@@ -422,3 +422,157 @@ func TestUnauthenticatedAndForgedTokensAreRejected(t *testing.T) {
 		t.Fatalf("no role: %d", c)
 	}
 }
+
+func TestLivePresence(t *testing.T) {
+	e := newIT(t)
+	alice := who{user: "alice", roles: []string{"user"}}
+	bob := who{user: "bob", roles: []string{"user"}}
+	carol := who{user: "carol", roles: []string{"user"}}
+	dave := who{user: "dave", roles: []string{"user"}}
+	ai := who{user: "ai-1", roles: []string{"user"}, typ: "ai", obo: "alice"}
+	_, out := e.call(alice, "POST", "/api/v1/documents", map[string]any{"title": "presence"})
+	docID := out["document"].(map[string]any)["id"].(string)
+	for _, p := range []map[string]any{{"subject": "bob", "role": "editor"}, {"subject": "carol", "role": "viewer"}, {"subject": "ai-1", "role": "editor"}} {
+		e.call(alice, "PUT", "/api/v1/documents/"+docID+"/permissions", p)
+	}
+	e.call(alice, "PUT", "/api/v1/documents/"+docID+"/ai-policy", map[string]any{"allowed": true, "maxOpsPerMin": 100, "maxDelete": 5})
+	wa, _ := e.dial(alice, docID, 0)
+	wb, _ := e.dial(bob, docID, 0)
+	wc, _ := e.dial(carol, docID, 0)
+	for _, w := range []*wsConn{wa, wb, wc} {
+		if _, ok := w.next("joined", 5*time.Second); !ok {
+			t.Fatal("join")
+		}
+	}
+	if w, code := e.dial(dave, docID, 0); w != nil || code != 404 {
+		t.Fatalf("a user without access must not even open the socket (404), got %d", code)
+	}
+	seq0 := func() float64 { _, s := e.hashOf(alice, docID); return s }()
+
+	// selection reaches the others, never the sender; identity comes from the token, not from the message
+	wa.send(map[string]any{"t": "act", "act": map[string]any{"state": "selecting", "page": "p1", "cells": []string{"1"}, "user": "mallory", "sid": "forged", "type": "ai"}})
+	for _, w := range []*wsConn{wb, wc} {
+		o, ok := w.next("act", 3*time.Second)
+		if !ok || o.Act.User != "alice" || o.Act.State != ActSelecting || o.Act.Type != "human" || o.Act.SID == "forged" || len(o.Act.Cells) != 1 {
+			t.Fatalf("%s: selection %+v ok=%v", w.name, o.Act, ok)
+		}
+		if ttl := o.Act.Exp - time.Now().UnixMilli(); ttl < 5000 || ttl > 9000 {
+			t.Fatalf("expiry %d ms from now", ttl)
+		}
+	}
+	if _, ok := wa.next("act", 300*time.Millisecond); ok {
+		t.Fatal("the sender must not receive its own activity")
+	}
+
+	// editing with a draft: editor ok; a viewer's "editing" is shown as a selection only
+	d := strings.Repeat("x", 900)
+	wb.send(map[string]any{"t": "act", "act": map[string]any{"state": "editing", "page": "p1", "cells": []string{"1"}, "draft": d}})
+	o, ok := wa.next("act", 3*time.Second)
+	if !ok || o.Act.State != ActEditing || o.Act.Draft == nil || len([]rune(*o.Act.Draft)) != maxDraftRune {
+		t.Fatalf("editing draft: %+v", o.Act)
+	}
+	wc.send(map[string]any{"t": "act", "act": map[string]any{"state": "editing", "page": "p1", "cells": []string{"1"}, "draft": "viewer typing"}})
+	for {
+		o, ok = wa.next("act", 3*time.Second)
+		if !ok {
+			t.Fatal("no activity from the viewer")
+		}
+		if o.Act.User == "carol" {
+			break
+		}
+	}
+	if o.Act.State != ActSelecting || o.Act.Draft != nil {
+		t.Fatalf("a viewer can only select: %+v", o.Act)
+	}
+
+	// drag preview + idle
+	wb.send(map[string]any{"t": "act", "act": map[string]any{"state": "dragging", "page": "p1", "cells": []string{"1"}, "preview": map[string]any{"dx": 12.5, "dy": -3}}})
+	for {
+		o, ok = wa.next("act", 3*time.Second)
+		if !ok {
+			t.Fatal("no drag")
+		}
+		if o.Act.User == "bob" && o.Act.State == ActDragging {
+			break
+		}
+	}
+	if o.Act.Preview == nil || *o.Act.Preview.Dx != 12.5 {
+		t.Fatalf("preview %+v", o.Act.Preview)
+	}
+	wb.send(map[string]any{"t": "act", "act": map[string]any{"state": "idle"}})
+	for {
+		o, ok = wa.next("act", 3*time.Second)
+		if !ok {
+			t.Fatal("no idle")
+		}
+		if o.Act.User == "bob" && o.Act.State == ActIdle {
+			break
+		}
+	}
+
+	// a late joiner sees what is active now (alice's selection), expired/idle entries are not replayed
+	wl, _ := e.dial(bob, docID, 0)
+	if _, ok := wl.next("joined", 5*time.Second); !ok {
+		t.Fatal("late join")
+	}
+	snap, ok := wl.next("act", 3*time.Second)
+	if !ok || snap.Act.User != "alice" || snap.Act.State != ActSelecting {
+		t.Fatalf("snapshot %+v ok=%v", snap.Act, ok)
+	}
+
+	// the AI works through REST: it shows up as "applying" with the cells it touches, only while it does
+	code, _ := e.call(ai, "POST", "/api/v1/documents/"+docID+"/operations", map[string]any{"ops": []model.Op{{ID: "ai-op-1", T: model.OpAddCell, Page: "p1", Cell: "ai-cell", Kind: "v", Parent: "1", Props: map[string]string{"gx": "1", "gy": "1", "gw": "10", "gh": "10", "v": "x"}}}})
+	if code != 200 {
+		t.Fatalf("ai ops: %d", code)
+	}
+	for {
+		o, ok = wa.next("act", 3*time.Second)
+		if !ok {
+			t.Fatal("no AI activity")
+		}
+		if o.Act.Type == "ai" {
+			break
+		}
+	}
+	if o.Act.State != ActApplying || len(o.Act.Cells) != 1 || o.Act.Cells[0] != "ai-cell" || o.Act.User != "ai-1" {
+		t.Fatalf("ai activity %+v", o.Act)
+	}
+
+	// leaving removes the entry
+	_ = wb.c.Close(websocket.StatusNormalClosure, "bye")
+	for {
+		o, ok = wa.next("act", 4*time.Second)
+		if !ok {
+			t.Fatal("no gone")
+		}
+		if o.Act.State == ActGone {
+			break
+		}
+	}
+
+	// burst: rate limited (best effort) but the server stays healthy and idle always passes
+	for i := 0; i < 300; i++ {
+		wc.send(map[string]any{"t": "act", "act": map[string]any{"state": "selecting", "page": "p1", "cells": []string{"1"}}})
+	}
+	wc.send(map[string]any{"t": "act", "act": map[string]any{"state": "idle"}})
+	got, idle := 0, false
+	for !idle {
+		o, ok = wa.next("act", 3*time.Second)
+		if !ok {
+			t.Fatal("idle after burst never arrived")
+		}
+		if o.Act.User == "carol" {
+			got++
+			idle = o.Act.State == ActIdle
+		}
+	}
+	if got >= 250 {
+		t.Fatalf("burst not limited: %d of 301 delivered", got)
+	}
+
+	// presence is not document state: the op log did not move because of it (only the AI's own op did)
+	_, seq1 := e.hashOf(alice, docID)
+	if seq1 != seq0+1 {
+		t.Fatalf("presence must not write operations: seq %v -> %v", seq0, seq1)
+	}
+}

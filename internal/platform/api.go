@@ -492,6 +492,7 @@ func (s *Server) postOperations(w http.ResponseWriter, r *http.Request, p *Princ
 	if p.IsAI && !res.Duplicate {
 		_ = s.store.Audit(r.Context(), p.Actor, d.ID, "ops", "ok", map[string]any{"batch": in.Batch, "ops": len(res.Applied)})
 		s.touchAIPresence(d.ID, p)
+		s.announceAI(d.ID, p, appliedCells(res.Applied))
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"batch": in.Batch, "seqs": seqs, "duplicate": res.Duplicate, "overridden": res.Overridden})
 }
@@ -553,6 +554,7 @@ func (s *Server) postLayout(w http.ResponseWriter, r *http.Request, p *Principal
 	}
 	_ = s.store.Audit(r.Context(), p.Actor, d.ID, "layout", "ok", map[string]any{"algo": in.Algo, "moved": len(res.Applied)})
 	s.touchAIPresence(d.ID, p)
+	s.announceAI(d.ID, p, appliedCells(res.Applied))
 	writeJSON(w, http.StatusOK, map[string]any{"moved": len(res.Applied)})
 }
 
@@ -786,4 +788,17 @@ var _ = identity.ErrInvalid
 func (s *Server) createSnapshotRow(ctx context.Context, docID, key string, raw []byte) error {
 	sum := sha256.Sum256(raw)
 	return s.store.AddSnapshot(ctx, docID, 0, key, hex.EncodeToString(sum[:]), len(raw))
+}
+
+// appliedCells lists (deduplicated, in order) the cells a sequenced batch touched; it only feeds the ephemeral AI presence.
+func appliedCells(ops []model.Op) []string {
+	seen := map[string]bool{}
+	var out []string
+	for i := range ops {
+		if c := ops[i].Cell; c != "" && !seen[c] {
+			seen[c] = true
+			out = append(out, c)
+		}
+	}
+	return out
 }

@@ -31,6 +31,7 @@ type Server struct {
 	replica string
 	seen    sync.Map // username -> last upsert time
 	rate    *rateLimiter
+	actRate *rateLimiter // live presence reports per session (best effort, dropped when exceeded)
 	started time.Time
 }
 
@@ -53,7 +54,7 @@ func New(cfg config.Platform, log *slog.Logger, store *Store, blob *Blob, rdb *r
 	for _, k := range cfg.Trusted {
 		vs.Add(k.Kid, k.Pub, k.Issuer)
 	}
-	s := &Server{cfg: cfg, log: log, store: store, blob: blob, rdb: rdb, verify: vs, replica: newID(5), started: time.Now(), rate: newRateLimiter(40, 80)}
+	s := &Server{cfg: cfg, log: log, store: store, blob: blob, rdb: rdb, verify: vs, replica: newID(5), started: time.Now(), rate: newRateLimiter(40, 80), actRate: newRateLimiter(30, 60)}
 	s.hub = newHub(s)
 	return s
 }
@@ -68,10 +69,11 @@ func (s *Server) Start(ctx context.Context) {
 
 type ctlMsg struct {
 	Origin     string       `json:"origin"`
-	Kind       string       `json:"kind"` // ops | resync | perm | presence | close
+	Kind       string       `json:"kind"` // ops | resync | perm | presence | act | close
 	Ops        []model.Op   `json:"ops,omitempty"`
 	Hash       string       `json:"hash,omitempty"`
 	Overridden []Overridden `json:"overridden,omitempty"`
+	Act        *ActMsg      `json:"act,omitempty"`
 }
 
 func chanFor(docID string) string { return "drawio:doc:" + docID }
@@ -138,6 +140,11 @@ func (s *Server) onRemote(docID string, m ctlMsg) {
 		dh.reauthorize(s)
 	case "presence":
 		dh.broadcastPresence(s)
+	case "act":
+		if m.Act != nil {
+			dh.setAct(m.Act)
+			dh.broadcastAct(m.Act, nil)
+		}
 	}
 }
 

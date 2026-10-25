@@ -35,6 +35,7 @@ type Out struct {
 	Presence   []PresenceEntry `json:"presence,omitempty"`
 	You        string          `json:"you,omitempty"`
 	Overridden *Overridden     `json:"overridden,omitempty"`
+	Act        *ActMsg         `json:"act,omitempty"`
 }
 
 // In is every client->server message.
@@ -44,6 +45,7 @@ type In struct {
 	Base  int64      `json:"base,omitempty"`
 	Ops   []model.Op `json:"ops,omitempty"`
 	Since int64      `json:"since,omitempty"`
+	Act   *ActIn     `json:"act,omitempty"`
 }
 
 // PresenceEntry is one connected collaborator (human or AI).
@@ -302,6 +304,10 @@ func (se *Session) readLoop(ctx context.Context, meta *DocMeta) {
 			}
 		case "ping":
 			se.enqueue(Out{T: "pong"})
+		case "act":
+			if se.dh != nil {
+				se.handleAct(in.Act)
+			}
 		case "ops":
 			if se.dh == nil {
 				se.enqueue(Out{T: "error", Code: "not_joined"})
@@ -353,6 +359,9 @@ func (se *Session) join(ctx context.Context, meta *DocMeta, since int64) error {
 	se.dh = dh
 	dh.sessions[se] = struct{}{}
 	se.enqueue(out)
+	for _, a := range dh.actSnapshot(se.id) {
+		se.enqueue(Out{T: "act", Act: a})
+	}
 	pctx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()
 	s.presenceSet(pctx, meta.ID, se.entry())
@@ -372,6 +381,10 @@ func (se *Session) leave() {
 	s.presenceDel(ctx, se.dh.id, se.entry())
 	se.dh.mu.Lock()
 	delete(se.dh.sessions, se)
+	gone := &ActMsg{SID: se.id, State: ActGone}
+	se.dh.setAct(gone)
+	se.dh.broadcastAct(gone, nil)
+	s.publish(se.dh.id, ctlMsg{Origin: s.replica, Kind: "act", Act: gone})
 	se.dh.lastUse = time.Now()
 	se.dh.broadcastPresence(s)
 	se.dh.mu.Unlock()

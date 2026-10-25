@@ -76,7 +76,7 @@
     var ui = null, ws = null, you = '', role = '', closed = false;
     var C = M.newDoc(), pending = [], T = M.newDoc(), E = M.newDoc(), joined = false; // E = what the editor is known to contain
     var busy = false, again = false, backoff = 500, lastHash = null, hashTimer = null, reconnectTimer = null, pingTimer = null;
-    var loadedInEditor = false, embedReady = false, pendingLoad = null, patchWaiters = [];
+    var presence = null, loadedInEditor = false, embedReady = false, pendingLoad = null, patchWaiters = [];
     var stats = { sent: 0, acked: 0, nacked: 0, remote: 0, resyncs: 0, patches: 0, hashChecks: 0, hashBad: 0 };
 
     function status(s, t) { if (opts.onStatus) opts.onStatus(s, t); }
@@ -123,11 +123,16 @@
         // the load itself is complete when the first 'load' event arrives; poll until pages exist
         var n = 0;
         (function wait() {
-          if (ui.pages && ui.pages.length) { loadedInEditor = true; applyRole(); status('ready', 'Connected'); window.dispatchEvent(new CustomEvent('drawio-adapter-ready')); schedule(); return; }
+          if (ui.pages && ui.pages.length) { loadedInEditor = true; startPresence(); applyRole(); status('ready', 'Connected'); window.dispatchEvent(new CustomEvent('drawio-adapter-ready')); schedule(); return; }
           if (++n > 300) { status('error', 'Editor did not start'); return; }
           setTimeout(wait, 100);
         })();
       }).catch(function () { status('error', 'Editor plugin could not be attached'); });
+    }
+
+    function startPresence() {
+      if (presence || !window.DrawioPresence) return;
+      presence = window.DrawioPresence.create({ ui: ui, send: function (act) { wsSend({ t: 'act', act: act }); } });
     }
 
     function applyRole() {
@@ -222,6 +227,7 @@
           break;
         case 'overridden': if (opts.onToast) opts.onToast('info', 'Another collaborator\'s change replaced one of yours'); break;
         case 'resync': resync(m.reason || 'server'); break;
+        case 'act': if (presence) presence.remote(m.act); break;
         case 'presence': if (opts.onPresence) opts.onPresence(m.presence || [], you); break;
         case 'role': role = m.role; applyRole(); if (opts.onRole) opts.onRole(role, m.title); schedule(); break;
         case 'error': if (opts.onToast) opts.onToast('warn', m.msg || m.code); break;
@@ -247,6 +253,7 @@
         return;
       }
       forceFull = false;
+      if (presence) presence.clearRemote();
       C = M.fromState(typeof m.state === 'string' ? JSON.parse(m.state) : m.state, m.seq);
       var drop = pending; pending = [];
       if (drop.length && opts.onToast) opts.onToast('info', 'The diagram was reloaded from the server');
@@ -306,6 +313,7 @@
         if (ws !== sock) return;
         joinedOnce = joinedOnce || joined;
         joined = false;
+        if (presence) presence.clearRemote();
         if (closed) return;
         if (ev.code === 4403 || ev.code === 4404) { closed = true; if (opts.onFatal) opts.onFatal(ev.code, ev.code === 4403 ? 'Your access to this diagram was removed' : 'This diagram no longer exists'); return; }
         if (ev.code === 1006 && !joinedOnce) { closed = true; if (opts.onFatal) opts.onFatal(404, 'Diagram not found or not shared with you'); return; }
@@ -319,6 +327,8 @@
     connect();
     return {
       stats: stats,
+      presence: function () { return presence; },
+      rawAct: function (a) { wsSend({ t: 'act', act: a }); }, // test hook: sends an arbitrary activity report
       state: function () { return { seq: C.seq, pending: pending.length, role: role, joined: joined, you: you }; },
       confirmed: function () { return C; },
       predicted: function () { return T; },
@@ -328,7 +338,7 @@
       liveCanonHash: function () { return ui ? M.sha256hex(M.canon(B.liveToDoc(fromLive(ui, T)), { ignoreOrder: true })) : Promise.resolve(''); },
       modelCanonHash: function (which) { return M.sha256hex(M.canon(which === 'predicted' ? T : C, { ignoreOrder: true })); },
       flush: function () { return reconcile(); },
-      close: function () { closed = true; clearTimeout(reconnectTimer); try { ws.close(); } catch (e) { /* ignore */ } },
+      close: function () { closed = true; if (presence) presence.stop(); clearTimeout(reconnectTimer); try { ws.close(); } catch (e) { /* ignore */ } },
       editorUi: function () { return ui; },
     };
   }

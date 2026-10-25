@@ -41,6 +41,7 @@ type docHandle struct {
 	snapping   bool
 	lastUse    time.Time
 	lastHash   time.Time
+	acts       map[string]*ActMsg // live presence by session id (ephemeral, memory only)
 }
 
 func newHub(s *Server) *Hub { return &Hub{s: s, docs: map[string]*docHandle{}} }
