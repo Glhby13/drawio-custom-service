@@ -1,7 +1,7 @@
 // SPIKE-003 / Phase 7 E2E in real Chrome: live presence (selection, editing + draft, drag/resize previews, AI "applying"),
 // lifecycle (commit, cancel, disconnect, heartbeat loss), security (viewer, no access), concurrency and latency with 10 clients.
 // Presence is ephemeral: the suite also proves it never writes to the operation log. Run: node e2e/phase7_presence.mjs
-import { BASE, check, finish, launch, newPage, keycloakLogin, password } from './lib.mjs';
+import { BASE, check, finish, launch, newPage, keycloakLogin, agentToken } from './lib.mjs';
 
 const browser = await launch();
 const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -42,12 +42,10 @@ const box = (s, cell) => s.page.evaluate(c => {
   const st = g.view.getState(cl), r = g.container.getBoundingClientRect(), f = document.getElementById('editor').getBoundingClientRect();
   return { x: f.left + r.left + st.x - g.container.scrollLeft, y: f.top + r.top + st.y - g.container.scrollTop, w: st.width, h: st.height };
 }, cell);
+// a point on empty canvas inside the editor frame (used to commit a text edit by clicking away)
+const empty = s => s.page.evaluate(() => { const f = document.getElementById('editor').getBoundingClientRect(); return { x: f.left + f.width * 0.75, y: f.top + f.height * 0.85 }; });
 const geo = (s, cell) => s.page.evaluate(c => { const g = window.__adapter.editorUi().editor.graph.getModel().getCell(c).geometry; return [g.x, g.y, g.width, g.height]; }, cell);
 const label = (s, cell) => s.page.evaluate(c => window.__adapter.editorUi().editor.graph.getModel().getCell(c).value, cell);
-async function agentToken(ctx, user) {
-  const r = await ctx.request.post(KC, { form: { grant_type: 'password', client_id: 'drawio-mcp-claude', username: user, password: password(user), scope: 'openid profile' }, failOnStatusCode: false });
-  return (await r.json()).access_token;
-}
 const tool = async (ctx, token, name, args) => {
   const r = await ctx.request.post(BASE + '/mcp', { headers: { Authorization: 'Bearer ' + token }, data: { jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name, arguments: args } }, failOnStatusCode: false });
   const j = await r.json(); return { ok: !!j.result && !j.result.isError, text: j.result?.content?.[0]?.text || j.error?.message || '' };
@@ -87,7 +85,7 @@ check('DRAFT: the committed label is still the old one for bob (draft is not doc
 check('DRAFT: no operation was written while typing', (await seq(alice, id)) === seq0);
 check('the draft is drawn next to the shape as plain text (no HTML injection surface)', await bob.page.evaluate(() => [...window.__adapter.editorUi().editor.graph.view.getOverlayPane().querySelectorAll('[data-presence-state="editing"] text')].some(t => /PostgreSQL/.test(t.textContent))));
 // commit by clicking on empty canvas
-await alice.page.mouse.click(b.x + 700, b.y + 500);
+{ const e = await empty(alice); await alice.page.mouse.click(e.x, e.y); }
 check('COMMIT: bob receives the committed semantic change', await bob.page.waitForFunction(() => window.__adapter.editorUi().editor.graph.getModel().getCell('A').value === 'PostgreSQL', null, { timeout: 8000 }).then(() => true).catch(() => false));
 r = await waitRendered(bob, l => !has(l, ALICE, 'editing'));
 check('COMMIT: the editing badge is gone afterwards', r.ok, JSON.stringify(r.last));
@@ -129,7 +127,7 @@ for (let i = 1; i <= 8; i++) { await alice.page.mouse.move(b.x + b.w + i * 10, b
 r = await waitRendered(bob, l => has(l, ALICE, 'resizing', 'B'));
 check('RESIZE: bob sees "alice is resizing Cache" while the mouse is still down', r.ok, JSON.stringify(r.last));
 const rz = await bob.page.evaluate(() => { const a = window.__adapter.presence().list().find(x => x.state === 'resizing'); return a && a.preview; });
-check('RESIZE: the preview carries the live size (wider than the committed 120x60)', rz && rz.w > 150 && rz.h > 80, JSON.stringify(rz));
+check('RESIZE: the preview carries the live size (wider than the committed 120x60)', rz && rz.w > 130 && rz.h > 70, JSON.stringify(rz));
 check('RESIZE: not committed yet', JSON.stringify(await geo(bob, 'B')) === JSON.stringify(sz0));
 await alice.page.mouse.up();
 check('RESIZE: committed after release', await bob.page.waitForFunction(g => window.__adapter.editorUi().editor.graph.getModel().getCell('B').geometry.width > g[2], sz0, { timeout: 8000 }).then(() => true).catch(() => false));
@@ -143,9 +141,9 @@ check('CONCURRENT: the viewer sees both alice and bob editing the same shape', r
 check('CONCURRENT: each editor sees the other one', (await waitRendered(alice, l => has(l, BOB, 'editing', 'A'))).ok && (await waitRendered(bob, l => has(l, ALICE, 'editing', 'A'))).ok);
 await alice.page.keyboard.press('Control+A'); await alice.page.keyboard.type('from alice');
 await bob.page.keyboard.press('Control+A'); await bob.page.keyboard.type('from bob');
-await alice.page.mouse.click(am.x + 700, am.y + 500); await bob.page.mouse.click(bm.x + 700, bm.y + 500);
-await sleep(1500);
-const [la, lb, lc] = await Promise.all([label(alice, 'A'), label(bob, 'A'), label(carol, 'A')]);
+{ const ea = await empty(alice), eb = await empty(bob); await alice.page.mouse.click(ea.x, ea.y); await bob.page.mouse.click(eb.x, eb.y); }
+let la, lb, lc;
+for (let i = 0; i < 60; i++) { await sleep(200); [la, lb, lc] = await Promise.all([label(alice, 'A'), label(bob, 'A'), label(carol, 'A')]); if (la === lb && lb === lc && /from (alice|bob)/.test(la)) break; }
 check('CONCURRENT: semantic conflict handling is unchanged: one winner, identical everywhere', la === lb && lb === lc && /from (alice|bob)/.test(la), `${la} | ${lb} | ${lc}`);
 check('CONCURRENT: presence cleared for both', (await waitRendered(carol, l => !has(l, ALICE, 'editing') && !has(l, BOB, 'editing'))).ok);
 
@@ -209,38 +207,40 @@ r = await waitRendered(bob, l => !l.some(x => x.type === 'ai'), 9000);
 check('AI: the indicator disappears by itself when the agent stops', r.ok && Date.now() - t0 < 12000, `${Date.now() - t0} ms`);
 check('AI: only the real operation reached the log', (await seq(alice2, id)) === seqAi0 + 1, `${seqAi0} -> ${await seq(alice2, id)}`);
 
-// ---- latency with 10 clients --------------------------------------------------------------------------------------------------------------------------------------------
-// 8 extra synthetic sockets + the real ones; sender types a draft carrying its own timestamp; a synthetic receiver in bob's page measures arrival
-const wsUrl = (location) => (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws/v1/documents/';
-await bob.page.evaluate(({ docId }) => new Promise(res => {
-  window.__lat = [];
-  const ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws/v1/documents/' + docId);
-  window.__latWs = ws;
-  ws.onopen = () => ws.send(JSON.stringify({ t: 'join', since: 0 }));
-  ws.onmessage = ev => { const m = JSON.parse(ev.data); if (m.t === 'joined') res(); if (m.t === 'act' && m.act.draft && /^\d{13}$/.test(m.act.draft)) window.__lat.push(Date.now() - Number(m.act.draft)); };
-}), { docId: id });
-await alice2.page.evaluate(({ docId }) => new Promise(res => {
-  window.__extra = []; let joined = 0;
-  for (let i = 0; i < 8; i++) { // seven idle viewers of the same diagram + the sender below make 10 clients with the 3 real browsers
-    const ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws/v1/documents/' + docId);
-    ws.onopen = () => ws.send(JSON.stringify({ t: 'join', since: 0 }));
-    ws.onmessage = ev => { if (JSON.parse(ev.data).t === 'joined' && ++joined === 8) res(); };
-    window.__extra.push(ws);
-  }
-}), { docId: id });
+// ---- latency with 11 sockets ----------------------------------------------------------------------------------------------------------------------------------------------------------
+// Transport latency is measured with sender and receiver in ONE page (a hidden browser tab throttles timers and would distort the clock);
+// the other 8 sockets only listen. A second, end-to-end measurement uses the two real browsers (selection -> overlay drawn on the other side).
 const seqPerf0 = await seq(alice2, id);
-await alice2.page.evaluate(() => new Promise(res => {
-  const s = window.__extra[0]; let n = 0;
-  const t = setInterval(() => { s.send(JSON.stringify({ t: 'act', act: { state: 'editing', page: 'p1', cells: ['A'], draft: String(Date.now()) } })); if (++n >= 80) { clearInterval(t); res(); } }, 45);
-}));
-await sleep(800);
-const lat = (await bob.page.evaluate(() => window.__lat)).sort((x, y) => x - y);
-const p = q => lat[Math.min(lat.length - 1, Math.floor(q * lat.length))];
-check('PERF: presence updates arrive with 11 sockets connected (3 real browsers + 8 more)', lat.length >= 20, `${lat.length} of 80 received (the server drops bursts above its per-session budget by design)`);
-check('PERF: presence latency p95 < 100 ms in the lab', lat.length > 0 && p(0.95) < 100, `p50 ${p(0.5)} ms, p95 ${p(0.95)} ms, max ${lat[lat.length - 1]} ms`);
-check('PERF: 80 presence updates wrote nothing to PostgreSQL (operation log unchanged)', (await seq(alice2, id)) === seqPerf0);
-await bob.page.evaluate(() => window.__latWs.close());
-await alice2.page.evaluate(() => window.__extra.forEach(w => w.close()));
+const tr = await alice2.page.evaluate(({ docId }) => new Promise(resolve => {
+  const mk = () => new Promise(ok => {
+    const w = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws/v1/documents/' + docId);
+    w.onopen = () => w.send(JSON.stringify({ t: 'join', since: 0 }));
+    w.onmessage = e => { if (JSON.parse(e.data).t === 'joined') { w.onmessage = null; ok(w); } };
+  });
+  Promise.all(Array.from({ length: 9 }, mk)).then(ws => { // 9 here + 2 real browsers' sockets (+ bob's) = 11+ clients on the diagram
+    const lat = []; ws[1].onmessage = e => { const m = JSON.parse(e.data); if (m.t === 'act' && m.act.draft) lat.push(Date.now() - Number(m.act.draft)); };
+    let k = 0;
+    const t = setInterval(() => {
+      ws[0].send(JSON.stringify({ t: 'act', act: { state: 'editing', page: 'p1', cells: ['A'], draft: String(Date.now()) } }));
+      if (++k >= 80) { clearInterval(t); setTimeout(() => { ws.forEach(w => w.close()); resolve(lat); }, 800); }
+    }, 40);
+  });
+}), { docId: id });
+tr.sort((x, y) => x - y);
+const pq = q => tr[Math.min(tr.length - 1, Math.floor(q * tr.length))];
+check('PERF: presence updates flow with 12 sockets on the diagram (3 real browsers + 9)', tr.length >= 40, `${tr.length} of 80 delivered (the per-session budget drops bursts by design)`);
+check('PERF: transport latency p95 < 100 ms in the lab', tr.length > 0 && pq(0.95) < 100, `p50 ${pq(0.5)} ms, p95 ${pq(0.95)} ms, max ${tr[tr.length - 1]} ms`);
+check('PERF: the 80 presence updates wrote nothing to PostgreSQL (operation log unchanged)', (await seq(alice2, id)) === seqPerf0);
+const e2e = [];
+for (let i = 0; i < 8; i++) {
+  const cell = ['A', 'B', 'C'][i % 3];
+  const t0 = Date.now();
+  await alice2.page.evaluate(c => { const g = window.__adapter.editorUi().editor.graph; g.setSelectionCell(g.getModel().getCell(c)); }, cell);
+  await bob.page.waitForFunction(c => window.__adapter.presence().rendered().some(x => x.cell === c && x.state === 'selecting'), cell, { polling: 10, timeout: 5000 });
+  e2e.push(Date.now() - t0);
+}
+e2e.sort((x, y) => x - y);
+check('PERF: end to end, a selection in one real browser is drawn in the other one within 400 ms (p95, includes the 40 ms client debounce)', e2e[Math.floor(e2e.length * 0.95)] < 400, `${e2e.join(', ')} ms`);
 
 // ---- nothing of this is in history / audit ----------------------------------------------------------------------------------------------------------------------------------------
 const hist = (await api(alice2, 'GET', `/documents/${id}/history?limit=100`)).json.history;

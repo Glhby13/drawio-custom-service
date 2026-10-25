@@ -111,11 +111,11 @@
       return layer;
     }
     function label(parent, x, y, color, text, extra) {
-      var t = el('text', { x: x + 6, y: y - 7, fill: '#fff', 'font-size': '11', 'font-family': 'Helvetica,Arial,sans-serif', 'font-weight': '600' });
+      var t = el('text', { x: x + 6, y: y - 8, fill: '#fff', 'font-size': '12', 'font-family': 'Helvetica,Arial,sans-serif', 'font-weight': '700' });
       t.textContent = text;
       parent.appendChild(t);
-      var w = Math.max(24, text.length * 6.4 + 12);
-      var bg = el('rect', { x: x, y: y - 20, width: w, height: 17, rx: 4, fill: color, 'fill-opacity': '0.95' });
+      var w = Math.max(24, text.length * 7 + 12);
+      var bg = el('rect', { x: x, y: y - 22, width: w, height: 19, rx: 4, fill: color, 'fill-opacity': '0.95' });
       parent.insertBefore(bg, t);
       if (extra) bg.setAttribute('stroke-dasharray', extra);
     }
@@ -138,7 +138,7 @@
           var slot = perCell[cid] = (perCell[cid] || 0) + 1;
           var grp = el('g', { 'data-presence-user': a.user || '', 'data-presence-state': a.state, 'data-presence-cell': cid, 'data-presence-type': a.type || 'human' });
           var x = st.x, y = st.y, w = st.width, h = st.height, dash = isAI ? '6 3' : null;
-          var base = { fill: a.state === 'editing' ? color : 'none', 'fill-opacity': '0.10', stroke: color, 'stroke-width': a.state === 'selecting' ? 2 : 3, rx: 3 };
+          var base = { fill: color, 'fill-opacity': a.state === 'editing' ? '0.14' : '0.07', stroke: color, 'stroke-width': a.state === 'selecting' ? 2 : 3, rx: 3 };
           if (dash) base['stroke-dasharray'] = dash;
           grp.appendChild(el('rect', Object.assign({ x: x - 2, y: y - 2, width: w + 4, height: h + 4 }, base)));
           if (a.state === 'dragging' && a.preview && a.preview.dx != null) { // ghost at the (uncommitted) position

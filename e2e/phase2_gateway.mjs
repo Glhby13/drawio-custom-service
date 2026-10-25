@@ -71,11 +71,11 @@ let sessionCookieValue;
   const { ctx, page } = await newPage(browser);
   await page.goto(BASE + '/', { waitUntil: 'domcontentloaded' });
   await keycloakLogin(page, 'e2e-team2');
-  await page.waitForURL(/drawio\.lab\.local\/auth\/callback/, { timeout: 30000 }).catch(() => {});
+  await page.waitForURL(/drawio\.lab\.local\/auth\/callback/, { timeout: 8000 }).catch(() => {}); // since the login flow gates sign-in on drawio-access, Keycloak itself answers first
   await page.waitForLoadState('domcontentloaded');
   const body = await page.textContent('body');
   const sid = (await ctx.cookies()).find(c => c.name === '__Host-drawio_sid');
-  check('authenticated user without the drawio-lab role is denied (403) and gets no session', /access denied/i.test(body) && !sid, (body || '').trim().slice(0, 80));
+  check('a user without drawio-access / the drawio-lab role is denied (Keycloak login flow, or the gateway 403) and gets no session', /access denied|not allowed|forbidden/i.test(body) && !sid, (body || '').trim().slice(0, 80));
   const direct = await ctx.request.get(BASE + '/editor/', { failOnStatusCode: false, maxRedirects: 0 });
   check('... and still cannot reach the editor', direct.status() !== 200, 'status ' + direct.status());
   await ctx.close();

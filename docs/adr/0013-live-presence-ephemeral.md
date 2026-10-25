@@ -20,3 +20,6 @@ Kolaborasi saat ini menampilkan perubahan setelah commit. Pengguna ingin melihat
 − Presence hilang saat restart pod (sengaja); draft teks terlihat oleh semua yang berhak membaca dokumen (tidak ada ACL per sel di model ini); caret langsung tidak ada (P3).
 ## Alternatives
 Presence sebagai operasi (ditolak: membanjiri op log/riwayat); lock saat edit (ditolak: menghalangi kolaborasi, tidak dibutuhkan); broker/stream baru (ditolak: transport yang ada cukup).
+
+## Evidence
+SPIKE-004 §4: E2E 51 cek (selection, editing+draft, drag, resize, AI applying, concurrent, viewer, spoof, tanpa akses, TTL, disconnect, snapshot join, performa), `TestLivePresence` terhadap PostgreSQL/SeaweedFS/Redis lab.

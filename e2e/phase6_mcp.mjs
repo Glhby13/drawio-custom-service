@@ -1,7 +1,7 @@
 // Phases 6-7 E2E against the lab: MCP server (OAuth bearer from Keycloak, Streamable HTTP) and the AI collaborator
 // (delegated identity, owner policy, explicit share, quotas, attribution, revert, realtime visibility to people).
 // Run: node e2e/phase6_mcp.mjs
-import { BASE, check, finish, launch, newPage, keycloakLogin, password } from './lib.mjs';
+import { BASE, check, finish, launch, newPage, keycloakLogin, agentToken, password } from './lib.mjs';
 
 const browser = await launch();
 const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -23,11 +23,6 @@ const api = (s, method, path, body) => s.page.evaluate(async ({ method, path, bo
 }, { method, path, body, csrf: s.csrf });
 
 // an agent obtains an access token for a real user (lab: direct grant; production agents use auth code + PKCE)
-async function agentToken(ctx, user) {
-  const r = await ctx.request.post(KC, { form: { grant_type: 'password', client_id: 'drawio-mcp-claude', username: user, password: password(user), scope: 'openid profile' }, failOnStatusCode: false });
-  if (r.status() !== 200) throw new Error('token for ' + user + ': ' + r.status() + ' ' + (await r.text()).slice(0, 200));
-  return (await r.json()).access_token;
-}
 let nextId = 1;
 async function mcp(ctx, token, method, params, hdr = {}) {
   const r = await ctx.request.post(BASE + '/mcp', { headers: Object.assign({ 'Content-Type': 'application/json', Accept: 'application/json, text/event-stream' }, token ? { Authorization: 'Bearer ' + token } : {}, hdr), data: { jsonrpc: '2.0', id: nextId++, method, params }, failOnStatusCode: false });

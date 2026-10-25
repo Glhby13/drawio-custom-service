@@ -4,3 +4,4 @@ node_modules/
 spikes/**/node_modules/
 /bin/
 webtest/diffops.json
+e2e/.otp-seeds.json

@@ -64,6 +64,12 @@
     var d = $('dlg');
     if (!d.open) d.showModal();
   }
+  // Enter inside a dialog field = the primary button (the <form method=dialog> would otherwise just close the dialog)
+  $('dlg-form').addEventListener('submit', function (e) {
+    e.preventDefault();
+    var p = $('dlg-actions').querySelector('.primary');
+    if (p && !p.disabled) p.click();
+  });
   function ask(title, text, okLabel) {
     return new Promise(function (resolve) {
       dialog(title, el('p', { text: text }), [{ label: 'Cancel', fn: function () { resolve(false); } }, { label: okLabel || 'OK', cls: 'primary', fn: function () { resolve(true); } }]);
@@ -144,7 +150,7 @@
         onPresence: renderPresence,
         onToast: toast,
         onFatal: function (code, msg) { setStatus('error', 'Disconnected'); var b = $('banner'); b.textContent = msg; b.hidden = false; frame.hidden = true; },
-        onSeq: function () {},
+        onSeq: function () { refreshPanelSoon(); },
       });
       window.__adapter = adapter; // used by the end-to-end suite
     }).catch(function (e) {
@@ -162,7 +168,7 @@
     $('btn-versions').onclick = function () { openPanel('Versions', id, renderVersions); };
     $('btn-comments').onclick = function () { openPanel('Comments', id, renderComments); };
     $('btn-export').onclick = function () { openExport(id); };
-    $('panel-close').onclick = function () { $('panel').hidden = true; panelRender = null; };
+    $('panel-close').onclick = function () { $('panel').hidden = true; panelRender = null; panelKind = ''; clearInterval(panelPoll); };
     window.addEventListener('beforeunload', function () { if (adapter) adapter.close(); });
   }
 
@@ -199,9 +205,17 @@
   }
 
   // ---- side panel ------------------------------------------------------------------------------------------------------
-  var panelRender = null;
+  var panelRender = null, panelKind = '', panelTimer = 0, panelPoll = 0;
+  // History / Versions follow the diagram live (every sequenced operation refreshes the open panel, debounced); Comments poll.
+  function refreshPanelSoon() {
+    if (!panelRender || panelKind === 'comments' || panelKind === '') return;
+    clearTimeout(panelTimer);
+    panelTimer = setTimeout(function () { if (panelRender) panelRender(); }, 600);
+  }
   function openPanel(title, id, fn) {
-    $('panel').hidden = false; $('panel-title').textContent = title;
+    $('panel').hidden = false; $('panel-title').textContent = title; panelKind = title.toLowerCase();
+    clearInterval(panelPoll);
+    if (panelKind === 'comments') panelPoll = setInterval(function () { if (panelRender && !document.hidden && !document.activeElement.matches('textarea')) panelRender(); }, 6000);
     panelRender = function () { fn(id, $('panel-body')); };
     panelRender();
   }
@@ -322,16 +336,23 @@
       var del = el('input', { class: 'field', id: 'ai-del', type: 'number', min: '0', max: '1000', value: String(ai.maxDelete) }); del.value = String(ai.maxDelete);
       var canPolicy = doc && doc.can && doc.can.policy;
       [allowed, rate, del].forEach(function (x) { x.disabled = !canPolicy; });
-      wrap.appendChild(el('hr'));
-      wrap.appendChild(el('label', null, [el('span', null, [allowed, ' Allow AI collaborators (agents) on this diagram'])]));
-      wrap.appendChild(el('label', null, ['Max AI operations per minute', rate]));
-      wrap.appendChild(el('label', null, ['Max AI deletions per change (larger needs confirmation)', del]));
-      var actions = [{ label: 'Close' }];
-      if (canPolicy) actions.unshift({ label: 'Save AI policy', cls: 'primary', keep: true, fn: function () {
-        api('PUT', '/documents/' + id + '/ai-policy', { allowed: allowed.checked, maxOpsPerMin: parseInt(rate.value, 10), maxDelete: parseInt(del.value, 10) })
-          .then(function () { toast('info', 'AI policy saved'); }).catch(function (e) { toast('error', e.message); });
-        return false;
-      } });
+      var aiBox = el('div', { class: 'ai-box' }, [
+        el('strong', { text: 'AI collaborators' }),
+        el('label', { class: 'check' }, [allowed, ' Allow AI collaborators (agents) on this diagram']),
+        el('label', null, ['Max AI operations per minute', rate]),
+        el('label', null, ['Max AI deletions per change (larger needs confirmation)', del]),
+      ]);
+      if (canPolicy) {
+        var saveAi = el('button', { class: 'btn', type: 'button', id: 'save-ai', text: 'Save AI settings', disabled: true, onclick: function () {
+          api('PUT', '/documents/' + id + '/ai-policy', { allowed: allowed.checked, maxOpsPerMin: parseInt(rate.value, 10), maxDelete: parseInt(del.value, 10) })
+            .then(function () { toast('info', 'AI settings saved'); saveAi.disabled = true; }).catch(function (e) { toast('error', e.message); });
+        } });
+        [allowed, rate, del].forEach(function (x) { x.addEventListener('input', function () { saveAi.disabled = false; }); x.addEventListener('change', function () { saveAi.disabled = false; }); });
+        aiBox.appendChild(saveAi);
+      } else aiBox.appendChild(el('small', { text: 'Only the owner or an administrator can change these settings.' }));
+      wrap.appendChild(aiBox);
+      q.addEventListener('keydown', function (e) { if (e.key === 'Enter') e.preventDefault(); }); // Enter in the search box must not close the dialog
+      var actions = [{ label: 'Done', cls: 'primary' }];
       dialog('Share "' + (doc ? doc.document.title : '') + '"', wrap, actions);
     }).catch(function (e) { toast('error', e.message); });
   }

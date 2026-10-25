@@ -3,7 +3,7 @@
 Author / Agent: Claude Code
 Timestamp: 2026-10-25 17:00
 Catatan nama: diminta sebagai "SPIKE-003-LIVE-PRESENCE"; nomor 003 sudah dipakai di MASTER-PLAN sebagai nama gate integrasi kolaborasi (Phase 4b, kini lulus lewat E2E), maka dokumen ini = **SPIKE-004** agar rujukan lama tidak ambigu.
-Status: **hasil ada di bagian "Hasil"** (diperbarui setelah E2E dari deploy GitOps).
+Status: **GO (lab)** — P0–P2 terbukti dengan Chrome asli; P3 (caret) sengaja tidak dibangun.
 
 ## 1. Pertanyaan dan batas
 Pengguna lain tidak hanya melihat hasil setelah commit, tetapi juga **apa yang sedang dikerjakan collaborator** (memilih, mengetik label, menarik, mengubah ukuran, AI sedang menerapkan perubahan), tanpa mencampur state ephemeral dengan state dokumen. Aturan: draw.io tidak di-fork/patch; tidak ada perubahan pada kontrak operasi semantik, op log, skema PostgreSQL, versi/riwayat, MCP, otorisasi AI.
@@ -62,5 +62,22 @@ Server → browser lain: `{"t":"act","act":{"sid","user","name","type","agent","
 ### 3.4 Browser (`internal/edge/web/presence.js`)
 Deteksi lokal dari API di atas (throttle: seleksi 40 ms, drag/resize 50 ms, draft 150 ms, heartbeat 3 dtk, hanya mengirim saat payload berubah). Tampilan di overlay SVG editor: kotak berwarna per pengguna (hash nama → palet 8 warna, cukup untuk ≥5 kolaborator), label "Nama · selected/editing/moving/resizing", hantu putus-putus untuk drag/resize, gelembung teks polos untuk draft, AI = garis putus-putus + awalan "AI". Beberapa orang pada sel yang sama ditumpuk labelnya.
 
-## 4. Hasil
-(diisi dari E2E; lihat bagian bawah setelah deploy)
+## 4. Hasil (E2E `e2e/phase7_presence.mjs`, 51 cek, Chrome asli, 3 pengguna + 9 soket sintetis)
+| Kemampuan | Hasil | Bukti |
+|---|---|---|
+| selection (P0) | **PASS** | klik/seleksi di A → B dan viewer menggambar kotak + label "Nama · selected"; hilang saat deselect; log tidak berubah |
+| editing (P0) | **PASS** | double-click A → "editing" di B; commit → badge hilang + perubahan semantik tiba; "cancel" (editor ditutup tanpa perubahan) → badge hilang, **seq tidak berubah** |
+| drag (P1) | **PASS** | saat mouse masih turun B melihat hantu + `dx,dy` hidup; bentuk & log B belum berubah; setelah lepas baru commit |
+| resize (P1) | **PASS** | B melihat ukuran sementara (mis. 200×110) sebelum commit |
+| draft teks (P2) | **PASS** | B melihat "✎ PostgreSQL" saat diketik; label committed tetap lama; tidak ada op; teks polos (tanpa HTML) |
+| caret (P3) | tidak dibangun | terbaca lewat `getSelection()` tetapi invasif; di luar prioritas |
+| AI presence | **PASS** | MCP `add_shape` → "AI applying changes" pada sel yang disentuh, otomatis hilang ≤ 4,5 dtk, bukan "editing" |
+| concurrent edit | **PASS** | dua orang mengedit sel yang sama: viewer melihat keduanya; hasil akhir satu pemenang identik di semua klien (semantik tak berubah) |
+| viewer | **PASS** | klaim "editing" viewer tampil sebagai selection; identitas palsu di pesan diabaikan |
+| tanpa akses | **PASS** | soket ke diagram yang tidak dibagikan tidak terbuka (404) |
+| lifecycle | **PASS** | browser beku (tanpa heartbeat) hilang di klien lain ≈ 7–9 dtk; tutup browser → hilang segera; join belakangan menerima snapshot |
+| performa | **PASS** | transport p50 3 ms / p95 6 ms dengan 12 soket pada diagram, 80/80 terkirim; end-to-end dua Chrome (seleksi → overlay) < 400 ms; 0 tulis DB/op log |
+
+Temuan: (1) "Escape" di editor teks draw.io menerapkan label, bukan membatalkan; (2) `getCurrentValue()` tidak aman dipanggil bebas, pakai `textarea.innerText`; (3) pengukuran latensi lintas tab di Chrome headless terdistorsi throttling tab latar belakang → pengukuran transport memakai satu halaman; (4) tab yang dibuka sebelum deploy tidak punya presence.js: perlu reload sekali setelah rilis.
+Tes unit/integrasi: `internal/platform/activity_test.go` (sanitasi, peran, kedaluwarsa), `TestLivePresence` (PG/S3/Redis lab: fan-out, role downgrade, spoof, burst limit, snapshot, AI, op log tidak bergerak).
+**Rekomendasi: GO.** Batas: draft terlihat oleh semua yang berhak membaca dokumen; presence hilang saat pod platform restart (sengaja); belum diuji >10 kolaborator manusia sungguhan.

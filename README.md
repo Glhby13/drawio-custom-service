@@ -29,7 +29,7 @@ Pola repo dan deploy mengikuti `n8n-custom-service`. Satu sumber untuk lab (ARM6
 | `webtest/` | konformansi JS↔Go (vektor dari Go, 1799 kasus diff) |
 | `Dockerfile` | satu Dockerfile multi-target (`SERVICE_NAME`), `CGO_ENABLED=0`, scratch, uid 65532 |
 | `Jenkinsfile` | lint, test, govulncheck, audit CGO → Kaniko → Harbor `drawio-custom-service` → bump `image.tag` **dan** `image.digest` di helm-values-lab |
-| `e2e/` | E2E Chrome nyata terhadap lab: `phase2_gateway.mjs` (25), `phase5_collab.mjs` (44: izin, kolaborasi 3 pengguna, revert/restore, restart pod, revoke), `phase6_mcp.mjs` (43: MCP + AI). Password uji dibaca dari `lab/SECRETS.md`. `LOCAL_WEB=1` melayani aset host dari working tree (loop cepat tanpa build) |
+| `e2e/` | E2E Chrome nyata terhadap lab: `phase2_gateway.mjs` (25), `phase5_collab.mjs` (44: izin, kolaborasi 3 pengguna, revert/restore, restart pod, revoke), `phase6_mcp.mjs` (43: MCP + AI), `phase7_presence.mjs` (51: presence), `phase8_ui.mjs` (9: dialog, share, riwayat live). Login Keycloak memakai flow `drawio-browser-role-otp` (role `drawio-access` + OTP): suite mendaftarkan TOTP user uji otomatis (seed di `e2e/.otp-seeds.json`, git-ignored). Password uji dibaca dari `lab/SECRETS.md`. `LOCAL_WEB=1` melayani aset host dari working tree (loop cepat tanpa build) |
 | `scripts/dev-image.sh` | build multi-arch lokal + push ke Harbor lab lewat bastion (hanya sampai Jenkins membangun repo ini) |
 | `deploy/nginx/drawio.lab.local.conf` | vhost nginx lab (TLS edge) satu-satunya jalan masuk |
 
@@ -38,6 +38,9 @@ Tidak diwarisi dari n8n-custom-service: `InsecureSkipVerify`, penerimaan ID toke
 
 ## Menghubungkan agen AI (MCP)
 Endpoint `https://drawio.lab.local/mcp` (Streamable HTTP, JSON-RPC). Metadata OAuth: `/.well-known/oauth-protected-resource` → Keycloak realm `lab`. Satu client Keycloak per aplikasi agen (`scripts/setup_keycloak_mcp.py`: `drawio-mcp-claude` → aktor `ai-claude`); agen masuk sebagai **pengguna sungguhan** dan bekerja atas namanya. Agar agen melihat sebuah diagram, pemilik: (1) Share → centang "Allow AI collaborators", (2) bagikan ke `ai-claude` sebagai editor. Batas: ops/menit dan penghapusan per request diatur pemilik; semua perubahan AI tercatat (aktor, agen, model) dan bisa di-revert dari History.
+
+## Presence langsung (siapa sedang apa)
+Saat beberapa orang membuka diagram yang sama, setiap orang melihat **siapa memilih / mengedit / menggeser / mengubah ukuran apa**: kotak berwarna per pengguna + label "Nama · editing", hantu putus-putus saat drag/resize, dan teks yang sedang diketik (draft) di dekat sel. AI yang sedang menerapkan perubahan tampil sebagai "AI … applying changes". Ini **ephemeral** (WebSocket + Redis, TTL 8 dtk, tanpa DB/riwayat/lock): presence memberi tahu, lapisan operasi semantik yang menyelesaikan konflik. Desain/bukti: `docs/spikes/SPIKE-004-live-presence.md`, `docs/adr/0013-live-presence-ephemeral.md`, `e2e/phase7_presence.mjs`. Setelah rilis baru, muat ulang tab yang sudah terbuka sekali.
 
 ## Performa
 `node e2e/perf_collab.mjs` (lab, 2026-10-25, diagram 500 sel, dua Chrome): server menerima batch 500 `addCell` dalam 87 ms; buka+render 0,7 dtk; latensi perubahan satu sel dari browser A ke B p50 36 ms / p95 42 ms / maks 60 ms (25 sampel; kriteria ADR-0006 #5 p95 < 250 ms **terpenuhi**); ubah gaya 100 sel sekaligus tampil di B dalam 94 ms; hash editor == server setelah semburan. Keterbatasan: satu pasang klien di satu mesin, jaringan lab, belum uji >2 klien aktif menulis bersamaan atau diagram >500 sel.

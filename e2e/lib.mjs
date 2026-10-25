@@ -58,11 +58,58 @@ export async function newPage(browser) {
   return { ctx, page, log };
 }
 
+// ---- TOTP (the drawio client's browser flow requires OTP, like ArgoCD: drawio-browser-role-otp) ----------------------------------
+// Test users are enrolled on the fly the first time they hit the "configure authenticator" page; the seed is kept in
+// e2e/.otp-seeds.json (lab only, git-ignored, recorded in lab/SECRETS.md) and used for every later login.
+import { createHmac } from 'node:crypto';
+import { existsSync, writeFileSync } from 'node:fs';
+const SEEDS = join(here, '.otp-seeds.json');
+const seeds = () => (existsSync(SEEDS) ? JSON.parse(readFileSync(SEEDS, 'utf8')) : {});
+function b32decode(s) {
+  const A = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567'; let bits = '';
+  for (const c of s.replace(/[\s=]/g, '').toUpperCase()) bits += A.indexOf(c).toString(2).padStart(5, '0');
+  const out = []; for (let i = 0; i + 8 <= bits.length; i += 8) out.push(parseInt(bits.slice(i, i + 8), 2));
+  return Buffer.from(out);
+}
+export function totp(b32, at = Date.now()) {
+  const ctr = Buffer.alloc(8); ctr.writeBigUInt64BE(BigInt(Math.floor(at / 30000)));
+  const h = createHmac('sha1', b32decode(b32)).update(ctr).digest(); const o = h[h.length - 1] & 15;
+  return String((h.readUInt32BE(o) & 0x7fffffff) % 1e6).padStart(6, '0');
+}
+
+// access token for an AI agent acting as `user` (lab: direct grant; users with an authenticator must send the TOTP too)
+export async function agentToken(ctx, user, client = 'drawio-mcp-claude') {
+  const form = { grant_type: 'password', client_id: client, username: user, password: password(user), scope: 'openid profile' };
+  const seed = seeds()[user]; if (seed) form.totp = totp(seed);
+  const r = await ctx.request.post('https://auth.lab.local/realms/lab/protocol/openid-connect/token', { form, failOnStatusCode: false });
+  if (r.status() !== 200) throw new Error('agent token for ' + user + ': ' + r.status() + ' ' + (await r.text()).slice(0, 160));
+  return (await r.json()).access_token;
+}
+
 export async function keycloakLogin(page, user) {
   await page.waitForURL(/auth\.lab\.local\/realms\/lab\/protocol\/openid-connect\/auth/, { timeout: 30000 });
   await page.fill('#username', user);
   await page.fill('#password', password(user));
   await page.click('#kc-login');
+  // after the password: the OTP prompt, the one-time enrolment page, an access-denied page, or straight back to the app
+  const step = await Promise.race([
+    page.waitForSelector('#otp', { timeout: 20000 }).then(() => 'otp'),
+    page.waitForSelector('#totp, #kc-totp-secret-key, #mode-manual', { timeout: 20000 }).then(() => 'setup'),
+    page.waitForURL(u => !/auth\.lab\.local/.test(u.toString()), { timeout: 20000 }).then(() => 'done'),
+    page.waitForFunction(() => /access denied|not allowed|forbidden/i.test(document.body.innerText), null, { timeout: 20000 }).then(() => 'denied'),
+  ]).catch(() => 'unknown');
+  if (step === 'otp') {
+    const seed = seeds()[user];
+    if (!seed) throw new Error('user ' + user + ' asks for an OTP but no seed is known (not enrolled by this suite)');
+    await page.fill('#otp', totp(seed)); await page.click('#kc-login');
+  } else if (step === 'setup') {
+    const manual = page.locator('#mode-manual'); if (await manual.count()) await manual.click();
+    const secret = (await page.locator('#kc-totp-secret-key').textContent()).replace(/\s/g, '');
+    const all = seeds(); all[user] = secret; writeFileSync(SEEDS, JSON.stringify(all, null, 1));
+    await page.fill('#totp', totp(secret));
+    const label = page.locator('#userLabel'); if (await label.count()) await label.fill('e2e');
+    await page.click('#saveTOTPBtn');
+  }
 }
 
 export function kubectl(args) {
