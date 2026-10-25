@@ -5,8 +5,11 @@
 package edge
 
 import (
+	"bytes"
+	"crypto/sha256"
 	"crypto/subtle"
 	"embed"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"io/fs"
@@ -35,8 +38,12 @@ type Server struct {
 	lim    *limiter
 	proxy  http.Handler
 	static fs.FS
-	cookie string
-	bind   string
+	// loggedOutBody is the public signed-out page with its stylesheet inlined; loggedOutCSP allows exactly that
+	// stylesheet by hash (no 'unsafe-inline', no extra public route).
+	loggedOutBody []byte
+	loggedOutCSP  string
+	cookie        string
+	bind          string
 }
 
 // New builds a Server.
@@ -45,7 +52,11 @@ func New(cfg config.Gateway, log *slog.Logger, store session.Store, o *OIDC, sig
 	if err != nil {
 		return nil, err
 	}
-	s := &Server{cfg: cfg, log: log, store: store, oidc: o, signer: signer, static: static,
+	body, csp, err := buildLoggedOut(static)
+	if err != nil {
+		return nil, err
+	}
+	s := &Server{cfg: cfg, log: log, store: store, oidc: o, signer: signer, static: static, loggedOutBody: body, loggedOutCSP: csp,
 		lim: newLimiter(cfg.RateRPS, cfg.RateBurst), cookie: "__Host-drawio_sid", bind: "__Host-drawio_login"}
 	if cfg.InsecureCookie {
 		s.cookie, s.bind = "drawio_sid", "drawio_login"
@@ -299,8 +310,34 @@ func (s *Server) logout(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) loggedOut(w http.ResponseWriter, _ *http.Request) {
 	pageHeaders(w.Header())
+	w.Header().Set("Content-Security-Policy", s.loggedOutCSP)
+	w.Header().Set("X-Frame-Options", "DENY")
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	_, _ = w.Write([]byte(`<!doctype html><meta charset="utf-8"><title>Signed out</title><p>You have been signed out. <a href="/login">Sign in again</a></p>`))
+	_, _ = w.Write(s.loggedOutBody)
+}
+
+const styleSlot = "<!--STYLE-->"
+
+// buildLoggedOut inlines logged-out.css into logged-out.html and returns the page with the CSP that permits
+// exactly that stylesheet (sha256 of its bytes). The signed-out page must work without a session, so it cannot
+// use the authenticated /static/ route.
+func buildLoggedOut(static fs.FS) ([]byte, string, error) {
+	page, err := fs.ReadFile(static, "logged-out.html")
+	if err != nil {
+		return nil, "", err
+	}
+	css, err := fs.ReadFile(static, "logged-out.css")
+	if err != nil {
+		return nil, "", err
+	}
+	if !bytes.Contains(page, []byte(styleSlot)) {
+		return nil, "", errors.New("logged-out.html has no " + styleSlot + " slot")
+	}
+	sum := sha256.Sum256(css)
+	csp := "default-src 'none'; style-src 'sha256-" + base64.StdEncoding.EncodeToString(sum[:]) +
+		"'; img-src data:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
+	inline := append(append([]byte("<style>"), css...), []byte("</style>")...)
+	return bytes.Replace(page, []byte(styleSlot), inline, 1), csp, nil
 }
 
 func (s *Server) me(w http.ResponseWriter, _ *http.Request, sess *session.Session) {
@@ -317,7 +354,7 @@ func (s *Server) hostPage(w http.ResponseWriter, r *http.Request, _ *session.Ses
 
 func (s *Server) staticFile(w http.ResponseWriter, r *http.Request, _ *session.Session) {
 	name := strings.TrimPrefix(r.URL.Path, "/static/")
-	if name == "" || strings.Contains(name, "/") || name == "host.html" {
+	if name == "" || strings.Contains(name, "/") || strings.HasPrefix(name, "host.html") || strings.HasPrefix(name, "logged-out.") {
 		http.NotFound(w, r)
 		return
 	}

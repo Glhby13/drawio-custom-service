@@ -1,6 +1,72 @@
-html, body { height: 100%; margin: 0; font: 14px system-ui, sans-serif; }
-body { display: flex; flex-direction: column; }
-#bar { display: flex; gap: 12px; align-items: center; padding: 6px 12px; background: #f1f3f5; border-bottom: 1px solid #d0d4d9; }
-.grow { flex: 1; }
-#editor { flex: 1; border: 0; width: 100%; }
-button { cursor: pointer; }
+/* Host shell around the unmodified draw.io (ui=atlas). The bar uses the exact blue of draw.io's atlas menubar
+   (#1868db, measured from the running editor) so the bar and the editor menu read as one two-row header. */
+:root {
+  --blue: #1868db;
+  --bar-h: 44px;
+  --font: -apple-system, "system-ui", "Segoe UI Variable", "Segoe UI", system-ui, ui-sans-serif, Roboto, "Helvetica Neue", Arial, sans-serif;
+  color-scheme: light;
+}
+html, body { height: 100%; margin: 0; }
+body { display: flex; flex-direction: column; font: 14px/1.4 var(--font); background: #f1f3f4; color: #3f3f3f; -webkit-font-smoothing: antialiased; }
+
+.bar {
+  position: relative; z-index: 1; box-sizing: border-box; display: flex; align-items: center; gap: 12px;
+  height: var(--bar-h); padding: 0 12px 0 16px; background: var(--blue); color: #fff;
+  border-bottom: 1px solid rgba(255, 255, 255, .16);
+}
+.grow { flex: 1; min-width: 0; }
+
+.brand { display: flex; align-items: center; gap: 10px; flex: none; }
+.brand-mark { display: block; flex: none; }
+.brand-name { font-size: 15px; font-weight: 600; letter-spacing: .1px; }
+
+.status {
+  display: inline-flex; align-items: center; gap: 7px; height: 22px; padding: 0 10px 0 9px; border-radius: 999px;
+  background: rgba(255, 255, 255, .14); font-size: 12px; font-weight: 500; line-height: 1; white-space: nowrap;
+}
+.status::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: #fbbf24; flex: none; }
+.status[data-state="loading"]::before { animation: pulse 1.2s ease-in-out infinite; }
+.status[data-state="auth"]::before { background: #bfdbfe; }
+.status[data-state="ready"]::before { background: #4ade80; box-shadow: 0 0 0 3px rgba(74, 222, 128, .28); }
+.status[data-state="error"]::before { background: #f87171; box-shadow: 0 0 0 3px rgba(248, 113, 113, .3); }
+@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
+
+.user {
+  display: flex; align-items: center; gap: 8px; max-width: 300px; padding: 3px 12px 3px 3px; border-radius: 999px;
+  background: rgba(255, 255, 255, .1);
+}
+.user[hidden], .role[hidden] { display: none; }
+.avatar {
+  display: grid; place-items: center; flex: none; width: 26px; height: 26px; border-radius: 50%;
+  background: #fff; color: var(--blue); font-size: 11px; font-weight: 700; letter-spacing: .3px; text-transform: uppercase;
+}
+.user-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; font-weight: 500; }
+.role {
+  flex: none; padding: 2px 6px; border-radius: 4px; background: rgba(255, 255, 255, .2);
+  font-size: 10px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; line-height: 1.2;
+}
+
+.btn-signout {
+  display: inline-flex; align-items: center; gap: 8px; flex: none; height: 32px; padding: 0 13px;
+  border: 1px solid rgba(255, 255, 255, .38); border-radius: 8px; background: transparent; color: #fff;
+  font: 500 13px/1 var(--font); cursor: pointer; transition: background-color .15s, border-color .15s, transform .05s;
+}
+.btn-signout:hover { background: rgba(255, 255, 255, .16); border-color: rgba(255, 255, 255, .6); }
+.btn-signout:active { background: rgba(255, 255, 255, .24); transform: translateY(1px); }
+.btn-signout:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+.btn-signout[aria-busy="true"] { opacity: .75; cursor: progress; }
+.btn-icon { flex: none; }
+
+#editor { flex: 1; width: 100%; border: 0; background: #f1f3f4; }
+
+@media (max-width: 760px) {
+  .bar { gap: 8px; padding: 0 8px 0 12px; }
+  .user { padding-right: 3px; }
+  .user-name, .role, .btn-label { display: none; }
+  .btn-signout { width: 32px; padding: 0; justify-content: center; }
+  .status { font-size: 0; gap: 0; padding: 0 8px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .status[data-state="loading"]::before { animation: none; }
+  .btn-signout { transition: none; }
+}

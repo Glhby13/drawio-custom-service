@@ -3,16 +3,37 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#1868db">
 <title>Diagrams</title>
 <link rel="stylesheet" href="/static/host.css">
 </head>
 <body>
-<header id="bar">
-  <strong>Diagrams</strong>
-  <span id="status">loading…</span>
+<header id="bar" class="bar">
+  <div class="brand">
+    <svg class="brand-mark" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" focusable="false">
+      <rect width="24" height="24" rx="6" fill="#fff"/>
+      <g fill="none" stroke="#1868db" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="4.5" y="5" width="6" height="5" rx="1.2"/>
+        <rect x="13.5" y="14" width="6" height="5" rx="1.2"/>
+        <path d="M10.5 7.5h3.5a2 2 0 0 1 2 2V14"/>
+      </g>
+    </svg>
+    <strong class="brand-name">Diagrams</strong>
+  </div>
+  <span id="status" class="status" data-state="loading" role="status" aria-live="polite">Loading…</span>
   <span class="grow"></span>
-  <span id="who"></span>
-  <button id="logout" type="button">Sign out</button>
+  <div id="user" class="user" hidden>
+    <span id="avatar" class="avatar" aria-hidden="true"></span>
+    <span id="who" class="user-name"></span>
+    <span id="role" class="role" hidden>admin</span>
+  </div>
+  <button id="logout" class="btn-signout" type="button" aria-label="Sign out">
+    <svg class="btn-icon" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false"
+      fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/>
+    </svg>
+    <span id="logout-label" class="btn-label">Sign out</span>
+  </button>
 </header>
 <iframe id="editor" title="draw.io editor"
   src="/editor/?embed=1&proto=json&spin=1&ui=atlas&noSaveBtn=1&noExitBtn=1&saveAndExit=0&libraries=1"></iframe>

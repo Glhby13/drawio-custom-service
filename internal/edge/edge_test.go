@@ -470,7 +470,7 @@ func TestHostPageAssetsAndHeaders(t *testing.T) {
 			t.Errorf("%s without session: %d", f, r.StatusCode)
 		}
 	}
-	for _, p := range []string{"/static/host.html", "/static/", "/static/a/b", "/nothing", "/static/..%2fhost.html"} {
+	for _, p := range []string{"/static/host.html", "/static/logged-out.html", "/static/logged-out.css", "/static/", "/static/a/b", "/nothing", "/static/..%2fhost.html"} {
 		if r := e.do(j, "GET", p, nil); r.StatusCode != 404 && r.StatusCode != 301 && r.StatusCode != 308 {
 			t.Errorf("%s: %d", p, r.StatusCode)
 		}
@@ -521,4 +521,57 @@ type testWriter struct{ t *testing.T }
 func (w testWriter) Write(p []byte) (int, error) {
 	w.t.Log(strings.TrimSpace(string(p)))
 	return len(p), nil
+}
+
+// The signed-out page is public (the session is gone), self-contained, and its CSP allows exactly its own stylesheet.
+func TestLoggedOutPageIsPublicSelfContainedAndHashPinned(t *testing.T) {
+	e := newEnv(t, nil)
+	res := e.do(nil, "GET", "/logged-out", nil)
+	body, _ := io.ReadAll(res.Body)
+	if res.StatusCode != http.StatusOK || !strings.HasPrefix(res.Header.Get("Content-Type"), "text/html") {
+		t.Fatalf("logged-out: %d %q", res.StatusCode, res.Header.Get("Content-Type"))
+	}
+	html := string(body)
+	for _, want := range []string{"Sign in again", `href="/login"`, "signed out"} {
+		if !strings.Contains(html, want) {
+			t.Errorf("logged-out page misses %q", want)
+		}
+	}
+	// the inline stylesheet must be exactly what the CSP hash covers
+	start, end := strings.Index(html, "<style>"), strings.Index(html, "</style>")
+	if start < 0 || end < start {
+		t.Fatal("no inline stylesheet")
+	}
+	sum := sha256.Sum256([]byte(html[start+len("<style>") : end]))
+	csp := res.Header.Get("Content-Security-Policy")
+	if !strings.Contains(csp, "style-src 'sha256-"+base64.StdEncoding.EncodeToString(sum[:])+"'") {
+		t.Fatalf("CSP does not pin the inline stylesheet: %q", csp)
+	}
+	for _, bad := range []string{"unsafe-inline", "unsafe-eval", "script-src", "http://", "https://"} {
+		if strings.Contains(csp, bad) {
+			t.Errorf("CSP contains %q: %q", bad, csp)
+		}
+	}
+	if strings.Contains(html, "<script") || strings.Contains(html, "onclick=") || strings.Contains(html, " style=") || strings.Contains(html, "http://") || strings.Contains(html, "https://") {
+		t.Fatal("logged-out page must have no script, inline style attribute, or external reference")
+	}
+	if !strings.Contains(csp, "frame-ancestors 'none'") || res.Header.Get("X-Frame-Options") != "DENY" {
+		t.Errorf("logged-out page must not be frameable: %q %q", csp, res.Header.Get("X-Frame-Options"))
+	}
+}
+
+// The host page markup keeps the ids the e2e and the script rely on and stays inline-free (CSP style-src 'self').
+func TestHostPageKeepsContractIDsAndHasNoInlineStyle(t *testing.T) {
+	e := newEnv(t, nil)
+	res := e.do(e.loggedIn(), "GET", "/", nav)
+	body, _ := io.ReadAll(res.Body)
+	html := string(body)
+	for _, id := range []string{`id="status"`, `id="logout"`, `id="who"`, `id="editor"`, `data-state="loading"`} {
+		if !strings.Contains(html, id) {
+			t.Errorf("host page misses %s", id)
+		}
+	}
+	if strings.Contains(html, " style=") || strings.Contains(html, "<style") {
+		t.Fatal("host page must not use inline styles (CSP style-src 'self')")
+	}
 }
