@@ -94,19 +94,25 @@ pipeline {
         stage('Go lint') {
           steps { script { runIn(BUILD_MODE, GOLANGCI_IMAGE, 'golangci', 'golangci-lint run ./cmd/... ./internal/...') } }
         }
-        stage('Go test') {
-          steps { script { runIn(BUILD_MODE, GO_IMAGE, 'golang', 'go vet ./... && go test -count=1 -coverprofile=coverage.out ./...') } }
-        }
-        stage('CGO audit') {
-          // ADR-0012: static binaries only. No package in the dependency tree may need cgo, and the build must work with CGO off.
-          steps { script { runIn(BUILD_MODE, GO_IMAGE, 'golang',
-            'test -z "$(CGO_ENABLED=0 go list -deps -f \'{{if .CgoFiles}}{{.ImportPath}}{{end}}\' ./cmd/...)" && CGO_ENABLED=0 go build ./cmd/...') } }
-        }
-        stage('Go vuln (SCA)') {
-          steps {
-            script {
-              runIn(BUILD_MODE, GO_IMAGE, 'golang',
-                "go install golang.org/x/vuln/cmd/govulncheck@${GOVULNCHECK_VERSION} && \$(go env GOPATH)/bin/govulncheck ./...")
+        // One container runs these three one after the other: three concurrent Go builds in the same container exceed its
+        // memory limit on the small lab nodes (cgroup OOM kills the container and Jenkins aborts the build as "Agent was removed").
+        stage('Go checks') {
+          stages {
+            stage('Go test') {
+              steps { script { runIn(BUILD_MODE, GO_IMAGE, 'golang', 'go vet ./... && go test -count=1 -coverprofile=coverage.out ./...') } }
+            }
+            stage('CGO audit') {
+              // ADR-0012: static binaries only. No package in the dependency tree may need cgo, and the build must work with CGO off.
+              steps { script { runIn(BUILD_MODE, GO_IMAGE, 'golang',
+                'test -z "$(CGO_ENABLED=0 go list -deps -f \'{{if .CgoFiles}}{{.ImportPath}}{{end}}\' ./cmd/...)" && CGO_ENABLED=0 go build ./cmd/...') } }
+            }
+            stage('Go vuln (SCA)') {
+              steps {
+                script {
+                  runIn(BUILD_MODE, GO_IMAGE, 'golang',
+                    "go install golang.org/x/vuln/cmd/govulncheck@${GOVULNCHECK_VERSION} && \$(go env GOPATH)/bin/govulncheck ./...")
+                }
+              }
             }
           }
         }
