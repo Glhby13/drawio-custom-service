@@ -59,7 +59,7 @@ await admin.page.click('#userbtn');
 check('LOCAL ADMIN: user menu: local account, Manage users, Change password, Sign out', /local account/.test(await admin.page.textContent('#menu-sub')) && await admin.page.isVisible('#mi-users') && await admin.page.isVisible('#mi-password') && await admin.page.isVisible('#logout'));
 await admin.page.click('#mi-users');
 await admin.page.waitForURL(/\/admin\/users$/); await admin.page.waitForSelector('#users-view:not([hidden])');
-check('USERS: the admin page lists the local accounts', (await admin.page.textContent('#users-body')).includes('admin'));
+check('USERS: the admin page lists the local accounts', await admin.page.waitForSelector('#users-body tr[data-user="admin"]', { timeout: 8000 }).then(() => true).catch(() => false));
 await admin.page.click('#new-user');
 await admin.page.fill('#nu-username', 'lab-test2'); await admin.page.fill('#nu-name', 'Clash'); await admin.page.fill('#nu-password', PW1);
 await admin.page.click('#dlg-actions .primary');
@@ -154,6 +154,7 @@ check('LEAVE GUARD: with unsaved changes our own dialog appears (not the browser
 await lu.page.click('#dlg-actions button:not(.primary)'); // Cancel = stay
 check('LEAVE GUARD: "Cancel" keeps the editor open', /\/d\//.test(lu.page.url()));
 await lu.page.evaluate(() => { WebSocket.prototype.send = WebSocket.prototype.__send; });
+let nativeSeen = 0; lu.page.removeAllListeners('dialog'); lu.page.on('dialog', d => { nativeSeen++; d.accept(); }); // tab close / reload with really unsaved work: the browser's own prompt is the last line of defence
 
 // ---- change password, sign in again ---------------------------------------------------------------------------------------------------------------------------------------------
 await lu.page.goto(BASE + '/'); await lu.page.waitForSelector('#list-view:not([hidden])');

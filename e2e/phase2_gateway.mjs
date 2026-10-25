@@ -91,6 +91,7 @@ let sessionCookieValue;
   await keycloakLogin(page, 'e2e-user2');
   await page.waitForSelector('#list-view:not([hidden])', { timeout: 60000 });
   const before = (await ctx.cookies()).find(c => c.name === '__Host-drawio_sid')?.value;
+  await page.click('#userbtn');
   await page.click('#logout');
   await page.waitForURL(/drawio\.lab\.local\/logged-out/, { timeout: 30000 });
   check('logout returns through Keycloak end_session to /logged-out', true, page.url());

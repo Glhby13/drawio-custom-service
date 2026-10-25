@@ -71,6 +71,16 @@ export async function newPage(browser) {
 import { createHmac } from 'node:crypto';
 import { existsSync, writeFileSync } from 'node:fs';
 const SEEDS = join(here, '.otp-seeds.json');
+const LAST = join(here, '.otp-last.json');
+// Keycloak refuses a TOTP code that was already used in the current 30 s window, so repeated sign-ins of the same test user wait for the next window.
+async function freshCode(user, seed) {
+  const last = existsSync(LAST) ? JSON.parse(readFileSync(LAST, 'utf8')) : {};
+  for (;;) {
+    const step = Math.floor(Date.now() / 30000);
+    if (last[user] !== step) { last[user] = step; writeFileSync(LAST, JSON.stringify(last)); return totp(seed); }
+    await new Promise(r => setTimeout(r, 1000));
+  }
+}
 const seeds = () => (existsSync(SEEDS) ? JSON.parse(readFileSync(SEEDS, 'utf8')) : {});
 function b32decode(s) {
   const A = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567'; let bits = '';
@@ -87,7 +97,7 @@ export function totp(b32, at = Date.now()) {
 // access token for an AI agent acting as `user` (lab: direct grant; users with an authenticator must send the TOTP too)
 export async function agentToken(ctx, user, client = 'drawio-mcp-claude') {
   const form = { grant_type: 'password', client_id: client, username: user, password: password(user), scope: 'openid profile' };
-  const seed = seeds()[user]; if (seed) form.totp = totp(seed);
+  const seed = seeds()[user]; if (seed) form.totp = await freshCode(user, seed);
   const r = await ctx.request.post('https://auth.lab.local/realms/lab/protocol/openid-connect/token', { form, failOnStatusCode: false });
   if (r.status() !== 200) throw new Error('agent token for ' + user + ': ' + r.status() + ' ' + (await r.text()).slice(0, 160));
   return (await r.json()).access_token;
@@ -111,12 +121,12 @@ export async function keycloakLogin(page, user) {
   if (step === 'otp') {
     const seed = seeds()[user];
     if (!seed) throw new Error('user ' + user + ' asks for an OTP but no seed is known (not enrolled by this suite)');
-    await page.fill('#otp', totp(seed)); await page.click('#kc-login');
+    await page.fill('#otp', await freshCode(user, seed)); await page.click('#kc-login');
   } else if (step === 'setup') {
     const manual = page.locator('#mode-manual'); if (await manual.count()) await manual.click();
     const secret = (await page.locator('#kc-totp-secret-key').textContent()).replace(/\s/g, '');
     const all = seeds(); all[user] = secret; writeFileSync(SEEDS, JSON.stringify(all, null, 1));
-    await page.fill('#totp', totp(secret));
+    await page.fill('#totp', await freshCode(user, secret));
     const label = page.locator('#userLabel'); if (await label.count()) await label.fill('e2e');
     await page.click('#saveTOTPBtn');
   }

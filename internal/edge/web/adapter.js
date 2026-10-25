@@ -273,7 +273,7 @@
       if (drop.length && opts.onToast) opts.onToast('info', 'The diagram was reloaded from the server');
       rebuild(); joined = true;
       verify(m.seq, m.hash);
-      loadFull(m.xml).then(function () { E = M.clone(C); applyRole(); schedule(); if (!pending.length && !offlineEdits) status('ready', 'All changes saved'); });
+      loadFull(m.xml).then(function () { E = M.clone(C); applyRole(); schedule(); if (loadedInEditor && !pending.length && !offlineEdits) status('ready', 'All changes saved'); });
     }
 
     function onOp(o, hash) {
