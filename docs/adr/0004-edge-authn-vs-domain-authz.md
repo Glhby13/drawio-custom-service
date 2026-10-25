@@ -58,3 +58,9 @@ INFERENCE (desain). Pola OIDC yang sudah jalan di lab: `n8n-custom-service/inter
 - Login: state sekali pakai (`GETDEL`), nonce, PKCE S256, dan cookie pengikat browser (anti login-CSRF); `return_to` hanya path relatif.
 - Peran kasar: client role `user|admin` di client `drawio-lab`; tanpa role = 403 dan tidak ada sesi. Gateway **bukan** sumber kebenaran izin dokumen.
 - EVIDENCE: `internal/edge/edge_test.go` (matriks + 12 mutasi kontrol keamanan terdeteksi), `e2e/phase2_gateway.mjs` (24/24 di Chrome terhadap Keycloak lab).
+
+## Addendum 2026-10-25 — platform dan MCP (Phase 3–8)
+- Dua edge menerbitkan token internal ke `platform`: gateway (`kid edge-1`, `iss drawio-gateway`, aktor manusia) dan mcp-server (`kid mcp-1`, `iss drawio-mcp`, aktor AI + `onBehalfOf`). Platform mempercayai **kunci publik keduanya** (`INTERNAL_KEYS`), bukan header; kunci privat tiap edge hanya di Secret-nya.
+- Platform ClusterIP + **NetworkPolicy** `drawio-platform-from-edges` (hanya pod gateway/mcp).
+- Keputusan izin tetap di `platform` (PDP satu modul untuk REST, WebSocket, MCP). Tanpa akses = 404.
+- EVIDENCE: `e2e/phase5_collab.mjs`, `e2e/phase6_mcp.mjs`.

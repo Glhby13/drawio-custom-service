@@ -177,9 +177,18 @@
     if (panelRender) panelRender();
   }
 
+  var presenceTimer = null;
   function renderPresence(list, you) {
     var box = $('presence'); box.textContent = '';
-    var seen = {};
+    var seen = {}, now = Date.now(), next = 0;
+    clearTimeout(presenceTimer);
+    list = list.filter(function (p) {
+      if (!p.exp) return true;
+      if (p.exp * 1000 <= now) return false;
+      next = next ? Math.min(next, p.exp * 1000) : p.exp * 1000; // an AI actor working through the API stays visible for a short while
+      return true;
+    });
+    if (next) presenceTimer = setTimeout(function () { renderPresence(list, you); }, next - now + 200);
     list.forEach(function (p) {
       var key = p.user + ':' + p.type + ':' + (p.agent || '');
       if (seen[key]) return; seen[key] = true;

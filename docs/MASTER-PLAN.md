@@ -55,6 +55,21 @@ Label bukti: **EVIDENCE** (dijalankan/dibaca, hasil tercatat) · **INFERENCE** �
 | Token internal | **PROVEN (unit)** | belum dipakai service lain (Phase 3) |
 Catatan: image CI = arsitektur agen (arm64 di lab); manifest-list multi-arch dari CI = Phase 8. Pengesampingan gate kantor Phase 2 dicatat di "Keputusan user: program lab-first". Phase 3 belum dimulai.
 
+## Status Phase 3–8 — platform, izin, kolaborasi, MCP, AI (2026-10-25, Claude Code): **PASS (lab)** — di-push, Jenkins #8 SUCCESS, ArgoCD Synced/Healthy, 3 suite E2E lulus dari deploy GitOps
+Atas instruksi user (satu sesi: "lanjut sampai semua … push, build, sync, test end to end dari segala aspek", hanya lab + GitHub user) Phase 3–8 dikerjakan berurutan dalam satu program; gate **Phase 4b/SPIKE-003 dipenuhi oleh E2E kolaborasi nyata** (Chrome asli ×3 pengguna, draw.io resmi tanpa patch).
+| Capability | Status | Bukti |
+|---|---|---|
+| Dokumen: PostgreSQL (op log, partisi hash, versi, komentar, audit) + SeaweedFS S3 (snapshot JSON gz tiap 200 op) + Redis (pub/sub, presence); pod tanpa PVC | **PROVEN (lab)** | `e2e/phase5_collab.mjs` (restart pod platform di tengah sesi, data utuh) |
+| PDP: viewer < commenter < editor < owner, `*` = semua orang, admin aplikasi baca/bagikan/hapus/pulihkan tetapi tidak mengedit, 404 tanpa oracle keberadaan | **PROVEN (lab)** | phase5: stranger 404, viewer 403, admin 403 untuk edit, revoke memutus sesi |
+| Kolaborasi realtime (ADR-0006 hybrid: operasi semantik terurut server + LWW per kunci + fractional index) di draw.io resmi | **PROVEN (lab)** | phase5: 3 pengguna, edit bersamaan (label sama, hapus vs edit, group, halaman baru) konvergen; hash CANON-v1 server == klien |
+| Adapter: baseline editor `E`, diff `E→L` → op, `toPatch(L,T)` → aksi `patch` embed; verifikasi hash periodik; resync otomatis | **PROVEN (lab)** | `webtest/` 1799 kasus diff (JS) diterima validator Go dengan state identik; phase5 |
+| Riwayat atribut, revert per batch, versi bernama + restore, komentar, ekspor .drawio/SVG, audit | **PROVEN (lab)** | phase5 |
+| MCP server (Streamable HTTP, OAuth bearer Keycloak, metadata RFC 9728, 15 tool + resources) | **PROVEN (lab)** | `e2e/phase6_mcp.mjs` 43 cek, tes unit `internal/mcpsrv` |
+| AI sebagai kolaborator berotorisasi: identitas `ai-<klien>` terdelegasi (on-behalf-of), izin = min(share AI, peran user), hanya bila pemilik mengizinkan AI + membagikan ke aktor AI, kuota op/menit, batas hapus per request, atribusi (aktor/agen/model) di riwayat+audit, presence, revert | **PROVEN (lab)** | phase6 |
+| Hardening: NetworkPolicy (platform hanya dari gateway+mcp), Secret skeleton (nilai di luar git), lint/vet/govulncheck bersih, `CGO_ENABLED=0` | **PROVEN (lab)** | Jenkins #8, `kubectl get netpol` |
+| Kantor RHEL/RKE AMD64 | **UNVERIFIED** | langkah: `lab/docs/office-sync/DRAWIO-PHASE2-8-OFFICE-STEPS.md` |
+Catatan jujur: (1) skala: `e2e/perf_collab.mjs` 500 sel, 2 klien — latensi p50 36 ms / p95 42 ms (README "Performa"); >500 sel dan >2 penulis aktif belum diuji; (2) agen AI diuji dengan klien MCP skrip (grant password Keycloak, khusus lab) — alur auth-code+PKCE didukung klien `drawio-mcp-claude` tetapi tidak dijalankan dari UI agen sungguhan; (3) DDL/migrasi PostgreSQL berjalan otomatis saat start (`MIGRATE=true`, `schema_version` 1) — di kantor DDL dijalankan user lebih dulu.
+
 ## 1. Executive Summary
 draw.io Community dipakai **apa adanya** sebagai editor; `drawio-custom-service` adalah lapisan enterprise (SSO, penyimpanan terpusat, izin, versi, kolaborasi, audit, MCP, AI)
 yang memakai **satu Semantic Operation Contract** dan **satu pipeline otorisasi domain** untuk manusia dan AI. Lab (MacBook M4 ARM64, cluster RHEL 9.8 aarch64 + RKE2) dan

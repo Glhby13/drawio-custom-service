@@ -2,7 +2,7 @@
 
 Author / Agent: Claude Code
 Timestamp: 2026-10-25 01:05 (revisi 2026-10-25 02:30)
-Status: **Proposed** (kontrak kandidat; direvisi oleh bukti fuzz SPIKE-002 — lihat "Revisi berdasarkan bukti")
+Status: **Accepted untuk lab (2026-10-25)** — schemaVersion 1 dipakai server (Go) dan klien (JS) dengan hash CANON-v1 identik
 
 ## Context
 Satu model perubahan harus dipakai bersama oleh adapter draw.io, kolaborasi, otorisasi, validasi, op log, audit, MCP, dan AI.
@@ -115,3 +115,6 @@ Model-level fuzz (`spikes/spike-004-fuzz`, Go, 12.000 skrip, 1,15 juta op) mengu
 
 ## Evidence
 SPIKE-001 §2, §4, §7, §8 (ukuran op kandidat 220 B), E7 (patch buatan server bisa diterapkan).
+
+## Addendum 2026-10-25
+Konformansi lintas bahasa: `webtest/` (JS) dan `internal/model` (Go) — 1799 transisi, 0 selisih; op hasil `diff()` JS diterima validator Go dengan struktur identik. Tambahan antarmuka API (bukan perubahan kontrak): `order` boleh dikosongkan oleh pemanggil REST (server menaruh di atas z-order / halaman terakhir).

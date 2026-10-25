@@ -491,6 +491,7 @@ func (s *Server) postOperations(w http.ResponseWriter, r *http.Request, p *Princ
 	}
 	if p.IsAI && !res.Duplicate {
 		_ = s.store.Audit(r.Context(), p.Actor, d.ID, "ops", "ok", map[string]any{"batch": in.Batch, "ops": len(res.Applied)})
+		s.touchAIPresence(d.ID, p)
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"batch": in.Batch, "seqs": seqs, "duplicate": res.Duplicate, "overridden": res.Overridden})
 }
@@ -551,6 +552,7 @@ func (s *Server) postLayout(w http.ResponseWriter, r *http.Request, p *Principal
 		return
 	}
 	_ = s.store.Audit(r.Context(), p.Actor, d.ID, "layout", "ok", map[string]any{"algo": in.Algo, "moved": len(res.Applied)})
+	s.touchAIPresence(d.ID, p)
 	writeJSON(w, http.StatusOK, map[string]any{"moved": len(res.Applied)})
 }
 

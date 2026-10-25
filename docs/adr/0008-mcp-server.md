@@ -2,7 +2,7 @@
 
 Author / Agent: Claude Code
 Timestamp: 2026-10-25 01:15
-Status: Proposed (fase utama roadmap: Phase 6; tool list = **candidate API**, bukan kontrak final)
+Status: **Accepted untuk lab (2026-10-25)** — diimplementasi di `internal/mcpsrv`; daftar tool di bawah adalah kontrak v1
 
 ## Context
 Agen AI dan alat lain perlu membaca dan mengubah diagram lewat Model Context Protocol, dengan aturan izin dan audit yang sama
@@ -47,3 +47,9 @@ Prinsip: **MCP → domain operation API**. Helper hanyalah pembungkus yang mengh
 
 ## Evidence
 INFERENCE (desain). E7: patch yang dibangun server berhasil diterapkan ke editor → op dari MCP bisa ditampilkan realtime setelah lowering.
+
+## Addendum 2026-10-25 — implementasi
+- Transport: Streamable HTTP, `POST /mcp` JSON-RPC 2.0 (tanpa stream server-initiated; `GET /mcp` = 405), protokol 2025-06-18 / 2025-03-26 / 2024-11-05. Ingress langsung ke service `drawio-mcp` untuk `/mcp` dan `/.well-known/oauth-protected-resource` (gateway tidak ikut jalur ini).
+- Auth: bearer access token Keycloak (JWKS, issuer, exp, `aud` = `drawio-mcp`); peran aplikasi dari `resource_access.drawio-lab`; 401 + `WWW-Authenticate: Bearer resource_metadata=…` (RFC 9728).
+- Tool v1: `list_diagrams get_diagram create_diagram add_shape connect update_cell delete_cells apply_operations layout export get_history list_versions save_version restore_version comment` + resources `diagram://<id>`. Semua lewat REST platform yang sama dengan UI (PDP, op log, audit). Server platform mengisi `order` bila kosong (`Doc.FillOrders`) dan menyediakan `POST /documents/{id}/layout`.
+- Klien agen = satu client Keycloak per aplikasi agen (`drawio-mcp-<nama>` → aktor `ai-<nama>`), skrip `scripts/setup_keycloak_mcp.py`.

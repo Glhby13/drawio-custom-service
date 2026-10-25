@@ -42,7 +42,7 @@ const tool = async (ctx, token, name, args, hdr) => {
 const waitLabels = (s, want, ms = 20000) => s.page.waitForFunction(w => {
   const m = window.__adapter.editorUi().editor.graph.getModel(), out = [];
   Object.values(m.cells).forEach(c => { if (c.vertex || c.edge) out.push((typeof c.value === 'string' ? c.value : '') || ''); });
-  return JSON.stringify(out.sort()) === JSON.stringify(w);
+  return JSON.stringify(out.sort()) === JSON.stringify(w.slice().sort());
 }, want, { timeout: ms }).then(() => true).catch(() => false);
 
 const alice = await login('e2e-team1'), carol = await login('e2e-user2');
@@ -89,6 +89,7 @@ r = await tool(ctx, tokA, 'add_shape', { document: id, label: 'Server', x: 300, 
 const shapeB = /shape (\S+)/.exec(r.text)?.[1];
 r = await tool(ctx, tokA, 'connect', { document: id, source: shapeA, target: shapeB, label: 'calls' });
 check('AI connects the shapes', r.ok, r.text);
+check('the AI actor shows up in the presence bar (marked AI) while it works', await alice.page.waitForFunction(() => [...document.querySelectorAll('#presence .pav.ai')].some(x => x.dataset.user === 'ai-claude'), null, { timeout: 15000 }).then(() => true).catch(() => false), await alice.page.evaluate(() => [...document.querySelectorAll('#presence .pav')].map(x => x.dataset.user + ':' + x.title).join(' | ')));
 check('the owner, watching in the browser, sees the AI\'s shapes appear in realtime', await waitLabels(alice, ['Client', 'Server', 'calls']));
 r = await tool(ctx, tokA, 'layout', { document: id, algo: 'layered' });
 check('AI arranges the diagram (layout tool)', r.ok, r.text);
@@ -120,8 +121,13 @@ check('the owner reverts the AI\'s update as with any other change', rv.status =
 check('revert is visible to the owner in the browser', await waitLabels(alice, ['Server', 'Client', 'calls']));
 
 // ---- limits and delegation ----------------------------------------------------------------------------------------------------------
-r = await tool(ctx, tokA, 'delete_cells', { document: id, cells: [shapeA, shapeB] });
-check('deleting more cells than the owner allows needs confirmation (AI policy maxDelete=2 -> cascade is larger)', !r.ok && /confirmation required/.test(r.text), r.text.slice(0, 160));
+r = await tool(ctx, tokA, 'add_shape', { document: id, label: 'Third', x: 40, y: 200 });
+const shapeC = /shape (\S+)/.exec(r.text)?.[1];
+r = await tool(ctx, tokA, 'delete_cells', { document: id, cells: [shapeA, shapeB, shapeC] });
+check('deleting more cells in one request than the owner allows (maxDelete=2) needs confirmation', !r.ok && /confirmation required/.test(r.text), r.text.slice(0, 160));
+check('nothing was deleted by the refused request', await waitLabels(alice, ['Server', 'Client', 'calls', 'Third']));
+r = await tool(ctx, tokA, 'delete_cells', { document: id, cells: [shapeC] });
+check('a deletion within the limit succeeds', r.ok, r.text);
 check('owner lowers the AI rate limit to 3 ops/min', (await api(alice, 'PUT', `/documents/${id}/ai-policy`, { allowed: true, maxOpsPerMin: 3, maxDelete: 2 })).status === 200);
 r = await tool(ctx, tokA, 'apply_operations', { document: id, operations: Array.from({ length: 5 }, (_, i) => ({ t: 'setProp', page: 'p1', cell: shapeA, key: 'v', val: 'x' + i })) });
 check('exceeding the AI quota is refused (rate limited)', !r.ok && /rate limited/.test(r.text), r.text.slice(0, 120));

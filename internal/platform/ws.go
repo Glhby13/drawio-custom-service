@@ -56,6 +56,7 @@ type PresenceEntry struct {
 	Agent string `json:"agent,omitempty"`
 	Role  string `json:"role"`
 	Since int64  `json:"since"`
+	Exp   int64  `json:"exp,omitempty"` // AI actors act through REST and have no socket: their presence expires on its own
 }
 
 // Session is one WebSocket connection.
@@ -436,4 +437,30 @@ func (se *Session) handleOps(ctx context.Context, meta *DocMeta, in In) {
 	if se.p.IsAI { // human edits are attributed by the operation log itself; AI batches also get an audit row
 		_ = s.store.Audit(ctx, se.p.Actor, meta.ID, "ops", "ok", map[string]any{"batch": in.Batch, "ops": len(res.Applied), "fromSeq": seqs[0], "toSeq": seqs[len(seqs)-1]})
 	}
+}
+
+// touchAIPresence shows an AI actor that is working through the REST API (MCP) as a collaborator for a short while.
+func (s *Server) touchAIPresence(docID string, p *Principal) {
+	if !p.IsAI {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	now := time.Now()
+	e := PresenceEntry{SID: "ai:" + p.Username, User: p.Username, Name: p.Actor.Name, Type: p.Actor.Type, OBO: p.Actor.OnBehalfOf, Agent: p.Actor.Agent,
+		Role: RoleEditor, Since: now.Unix() / 30 * 30, Exp: now.Add(45 * time.Second).Unix()}
+	// one live entry per AI actor: replace what a previous call left behind
+	old := s.presenceList(docID)
+	for _, o := range old {
+		if o.SID == e.SID && (o.Since != e.Since || o.Exp != e.Exp) {
+			s.presenceDel(ctx, docID, o)
+		}
+	}
+	s.presenceSet(ctx, docID, e)
+	if dh := s.hub.existing(docID); dh != nil {
+		dh.mu.Lock()
+		dh.broadcastPresence(s)
+		dh.mu.Unlock()
+	}
+	s.publish(docID, ctlMsg{Origin: s.replica, Kind: "presence"})
 }

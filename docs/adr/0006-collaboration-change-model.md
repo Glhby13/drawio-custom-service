@@ -2,7 +2,7 @@
 
 Author / Agent: Claude Code
 Timestamp: 2026-10-25 00:55 (revisi 2026-10-25 02:45)
-Status: **Proposed** (CURRENT HYPOTHESIS — bukan arsitektur final). Bukti model-level kuat (SPIKE-002 §11) tetapi **integrasi draw.io↔adapter↔model belum terbukti**; Accepted hanya bila kriteria di bawah terpenuhi.
+Status: **Accepted untuk lab (2026-10-25)** — kriteria integrasi terpenuhi di E2E nyata; kantor UNVERIFIED. Teks asli: "Proposed (CURRENT HYPOTHESIS …)". Bukti model-level kuat (SPIKE-002 §11) tetapi **integrasi draw.io↔adapter↔model belum terbukti**; Accepted hanya bila kriteria di bawah terpenuhi.
 
 ## Context
 Kolaborasi beberapa user (dan AI) pada satu diagram draw.io tanpa mengubah draw.io. Bukti dari SPIKE-001 putaran 1:
@@ -150,3 +150,9 @@ Bila gagal: catat **Accepted alternative** — snapshot + lock (minimal), atau C
 
 ## Evidence
 `docs/spikes/SPIKE-001-drawio-change-model.md` §4–§10; `spikes/spike-001/results/*.json`.
+
+## Addendum 2026-10-25 — bukti integrasi draw.io ↔ adapter ↔ model (SPIKE-003 secara de facto)
+- Browser menyimpan tiga keadaan: **confirmed C** (op ter-resolve berurutan dari server), **pending** (batch terkirim belum diakui) dan **E** (isi editor yang diketahui). Perubahan lokal = `diff(E, L)` (bukan terhadap T — perubahan remote yang belum tampil tidak boleh terbaca sebagai penghapusan lokal; bug ini ditemukan E2E dan diperbaiki). Perubahan remote/ack → `toPatch(L, T)` ke aksi `patch` embed. Setelah penerapan `E := T`.
+- Nack/ditolak ⇒ editor dikembalikan ke T (perubahan hilang terlihat oleh pengguna dengan toast), tanpa loop kirim ulang.
+- Hash CANON-v1 dari server diverifikasi terhadap C; selisih ⇒ resync penuh. Reconnect memakai `since=lastSeq` (catch-up) atau join penuh.
+- Bukti: 44 cek E2E (3 pengguna paralel di Chrome), 1799 kasus diff JS→Go identik, kriteria 1–4 terpenuhi; kriteria 5 (latensi p95) lihat README "Performa".

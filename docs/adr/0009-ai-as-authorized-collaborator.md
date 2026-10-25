@@ -2,7 +2,7 @@
 
 Author / Agent: Claude Code
 Timestamp: 2026-10-25 01:15
-Status: Proposed (Phase 7, di atas MCP)
+Status: **Accepted untuk lab (2026-10-25)** — Phase 7 diimplementasi di atas MCP
 
 ## Context
 AI harus bisa membaca dan mengubah diagram seperti kolaborator biasa: terlihat, dibatasi izin, diaudit, dan dapat dibatalkan.
@@ -46,3 +46,9 @@ Bukan `AI ─> S3` dan bukan `AI ─> PostgreSQL`. mcp-server tidak memiliki kre
 
 ## Evidence
 INFERENCE (desain); bergantung pada ADR-0004, ADR-0008, ADR-0010.
+
+## Addendum 2026-10-25 — implementasi
+- Aktor AI `ai-<klien>` (`actorType=ai`, `onBehalfOf=<user>`, `agent=<client id>`, `model` dari header `X-Agent-Model`). Peran efektif = **min(share eksplisit untuk aktor AI, peran user pendelegasi)**, dibatasi editor, dan hanya bila `aiPolicy.allowed` — tanpa share ke aktor AI atau tanpa izin pemilik ⇒ 404.
+- Pemilik mengatur di dialog Share: izinkan AI, `maxOpsPerMin` (Redis, gagal-tertutup), `maxDelete` per request (lebih ⇒ 409 `confirmation_required`; **tidak ada kanal konfirmasi lewat agen**: pemilik menaikkan batas atau agen menghapus lebih sedikit). AI tidak pernah owner/share/hapus dokumen/atur kebijakan; bukan admin aplikasi.
+- Atribusi di riwayat dan audit (aktor, OBO, agen, model); revert per batch seperti op manusia; kehadiran AI di presence selama bekerja lewat API (entri berkedaluwarsa sendiri 45 dtk).
+- Mode "saran" (cabang usulan) **belum** — dicatat sebagai pekerjaan lanjutan.

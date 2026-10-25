@@ -69,3 +69,6 @@ PostgreSQL 18.6 (Docker Desktop arm64, `synchronous_commit=on`, `wal_sync_method
 
 ## Evidence
 E6 (ukuran XML), `spikes/spike-002-oplog/results.json` (biaya CPU replay/encode). Latensi DB: UNKNOWN (metodologi SPIKE-001 §9).
+
+## Addendum 2026-10-25 — implementasi
+Tabel `ops` (partisi hash, kunci `(document_id, seq)`), `snapshots`, `versions`, `comments`, `audit`, `users`, `permissions`, `documents` (migrasi `internal/platform/migrations/001_init.sql`, `schema_version` 1; service menolak start bila kurang). Pembagian urutan: `SELECT … FOR UPDATE` pada baris dokumen; idempotensi batch lewat `op_id`. Snapshot tiap 200 op ke `drawio-documents/<doc>/snapshots/<seq>.json.gz`; restore = op `restore` baru + snapshot langsung (klien resync).
