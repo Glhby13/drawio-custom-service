@@ -74,7 +74,7 @@
     // opts: { frame, docId, onStatus(state,text), onRole(role,title), onPresence(list,you), onFatal(code,msg), onToast(kind,text), onSeq(seq) }
     var frame = opts.frame;
     var ui = null, ws = null, you = '', role = '', closed = false;
-    var C = M.newDoc(), pending = [], T = M.newDoc(), joined = false;
+    var C = M.newDoc(), pending = [], T = M.newDoc(), E = M.newDoc(), joined = false; // E = what the editor is known to contain
     var busy = false, again = false, backoff = 500, lastHash = null, hashTimer = null, reconnectTimer = null, pingTimer = null;
     var loadedInEditor = false, embedReady = false, pendingLoad = null, patchWaiters = [];
     var stats = { sent: 0, acked: 0, nacked: 0, remote: 0, resyncs: 0, patches: 0, hashChecks: 0, hashBad: 0 };
@@ -163,10 +163,14 @@
           again = false;
           var L = fromLive(ui, T);
           if (canEdit()) {
-            var ops = B.diff(T, L);
-            if (ops.length) sendBatch(ops);
+            // the user's own changes = live editor vs. what we last put into it (E), never vs. T: remote changes that are
+            // not in the editor yet must not look like local deletions
+            var d = B.diff(E, L);
+            if (d.mismatch && window.console) console.warn('diff does not reproduce the live state (model gap)');
+            if (d.ops.length) sendBatch(d.ops);
           }
           var r = B.toPatch(L, T);
+          E = M.clone(T);
           if (!r.empty) {
             stats.patches++;
             var w = waitPatchEvent();
@@ -248,7 +252,7 @@
       if (drop.length && opts.onToast) opts.onToast('info', 'The diagram was reloaded from the server');
       rebuild(); joined = true;
       verify(m.seq, m.hash);
-      loadFull(m.xml).then(function () { applyRole(); schedule(); });
+      loadFull(m.xml).then(function () { E = M.clone(C); applyRole(); schedule(); });
     }
 
     function onOp(o, hash) {

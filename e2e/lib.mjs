@@ -47,6 +47,13 @@ export async function newPage(browser) {
   const log = { requests: [], violations: [], consoleErrors: [] };
   page.on('request', r => log.requests.push(r.url()));
   page.on('console', m => { if (m.type() === 'error') log.consoleErrors.push(m.text().slice(0, 200)); });
+  if (process.env.LOCAL_WEB) { // fast loop: serve the host assets from the working tree instead of the deployed image
+    await ctx.route('**/static/*', route => {
+      const name = new URL(route.request().url()).pathname.split('/').pop();
+      const f = join(here, '..', 'internal', 'edge', 'web', name);
+      try { route.fulfill({ body: readFileSync(f), headers: { 'content-type': name.endsWith('.js') ? 'text/javascript' : name.endsWith('.css') ? 'text/css' : 'text/plain', 'cache-control': 'no-store' } }); } catch (e) { route.continue(); }
+    });
+  }
   await ctx.addInitScript(() => document.addEventListener('securitypolicyviolation', e => { (window.__csp = window.__csp || []).push(e.violatedDirective + ' ' + e.blockedURI); }));
   return { ctx, page, log };
 }
