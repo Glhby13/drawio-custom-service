@@ -30,14 +30,15 @@ var webFS embed.FS
 
 // Server wires the gateway.
 type Server struct {
-	cfg    config.Gateway
-	log    *slog.Logger
-	store  session.Store
-	oidc   *OIDC
-	signer *identity.Signer
-	lim    *limiter
-	proxy  http.Handler
-	static fs.FS
+	cfg      config.Gateway
+	log      *slog.Logger
+	store    session.Store
+	oidc     *OIDC
+	signer   *identity.Signer
+	lim      *limiter
+	proxy    http.Handler
+	platform http.Handler
+	static   fs.FS
 	// loggedOutBody is the public signed-out page with its stylesheet inlined; loggedOutCSP allows exactly that
 	// stylesheet by hash (no 'unsafe-inline', no extra public route).
 	loggedOutBody []byte
@@ -62,6 +63,9 @@ func New(cfg config.Gateway, log *slog.Logger, store session.Store, o *OIDC, sig
 		s.cookie, s.bind = "drawio_sid", "drawio_login"
 	}
 	s.proxy = newEditorProxy(cfg.DrawioUpstream, log)
+	if cfg.PlatformUpstream != nil {
+		s.platform = newPlatformProxy(cfg.PlatformUpstream, log)
+	}
 	return s, nil
 }
 
@@ -84,6 +88,11 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/me", s.limited(s.authed(s.me)))
 	mux.HandleFunc("GET /static/", s.authed(s.staticFile))
 	mux.HandleFunc("GET /{$}", s.authed(s.hostPage))
+	mux.HandleFunc("GET /d/{id}", s.authed(s.hostPage)) // the single-page UI routes on the client
+	if s.platform != nil {
+		mux.Handle("/api/v1/", s.authedHandler(s.platformAPI))
+		mux.Handle("/ws/v1/", s.authedHandler(s.platformAPI))
+	}
 	// Every method reaches the proxy so the CSRF/origin rule applies uniformly; draw.io itself is mostly GET.
 	mux.Handle("/editor/", s.authedHandler(s.editor))
 	return observe(s.log, s.csrfOrigin(mux))
@@ -132,7 +141,7 @@ func (s *Server) csrfOrigin(next http.Handler) http.Handler {
 				http.Error(w, "forbidden origin", http.StatusForbidden)
 				return
 			}
-			r.Body = http.MaxBytesReader(w, r.Body, 4<<20)
+			r.Body = http.MaxBytesReader(w, r.Body, 16<<20)
 		}
 		next.ServeHTTP(w, r)
 	})

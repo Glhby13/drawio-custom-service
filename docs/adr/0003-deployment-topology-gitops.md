@@ -21,7 +21,7 @@ di template ApplicationSet bersama) menunjukkan template bersama tidak boleh diu
 - Monorepo `Glhby13/drawio-custom-service` (pola `n8n-custom-service`: satu Dockerfile multi-target `SERVICE_NAME`, Jenkinsfile
   lint/test/govulncheck → kaniko → Harbor project `drawio-custom-service` → bump `image.tag`).
 - Chart generik `helm-base-lab/drawio-custom-service`; values `helm-values-lab/lab-manifest/drawio-custom-service/<svc>/` (3 file per service)
-  + `common-k8s-resources`.
+  + `common-k8s-resources` (diperbarui 2026-10-25: ikut pola **portal-platform**, bukan n8n — lihat addendum).
 - AppProject + ApplicationSet terpisah `lab-drawio-custom-projects` (tiru `lab-n8n-custom-projects`).
 - Gateway = satu-satunya Ingress untuk `drawio.lab.local`; vhost VM nginx (TLS edge) menunjuk ingress-nginx; websocket diaktifkan.
 
@@ -37,3 +37,10 @@ di template ApplicationSet bersama) menunjukkan template bersama tidak boleh diu
 ## Evidence
 Pola yang sudah berjalan: `argocd-gitops-lab/.../lab-projects-dev-lab-services.yaml`, `.../lab-n8n-custom-projects/dev/lab-n8n-custom-projects-dev-lab-services.yaml`,
 `helm-base-lab/n8n-custom-service`, `n8n-custom-service/Jenkinsfile` (dibaca 2026-10-24).
+
+## Addendum 2026-10-25 — `common-k8s-resources` (pola portal-platform)
+- Values: `helm-values-lab/lab-manifest/drawio-custom-service/common-k8s-resources/{values-common,values-env-dev,values-cluster-dev-lab}.yaml`; chart: `helm-base-lab/common-k8s-resources` (chart bersama yang sudah ada).
+- ApplicationSet `lab-drawio-common-resources-clusters` di `argocd-gitops-lab/.../lab-drawio-custom-projects/common/` → Application `lab-drawio-common-resources-dev-lab`, project `lab-drawio-custom-projects`, namespace `lab-dev`, `prune: false`, `selfHeal: true`, sumber values memakai `directory.exclude: "*.yaml"` (tanpa ini ArgoCD mem-parse values sebagai manifest).
+- Isi awal: **skeleton** Secret `drawio-gateway-secret` (tanpa `data`; `Delete=false`; daftar key di anotasi `lab.local/keys`). Nilai Secret tetap dibuat tangan dan dicatat di `lab/SECRETS.md`. `lab-ca` sengaja **tidak** dideklarasikan karena dipakai bersama oleh project lain.
+- Kenapa pola portal, bukan n8n: di n8n folder serupa tidak ditunjuk ApplicationSet mana pun (tidak ter-deploy); di portal ia benar-benar dikelola ArgoCD. NetworkPolicy bersama (Phase 8) ditambahkan di sini.
+- EVIDENCE (server-side dry-run, tanpa mengubah cluster): schema ApplicationSet valid; menerapkan skeleton di atas Secret yang ada mempertahankan ketiga key `data`. `last-applied` Secret live hanya memuat `stringData` (bukan `data`).

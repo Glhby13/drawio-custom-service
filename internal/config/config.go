@@ -15,24 +15,25 @@ import (
 
 // Gateway holds every setting of the gateway deployable.
 type Gateway struct {
-	Port           string
-	PublicURL      *url.URL // https://drawio.lab.local (browser-facing origin)
-	IssuerURL      string
-	ClientID       string
-	ClientSecret   string
-	RequiredRole   string // client role needed to enter at all (coarse check, ADR-0004)
-	DrawioUpstream *url.URL
-	RedisAddr      string
-	RedisUser      string
-	RedisPassword  string
-	CAFile         string // extra PEM bundle trusted for the issuer (lab wildcard CA)
-	SessionTTL     time.Duration
-	SessionIdle    time.Duration
-	RateBurst      int
-	RateRPS        float64
-	InternalKey    ed25519.PrivateKey
-	InternalKeyID  string
-	InsecureCookie bool // plain-HTTP local tests only; refused when PUBLIC_URL is https
+	Port             string
+	PublicURL        *url.URL // https://drawio.lab.local (browser-facing origin)
+	IssuerURL        string
+	ClientID         string
+	ClientSecret     string
+	RequiredRole     string // client role needed to enter at all (coarse check, ADR-0004)
+	DrawioUpstream   *url.URL
+	PlatformUpstream *url.URL // optional: when empty /api/v1 and /ws/v1 are not served
+	RedisAddr        string
+	RedisUser        string
+	RedisPassword    string
+	CAFile           string // extra PEM bundle trusted for the issuer (lab wildcard CA)
+	SessionTTL       time.Duration
+	SessionIdle      time.Duration
+	RateBurst        int
+	RateRPS          float64
+	InternalKey      ed25519.PrivateKey
+	InternalKeyID    string
+	InsecureCookie   bool // plain-HTTP local tests only; refused when PUBLIC_URL is https
 }
 
 // LoadGateway reads and validates the environment; getenv is injectable for tests.
@@ -63,6 +64,11 @@ func LoadGateway(getenv func(string) string) (Gateway, error) {
 	}
 	if !strings.HasPrefix(g.IssuerURL, "https://") {
 		errs = append(errs, errors.New("ISSUER_URL must be https"))
+	}
+	if v := getenv("PLATFORM_UPSTREAM"); v != "" {
+		pu2, err := parseURL("PLATFORM_UPSTREAM", v)
+		errs = append(errs, err)
+		g.PlatformUpstream = pu2
 	}
 	g.InsecureCookie = getenv("INSECURE_COOKIE") == "true"
 	if pu != nil && pu.Scheme != "https" && !g.InsecureCookie {

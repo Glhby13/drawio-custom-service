@@ -32,6 +32,8 @@ type Claims struct {
 	Audience   string   `json:"aud"`
 	ActorType  string   `json:"actorType"`
 	OnBehalfOf string   `json:"onBehalfOf,omitempty"`
+	Username   string   `json:"preferred_username,omitempty"`
+	Name       string   `json:"name,omitempty"`
 	Roles      []string `json:"roles,omitempty"`
 	SessionID  string   `json:"sessionId,omitempty"`
 	Agent      string   `json:"agent,omitempty"`
@@ -148,3 +150,35 @@ func (v *Verifier) Verify(token, audience string) (Claims, error) {
 func b64(b []byte) string { return base64.RawURLEncoding.EncodeToString(b) }
 
 func unb64(s string) ([]byte, error) { return base64.RawURLEncoding.DecodeString(s) }
+
+// VerifierSet trusts several edges (gateway, mcp-server), each with its own key id, key and issuer.
+type VerifierSet struct{ byKid map[string]*Verifier }
+
+// NewVerifierSet builds a set; keys maps kid -> (public key, issuer).
+func NewVerifierSet() *VerifierSet { return &VerifierSet{byKid: map[string]*Verifier{}} }
+
+// Add registers an edge.
+func (s *VerifierSet) Add(kid string, pub ed25519.PublicKey, issuer string) {
+	s.byKid[kid] = NewVerifier(pub, kid, issuer)
+}
+
+// Verify selects the verifier by the (unauthenticated) kid header, then performs every check of Verifier.Verify.
+func (s *VerifierSet) Verify(token, audience string) (Claims, error) {
+	parts := strings.Split(token, ".")
+	if len(parts) != 3 {
+		return Claims{}, ErrInvalid
+	}
+	hb, err := unb64(parts[0])
+	if err != nil {
+		return Claims{}, ErrInvalid
+	}
+	var h header
+	if json.Unmarshal(hb, &h) != nil {
+		return Claims{}, ErrInvalid
+	}
+	v := s.byKid[h.Kid]
+	if v == nil {
+		return Claims{}, ErrInvalid
+	}
+	return v.Verify(token, audience)
+}

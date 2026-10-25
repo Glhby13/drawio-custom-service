@@ -3,3 +3,4 @@
 node_modules/
 spikes/**/node_modules/
 /bin/
+webtest/diffops.json

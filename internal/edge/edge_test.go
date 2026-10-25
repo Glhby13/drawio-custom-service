@@ -130,6 +130,11 @@ type env struct {
 		cookie, auth, path string
 	}
 	verifier *identity.Verifier
+	platform *httptest.Server
+	plat     struct {
+		sync.Mutex
+		auth, cookie, path, origin string
+	}
 }
 
 func newEnv(t *testing.T, mut func(*config.Gateway)) *env {
@@ -145,6 +150,15 @@ func newEnv(t *testing.T, mut func(*config.Gateway)) *env {
 		_, _ = io.WriteString(w, "<html>draw.io</html>")
 	}))
 	t.Cleanup(e.upstream.Close)
+	e.platform = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		e.plat.Lock()
+		e.plat.auth, e.plat.cookie, e.plat.path, e.plat.origin = r.Header.Get("Authorization"), r.Header.Get("Cookie"), r.URL.Path, r.Header.Get("Origin")
+		e.plat.Unlock()
+		w.Header().Set("Server", "platform")
+		w.Header().Set("Set-Cookie", "x=y")
+		_, _ = io.WriteString(w, `{"documents":[]}`)
+	}))
+	t.Cleanup(e.platform.Close)
 	mr := miniredis.RunT(t)
 	e.mr = mr
 	pool := x509.NewCertPool()
@@ -152,7 +166,8 @@ func newEnv(t *testing.T, mut func(*config.Gateway)) *env {
 	up, _ := url.Parse(e.upstream.URL)
 	pub, priv, _ := ed25519.GenerateKey(rand.Reader)
 	pu, _ := url.Parse("https://drawio.test")
-	cfg := config.Gateway{Port: "0", PublicURL: pu, IssuerURL: e.idp.srv.URL, ClientID: clientID, ClientSecret: "s", RequiredRole: "user",
+	plu, _ := url.Parse(e.platform.URL)
+	cfg := config.Gateway{PlatformUpstream: plu, Port: "0", PublicURL: pu, IssuerURL: e.idp.srv.URL, ClientID: clientID, ClientSecret: "s", RequiredRole: "user",
 		DrawioUpstream: up, SessionTTL: time.Hour, SessionIdle: 10 * time.Minute, RateBurst: 1000, RateRPS: 1000, InternalKey: priv, InternalKeyID: "k"}
 	if mut != nil {
 		mut(&cfg)
@@ -456,13 +471,13 @@ func TestHostPageAssetsAndHeaders(t *testing.T) {
 	res := e.do(j, "GET", "/", nav)
 	body, _ := io.ReadAll(res.Body)
 	csp := res.Header.Get("Content-Security-Policy")
-	if res.StatusCode != 200 || !strings.Contains(string(body), `src="/editor/`) || !strings.Contains(csp, "script-src 'self'") || strings.Contains(csp, "unsafe-inline'") && strings.Contains(csp, "script-src 'self' 'unsafe") || !strings.Contains(csp, "frame-ancestors 'self'") {
+	if res.StatusCode != 200 || !strings.Contains(string(body), `src="/static/adapter.js"`) || !strings.Contains(csp, "script-src 'self'") || strings.Contains(csp, "unsafe-inline'") && strings.Contains(csp, "script-src 'self' 'unsafe") || !strings.Contains(csp, "frame-ancestors 'self'") {
 		t.Fatalf("host page: %d csp=%q", res.StatusCode, csp)
 	}
 	if strings.Contains(string(body), "<script>") || strings.Contains(string(body), "onclick=") {
 		t.Fatal("inline script would violate the host CSP")
 	}
-	for _, f := range []string{"adapter.js", "host.js", "host.css"} {
+	for _, f := range []string{"adapter.js", "host.js", "host.css", "model.js", "bridge.js"} {
 		if r := e.do(j, "GET", "/static/"+f, nil); r.StatusCode != 200 {
 			t.Errorf("%s: %d", f, r.StatusCode)
 		}
@@ -573,5 +588,51 @@ func TestHostPageKeepsContractIDsAndHasNoInlineStyle(t *testing.T) {
 	}
 	if strings.Contains(html, " style=") || strings.Contains(html, "<style") {
 		t.Fatal("host page must not use inline styles (CSP style-src 'self')")
+	}
+}
+
+func TestPlatformProxyMintsAnInternalTokenAndDropsBrowserCredentials(t *testing.T) {
+	e := newEnv(t, nil)
+	if res := e.do(nil, "GET", "/api/v1/documents", nil); res.StatusCode != 401 {
+		t.Fatalf("unauthenticated API call must be 401, got %d", res.StatusCode)
+	}
+	j := e.loggedIn()
+	res := e.do(j, "GET", "/api/v1/documents", map[string]string{"Authorization": "Bearer forged.client.token", "Origin": "https://drawio.test"})
+	if res.StatusCode != 200 {
+		t.Fatalf("API call: %d", res.StatusCode)
+	}
+	e.plat.Lock()
+	auth, cookie, path := e.plat.auth, e.plat.cookie, e.plat.path
+	e.plat.Unlock()
+	if path != "/api/v1/documents" || cookie != "" {
+		t.Fatalf("upstream saw path %q cookie %q (cookies must not cross)", path, cookie)
+	}
+	tok := strings.TrimPrefix(auth, "Bearer ")
+	if tok == "" || tok == "forged.client.token" {
+		t.Fatalf("client Authorization leaked or no token minted: %q", auth)
+	}
+	c, err := e.verifier.Verify(tok, "platform")
+	if err != nil || c.ActorType != "human" || c.Username == "" || len(c.Roles) == 0 || c.ExpiresAt-c.IssuedAt > 60 {
+		t.Fatalf("minted token wrong: %+v %v", c, err)
+	}
+	if _, err := e.verifier.Verify(tok, "other-service"); err == nil {
+		t.Fatal("token must be bound to the platform audience")
+	}
+	if res.Header.Get("Set-Cookie") != "" || res.Header.Get("Server") != "" {
+		t.Fatalf("upstream cookie/banner leaked: %v", res.Header)
+	}
+	// cross-site state-changing calls and WebSocket upgrades are refused at the edge
+	if r := e.do(j, "POST", "/api/v1/documents", map[string]string{"Origin": "https://evil.test"}); r.StatusCode != 403 {
+		t.Fatalf("cross-origin POST: %d", r.StatusCode)
+	}
+	if r := e.do(j, "GET", "/ws/v1/documents/x", map[string]string{"Upgrade": "websocket", "Connection": "Upgrade", "Origin": "https://evil.test"}); r.StatusCode != 403 {
+		t.Fatalf("cross-origin websocket: %d", r.StatusCode)
+	}
+	// the SPA route serves the host page for navigations and still requires a session
+	if r := e.do(nil, "GET", "/d/abc", nav); r.StatusCode != 302 {
+		t.Fatalf("/d/{id} without session: %d", r.StatusCode)
+	}
+	if r := e.do(j, "GET", "/d/abc", nav); r.StatusCode != 200 {
+		t.Fatalf("/d/{id} with session: %d", r.StatusCode)
 	}
 }
