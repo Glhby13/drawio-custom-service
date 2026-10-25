@@ -32,6 +32,7 @@ type itEnv struct {
 	srv    *Server
 	ts     *httptest.Server
 	signer *identity.Signer
+	gw     *identity.Signer // same key, issuer "drawio-gateway": what the real gateway signs (service tokens, local sign-ins)
 }
 
 func newIT(t *testing.T) *itEnv {
@@ -43,7 +44,7 @@ func newIT(t *testing.T) *itEnv {
 	cfg := config.Platform{Port: "0", PGHost: hp[0], PGPort: hp[1], PGDB: "drawio_test", PGUser: "lab_worker", PGPassword: os.Getenv("DRAWIO_IT_PG_PASSWORD"), PGSSLMode: "disable",
 		S3Endpoint: os.Getenv("DRAWIO_IT_S3"), S3Bucket: "drawio-documents", S3AccessKey: "drawio", S3SecretKey: os.Getenv("DRAWIO_IT_S3_SECRET"), S3Region: "us-east-1",
 		RedisAddr: os.Getenv("DRAWIO_IT_REDIS"), RedisUser: "drawio", RedisPassword: os.Getenv("DRAWIO_IT_REDIS_PASSWORD"),
-		Trusted: []config.TrustedKey{{Kid: "t-1", Pub: pub, Issuer: "it-edge"}}, SnapshotEvery: 10, AdminRole: "admin", UserRole: "user", AIDefaultMaxOpsPerMin: 300, AIDefaultMaxDelete: 20}
+		Trusted: []config.TrustedKey{{Kid: "t-1", Pub: pub, Issuer: "it-edge"}, {Kid: "gw-1", Pub: pub, Issuer: "drawio-gateway"}}, SnapshotEvery: 10, AdminRole: "admin", UserRole: "user", AIDefaultMaxOpsPerMin: 300, AIDefaultMaxDelete: 20}
 	ctx := context.Background()
 	pool, err := OpenPG(ctx, cfg)
 	if err != nil {
@@ -68,7 +69,7 @@ func newIT(t *testing.T) *itEnv {
 	srv.Start(cctx)
 	ts := httptest.NewServer(srv.Handler())
 	t.Cleanup(ts.Close)
-	return &itEnv{t: t, srv: srv, ts: ts, signer: identity.NewSigner(priv, "t-1", "it-edge")}
+	return &itEnv{t: t, srv: srv, ts: ts, signer: identity.NewSigner(priv, "t-1", "it-edge"), gw: identity.NewSigner(priv, "gw-1", "drawio-gateway")}
 }
 
 type who struct {
@@ -515,9 +516,18 @@ func TestLivePresence(t *testing.T) {
 	if _, ok := wl.next("joined", 5*time.Second); !ok {
 		t.Fatal("late join")
 	}
-	snap, ok := wl.next("act", 3*time.Second)
-	if !ok || snap.Act.User != "alice" || snap.Act.State != ActSelecting {
-		t.Fatalf("snapshot %+v ok=%v", snap.Act, ok)
+	var snap Out
+	for { // the snapshot lists every live collaborator in map order: look for alice's entry
+		var ok bool
+		if snap, ok = wl.next("act", 3*time.Second); !ok {
+			t.Fatal("alice's selection is missing from the join snapshot")
+		}
+		if snap.Act.User == "alice" {
+			break
+		}
+	}
+	if snap.Act.State != ActSelecting {
+		t.Fatalf("snapshot %+v", snap.Act)
 	}
 
 	// the AI works through REST: it shows up as "applying" with the cells it touches, only while it does
@@ -574,5 +584,186 @@ func TestLivePresence(t *testing.T) {
 	_, seq1 := e.hashOf(alice, docID)
 	if seq1 != seq0+1 {
 		t.Fatalf("presence must not write operations: seq %v -> %v", seq0, seq1)
+	}
+}
+
+// ---- local accounts --------------------------------------------------------------------------------------------------------
+
+func (e *itEnv) localTok(user string) string {
+	tok, err := e.gw.Sign(identity.Claims{Subject: "local:" + user, Audience: Audience, ActorType: identity.ActorHuman, Username: user, Name: user, Idp: "local"}, time.Minute)
+	if err != nil {
+		e.t.Fatal(err)
+	}
+	return tok
+}
+
+func (e *itEnv) rawCall(tok, method, path string, body any) (int, map[string]any) {
+	var rd io.Reader
+	if body != nil {
+		b, _ := json.Marshal(body)
+		rd = bytes.NewReader(b)
+	}
+	req, _ := http.NewRequest(method, e.ts.URL+path, rd)
+	req.Header.Set("Authorization", "Bearer "+tok)
+	req.Header.Set("Content-Type", "application/json")
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		e.t.Fatal(err)
+	}
+	defer res.Body.Close()
+	raw, _ := io.ReadAll(res.Body)
+	var out map[string]any
+	_ = json.Unmarshal(raw, &out)
+	return res.StatusCode, out
+}
+
+func TestLocalAccounts(t *testing.T) {
+	e := newIT(t)
+	tag := fmt.Sprint(time.Now().UnixNano() % 1e8)
+	admin := who{user: "boss", roles: []string{"admin"}}
+	plain := who{user: "plainuser", roles: []string{"user"}}
+	lu, la := "lus"+tag, "las"+tag
+	svc, _ := e.gw.Sign(identity.Claims{Subject: "gateway-auth", Audience: Audience, ActorType: identity.ActorService}, 30*time.Second)
+	verify := func(user, pw string) (int, map[string]any) {
+		return e.rawCall(svc, "POST", "/api/v1/internal/auth/local", map[string]string{"username": user, "password": pw})
+	}
+	t.Cleanup(func() {
+		for _, u := range []string{lu, la} {
+			e.call(admin, "DELETE", "/api/v1/admin/local-users/"+u, nil)
+		}
+	})
+
+	// only administrators manage accounts
+	if c, _ := e.call(plain, "GET", "/api/v1/admin/local-users", nil); c != 403 {
+		t.Fatalf("a normal user must not list local accounts: %d", c)
+	}
+	if c, _ := e.call(plain, "POST", "/api/v1/admin/local-users", map[string]any{"username": lu, "role": "user", "password": "a long enough password"}); c != 403 {
+		t.Fatalf("a normal user must not create accounts: %d", c)
+	}
+	// validation
+	for name, body := range map[string]map[string]any{
+		"short password":  {"username": lu, "role": "user", "password": "short"},
+		"bad username":    {"username": "Bad Name!", "role": "user", "password": "a long enough password"},
+		"bad role":        {"username": lu, "role": "root", "password": "a long enough password"},
+		"password = name": {"username": lu, "role": "user", "password": strings.ToUpper(lu)},
+	} {
+		if c, _ := e.call(admin, "POST", "/api/v1/admin/local-users", body); c != 400 {
+			t.Fatalf("%s accepted: %d", name, c)
+		}
+	}
+	if c, o := e.call(admin, "POST", "/api/v1/admin/local-users", map[string]any{"username": lu, "name": "Local User", "role": "user", "password": "a long enough password"}); c != 201 {
+		t.Fatalf("create: %d %v", c, o)
+	}
+	if c, _ := e.call(admin, "POST", "/api/v1/admin/local-users", map[string]any{"username": lu, "role": "user", "password": "a long enough password"}); c != 409 {
+		t.Fatalf("duplicate username: %d", c)
+	}
+	// an SSO account that already exists blocks the name
+	e.call(who{user: "sso" + tag, roles: []string{"user"}}, "GET", "/api/v1/documents", nil)
+	time.Sleep(400 * time.Millisecond) // the principal is remembered asynchronously
+	if c, _ := e.call(admin, "POST", "/api/v1/admin/local-users", map[string]any{"username": "sso" + tag, "role": "user", "password": "a long enough password"}); c != 409 {
+		t.Fatalf("local username equal to an SSO account: %d", c)
+	}
+
+	// the credential check (service token only)
+	if c, o := verify(lu, "a long enough password"); c != 200 || o["role"] != "user" || o["sub"] != "local:"+lu {
+		t.Fatalf("verify: %d %v", c, o)
+	}
+	for _, bad := range [][2]string{{lu, "wrong password!!"}, {"nobody" + tag, "a long enough password"}} {
+		if c, _ := verify(bad[0], bad[1]); c != 401 {
+			t.Fatalf("bad credentials accepted: %v %d", bad, c)
+		}
+	}
+	if c, _ := e.rawCall(e.token(admin), "POST", "/api/v1/internal/auth/local", map[string]string{"username": lu, "password": "a long enough password"}); c != 403 {
+		t.Fatalf("a browser-style token must not use the credential check: %d", c)
+	}
+	mcpTok, _ := e.signer.Sign(identity.Claims{Subject: "gateway-auth", Audience: Audience, ActorType: identity.ActorService}, 30*time.Second) // wrong issuer
+	if c, _ := e.rawCall(mcpTok, "POST", "/api/v1/internal/auth/local", map[string]string{"username": lu, "password": "a long enough password"}); c != 403 {
+		t.Fatalf("only the gateway issuer may call it: %d", c)
+	}
+
+	// a local account is an ordinary principal: owns diagrams, shares with SSO users
+	code, out := e.rawCall(e.localTok(lu), "POST", "/api/v1/documents", map[string]any{"title": "local owner"})
+	if code != 201 {
+		t.Fatalf("local user creates a diagram: %d %v", code, out)
+	}
+	doc := out["document"].(map[string]any)
+	docID := doc["id"].(string)
+	if doc["owner"] != lu {
+		t.Fatalf("owner %v", doc["owner"])
+	}
+	bob := who{user: "bob" + tag, roles: []string{"user"}}
+	if c, _ := e.rawCall(e.localTok(lu), "PUT", "/api/v1/documents/"+docID+"/permissions", map[string]any{"subject": bob.user, "role": "editor"}); c != 200 {
+		t.Fatalf("share to an SSO user: %d", c)
+	}
+	if c, o := e.call(bob, "GET", "/api/v1/documents/"+docID, nil); c != 200 || o["role"] != "editor" {
+		t.Fatalf("the SSO user sees the local user's diagram: %d %v", c, o["role"])
+	}
+	// ... and the other way round
+	_, o2 := e.call(bob, "POST", "/api/v1/documents", map[string]any{"title": "sso owner"})
+	d2 := o2["document"].(map[string]any)["id"].(string)
+	e.call(bob, "PUT", "/api/v1/documents/"+d2+"/permissions", map[string]any{"subject": lu, "role": "viewer"})
+	if c, o := e.rawCall(e.localTok(lu), "GET", "/api/v1/documents/"+d2, nil); c != 200 || o["role"] != "viewer" {
+		t.Fatalf("the local user sees the SSO user's diagram: %d %v", c, o["role"])
+	}
+	// a token that claims to be local but is not from the gateway is refused; so is an SSO token borrowing a local name
+	forged, _ := e.signer.Sign(identity.Claims{Subject: "local:" + lu, Audience: Audience, ActorType: identity.ActorHuman, Username: lu, Idp: "local"}, time.Minute)
+	if c, _ := e.rawCall(forged, "GET", "/api/v1/documents", nil); c != 403 {
+		t.Fatalf("a local claim from another issuer: %d", c)
+	}
+	if c, _ := e.call(who{user: lu, roles: []string{"user"}}, "GET", "/api/v1/documents", nil); c != 403 {
+		t.Fatalf("an SSO token must not take over a local username: %d", c)
+	}
+	// a local account has no roles in its token: role comes from the database. Promote -> admin powers; demote -> gone
+	if c, _ := e.rawCall(e.localTok(lu), "GET", "/api/v1/admin/local-users", nil); c != 403 {
+		t.Fatalf("a local user is not an admin: %d", c)
+	}
+	if c, o := e.call(admin, "PATCH", "/api/v1/admin/local-users/"+lu, map[string]any{"role": "admin"}); c != 200 {
+		t.Fatalf("promote: %d %v", c, o)
+	}
+	if c, _ := e.rawCall(e.localTok(lu), "GET", "/api/v1/admin/local-users", nil); c != 200 {
+		t.Fatalf("a local admin lists accounts: %d", c)
+	}
+	e.call(admin, "PATCH", "/api/v1/admin/local-users/"+lu, map[string]any{"role": "user"})
+	// own password
+	if c, _ := e.rawCall(e.localTok(lu), "POST", "/api/v1/me/password", map[string]string{"current": "WRONG wrong wrong", "new": "another long password"}); c != 403 {
+		t.Fatalf("wrong current password: %d", c)
+	}
+	if c, _ := e.rawCall(e.localTok(lu), "POST", "/api/v1/me/password", map[string]string{"current": "a long enough password", "new": "another long password"}); c != 200 {
+		t.Fatalf("change password: %d", c)
+	}
+	if c, _ := verify(lu, "a long enough password"); c != 401 {
+		t.Fatalf("the old password still works: %d", c)
+	}
+	if c, _ := verify(lu, "another long password"); c != 200 {
+		t.Fatalf("the new password does not work: %d", c)
+	}
+	if c, _ := e.call(bob, "POST", "/api/v1/me/password", map[string]string{"current": "x", "new": "another long password"}); c != 400 {
+		t.Fatalf("an SSO account has no local password: %d", c)
+	}
+	// admin reset, then disable: sign-in and live tokens stop working
+	e.call(admin, "PATCH", "/api/v1/admin/local-users/"+lu, map[string]any{"password": "reset by the admin"})
+	if c, _ := verify(lu, "reset by the admin"); c != 200 {
+		t.Fatalf("admin reset: %d", c)
+	}
+	if c, o := e.call(admin, "PATCH", "/api/v1/admin/local-users/"+lu, map[string]any{"disabled": true}); c != 200 {
+		t.Fatalf("disable: %d %v", c, o)
+	}
+	if c, _ := verify(lu, "reset by the admin"); c != 401 {
+		t.Fatalf("disabled account can sign in: %d", c)
+	}
+	if c, _ := e.rawCall(e.localTok(lu), "GET", "/api/v1/documents", nil); c != 403 {
+		t.Fatalf("a disabled account keeps working with an old session: %d", c)
+	}
+	// cannot delete an account that owns diagrams; deleting the diagram first allows it (and removes its shares)
+	e.call(admin, "PATCH", "/api/v1/admin/local-users/"+lu, map[string]any{"disabled": false})
+	if c, _ := e.call(admin, "DELETE", "/api/v1/admin/local-users/"+lu, nil); c != 409 {
+		t.Fatalf("delete while owning diagrams: %d", c)
+	}
+	e.rawCall(e.localTok(lu), "DELETE", "/api/v1/documents/"+docID, nil)
+	if c, o := e.call(admin, "DELETE", "/api/v1/admin/local-users/"+lu, nil); c != 200 {
+		t.Fatalf("delete: %d %v", c, o)
+	}
+	if c, _ := verify(lu, "reset by the admin"); c != 401 {
+		t.Fatalf("deleted account can sign in: %d", c)
 	}
 }

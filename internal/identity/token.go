@@ -37,6 +37,7 @@ type Claims struct {
 	Roles      []string `json:"roles,omitempty"`
 	SessionID  string   `json:"sessionId,omitempty"`
 	Agent      string   `json:"agent,omitempty"`
+	Idp        string   `json:"idp,omitempty"` // where the human signed in: "local" (DrawSpace account) or "sso"
 	Model      string   `json:"model,omitempty"`
 	IssuedAt   int64    `json:"iat"`
 	ExpiresAt  int64    `json:"exp"`

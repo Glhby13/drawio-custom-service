@@ -9,8 +9,11 @@ const origins = log => [...new Set(log.requests.filter(u => /^https?:/.test(u)).
 {
   const { ctx, page } = await newPage(browser);
   await page.goto(BASE + '/', { waitUntil: 'domcontentloaded' });
+  await page.waitForURL(u => /^\/login$/.test(u.pathname), { timeout: 30000 });
+  check('unauthenticated navigation is sent to the DrawSpace login page (local form + SSO button)', (await page.isVisible('#f')) && (await page.isVisible('#sso')), page.url());
+  await page.click('#sso');
   await page.waitForURL(/auth\.lab\.local/, { timeout: 30000 });
-  check('unauthenticated navigation is sent to Keycloak login', /auth\.lab\.local\/realms\/lab/.test(page.url()), new URL(page.url()).origin);
+  check('"Sign in with SSO" continues to Keycloak', /auth\.lab\.local\/realms\/lab/.test(page.url()), new URL(page.url()).origin);
   const api = await ctx.request.get(BASE + '/editor/', { failOnStatusCode: false, maxRedirects: 0 });
   check('unauthenticated /editor/ is not served', api.status() === 302 || api.status() === 401, 'status ' + api.status());
   const me = await ctx.request.get(BASE + '/api/me', { failOnStatusCode: false, maxRedirects: 0 });
@@ -94,6 +97,8 @@ let sessionCookieValue;
   const stale = await ctx.request.get(BASE + '/api/me', { failOnStatusCode: false, headers: { Cookie: '__Host-drawio_sid=' + before } });
   check('old session cookie is dead after logout (server-side deletion)', stale.status() === 401, 'status ' + stale.status());
   await page.goto(BASE + '/', { waitUntil: 'domcontentloaded' });
+  await page.waitForURL(u => /^\/login$/.test(u.pathname), { timeout: 30000 });
+  await page.click('#sso');
   await page.waitForURL(/auth\.lab\.local/, { timeout: 30000 });
   const loginForm = await page.locator('#username').count();
   check('Keycloak SSO session ended too: login form is shown, no silent re-login', loginForm === 1, 'login form present');

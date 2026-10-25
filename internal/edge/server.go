@@ -43,6 +43,8 @@ type Server struct {
 	// stylesheet by hash (no 'unsafe-inline', no extra public route).
 	loggedOutBody []byte
 	loggedOutCSP  string
+	loginBody     []byte // the sign-in page (inlined stylesheet, CSP allows that stylesheet by hash and its own script)
+	loginCSP      string
 	cookie        string
 	bind          string
 }
@@ -53,11 +55,15 @@ func New(cfg config.Gateway, log *slog.Logger, store session.Store, o *OIDC, sig
 	if err != nil {
 		return nil, err
 	}
-	body, csp, err := buildLoggedOut(static)
+	body, csp, err := buildPage(static, "logged-out.html", "logged-out.css", "")
 	if err != nil {
 		return nil, err
 	}
-	s := &Server{cfg: cfg, log: log, store: store, oidc: o, signer: signer, static: static, loggedOutBody: body, loggedOutCSP: csp,
+	lbody, lcsp, err := buildPage(static, "login.html", "login.css", "script-src 'self'; connect-src 'self'; ")
+	if err != nil {
+		return nil, err
+	}
+	s := &Server{cfg: cfg, log: log, store: store, oidc: o, signer: signer, static: static, loggedOutBody: body, loggedOutCSP: csp, loginBody: lbody, loginCSP: lcsp,
 		lim: newLimiter(cfg.RateRPS, cfg.RateBurst), cookie: "__Host-drawio_sid", bind: "__Host-drawio_login"}
 	if cfg.InsecureCookie {
 		s.cookie, s.bind = "drawio_sid", "drawio_login"
@@ -77,7 +83,11 @@ func (s *Server) Handler() http.Handler {
 		_, _ = w.Write([]byte("ok"))
 	})
 	mux.HandleFunc("GET /readyz", s.ready)
-	mux.HandleFunc("GET /login", s.limited(s.login))
+	mux.HandleFunc("GET /login", s.limited(s.loginPage))
+	mux.HandleFunc("GET /login/sso", s.limited(s.loginSSO))
+	mux.HandleFunc("POST /login/local", s.limited(s.loginLocal))
+	mux.HandleFunc("GET /login-assets/login.js", s.publicAsset("login.js", "text/javascript; charset=utf-8"))
+	mux.HandleFunc("GET /favicon.svg", s.publicAsset("favicon.svg", "image/svg+xml"))
 	mux.HandleFunc("GET /auth/callback", s.limited(s.callback))
 	mux.HandleFunc("GET /logged-out", s.loggedOut)
 	mux.HandleFunc("GET /favicon.ico", func(w http.ResponseWriter, _ *http.Request) {
@@ -88,7 +98,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/me", s.limited(s.authed(s.me)))
 	mux.HandleFunc("GET /static/", s.authed(s.staticFile))
 	mux.HandleFunc("GET /{$}", s.authed(s.hostPage))
-	mux.HandleFunc("GET /d/{id}", s.authed(s.hostPage)) // the single-page UI routes on the client
+	mux.HandleFunc("GET /admin/users", s.authed(s.hostPage)) // the user-management view of the single-page UI (admins only, enforced by the platform)
+	mux.HandleFunc("GET /d/{id}", s.authed(s.hostPage))      // the single-page UI routes on the client
 	if s.platform != nil {
 		mux.Handle("/api/v1/", s.authedHandler(s.platformAPI))
 		mux.Handle("/ws/v1/", s.authedHandler(s.platformAPI))
@@ -114,10 +125,11 @@ func (s *Server) ready(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "session store unavailable", http.StatusServiceUnavailable)
 		return
 	}
+	// The identity provider is deliberately NOT part of readiness: local accounts must still be able to sign in (break-glass)
+	// while SSO is down. SSO sign-in answers 503 by itself in that case.
 	if err := s.oidc.Ready(); err != nil {
-		s.log.Warn("not ready: oidc discovery failed", "err", err.Error())
-		http.Error(w, "identity provider unavailable", http.StatusServiceUnavailable)
-		return
+		s.log.Warn("sso unavailable (local sign-in still works)", "err", err.Error())
+		w.Header().Set("X-SSO", "unavailable")
 	}
 	_, _ = w.Write([]byte("ready"))
 }
@@ -220,7 +232,7 @@ func (s *Server) clearCookie(w http.ResponseWriter) {
 	http.SetCookie(w, s.secureCookie(s.cookie, "", -1))
 }
 
-func (s *Server) login(w http.ResponseWriter, r *http.Request) {
+func (s *Server) loginSSO(w http.ResponseWriter, r *http.Request) {
 	state, nonce, verifier, binding := session.RandomToken(24), session.RandomToken(24), session.RandomToken(48), session.RandomToken(24)
 	if err := s.store.PutLogin(r.Context(), state, session.Login{Nonce: nonce, Verifier: verifier, ReturnTo: safeReturn(r.URL.Query().Get("return_to")), BindingHash: session.Hash(binding)}); err != nil {
 		s.log.Error("login state store", "request_id", RequestID(r.Context()), "err", err.Error())
@@ -279,7 +291,7 @@ func (s *Server) callback(w http.ResponseWriter, r *http.Request) {
 	}
 	now := time.Now()
 	sess := &session.Session{Subject: id.Subject, Username: id.Username, Name: id.Name, Email: id.Email, Roles: id.Roles,
-		CSRF: session.RandomToken(24), IDToken: id.IDToken, CreatedAt: now, ExpiresAt: now.Add(s.cfg.SessionTTL)}
+		CSRF: session.RandomToken(24), IDToken: id.IDToken, Idp: "sso", CreatedAt: now, ExpiresAt: now.Add(s.cfg.SessionTTL)}
 	sid, err := s.store.CreateSession(r.Context(), sess)
 	if err != nil {
 		http.Error(w, "session store unavailable", http.StatusServiceUnavailable)
@@ -302,8 +314,10 @@ func (s *Server) logout(w http.ResponseWriter, r *http.Request) {
 				http.Error(w, "csrf token required", http.StatusForbidden)
 				return
 			}
-			if u, err := s.oidc.EndSessionURL(sess.IDToken, s.cfg.PublicURL.String()+"/logged-out"); err == nil {
-				redirect = u
+			if sess.IDToken != "" { // SSO session: end the Keycloak SSO session too; local sessions just end here
+				if u, err := s.oidc.EndSessionURL(sess.IDToken, s.cfg.PublicURL.String()+"/logged-out"); err == nil {
+					redirect = u
+				}
 			}
 			if err := s.store.DeleteSession(r.Context(), c.Value); err != nil {
 				http.Error(w, "session store unavailable", http.StatusServiceUnavailable)
@@ -327,33 +341,48 @@ func (s *Server) loggedOut(w http.ResponseWriter, _ *http.Request) {
 
 const styleSlot = "<!--STYLE-->"
 
-// buildLoggedOut inlines logged-out.css into logged-out.html and returns the page with the CSP that permits
-// exactly that stylesheet (sha256 of its bytes). The signed-out page must work without a session, so it cannot
-// use the authenticated /static/ route.
-func buildLoggedOut(static fs.FS) ([]byte, string, error) {
-	page, err := fs.ReadFile(static, "logged-out.html")
+// buildPage inlines css into html (at the <!--STYLE--> slot) and returns the page with the CSP that permits exactly that stylesheet
+// (sha256 of its bytes) plus extra directives. These pages must work without a session, so they cannot use the authenticated
+// /static/ route and need no 'unsafe-inline'.
+func buildPage(static fs.FS, htmlName, cssName, extra string) ([]byte, string, error) {
+	page, err := fs.ReadFile(static, htmlName)
 	if err != nil {
 		return nil, "", err
 	}
-	css, err := fs.ReadFile(static, "logged-out.css")
+	css, err := fs.ReadFile(static, cssName)
 	if err != nil {
 		return nil, "", err
 	}
 	if !bytes.Contains(page, []byte(styleSlot)) {
-		return nil, "", errors.New("logged-out.html has no " + styleSlot + " slot")
+		return nil, "", errors.New(htmlName + " has no " + styleSlot + " slot")
 	}
 	sum := sha256.Sum256(css)
-	csp := "default-src 'none'; style-src 'sha256-" + base64.StdEncoding.EncodeToString(sum[:]) +
-		"'; img-src data:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
+	csp := "default-src 'none'; " + extra + "style-src 'sha256-" + base64.StdEncoding.EncodeToString(sum[:]) +
+		"'; img-src 'self' data:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
 	inline := append(append([]byte("<style>"), css...), []byte("</style>")...)
 	return bytes.Replace(page, []byte(styleSlot), inline, 1), csp, nil
+}
+
+// publicAsset serves one embedded file without a session (sign-in page script, favicon).
+func (s *Server) publicAsset(name, ctype string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		b, err := fs.ReadFile(s.static, name)
+		if err != nil {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", ctype)
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		w.Header().Set("Cache-Control", "public, max-age=300")
+		_, _ = w.Write(b)
+	}
 }
 
 func (s *Server) me(w http.ResponseWriter, _ *http.Request, sess *session.Session) {
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]any{"sub": sess.Subject, "username": sess.Username, "name": sess.Name,
-		"email": sess.Email, "roles": sess.Roles, "csrf": sess.CSRF, "expiresAt": sess.ExpiresAt})
+		"email": sess.Email, "roles": sess.Roles, "idp": sess.Idp, "csrf": sess.CSRF, "expiresAt": sess.ExpiresAt})
 }
 
 func (s *Server) hostPage(w http.ResponseWriter, r *http.Request, _ *session.Session) {
@@ -363,7 +392,7 @@ func (s *Server) hostPage(w http.ResponseWriter, r *http.Request, _ *session.Ses
 
 func (s *Server) staticFile(w http.ResponseWriter, r *http.Request, _ *session.Session) {
 	name := strings.TrimPrefix(r.URL.Path, "/static/")
-	if name == "" || strings.Contains(name, "/") || strings.HasPrefix(name, "host.html") || strings.HasPrefix(name, "logged-out.") {
+	if name == "" || strings.Contains(name, "/") || strings.HasPrefix(name, "host.html") || strings.HasPrefix(name, "logged-out.") || strings.HasPrefix(name, "login.") || name == "favicon.svg" {
 		http.NotFound(w, r)
 		return
 	}

@@ -47,7 +47,7 @@ check('SHARE: Done closes the dialog', !(await alice.page.isVisible('#dlg[open]'
 // 3. History follows live
 await bob.page.goto(BASE + '/d/' + id);
 await bob.page.waitForFunction(() => window.__adapter && window.__adapter.state().joined && document.getElementById('status').dataset.state === 'ready', null, { timeout: 60000 });
-await alice.page.click('#btn-history');
+await alice.page.evaluate(() => window.__app.openPanel('history'));
 await alice.page.waitForSelector('#panel-body');
 const count = () => alice.page.$$eval('#panel-body .item', x => x.length);
 const before = await count();

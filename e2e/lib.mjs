@@ -26,6 +26,13 @@ export function password(user) {
   throw new Error('password for ' + user + ' not found in SECRETS.md');
 }
 
+// the first local administrator (lab/SECRETS.md row "DrawSpace local sign-in")
+export function localAdminPassword() {
+  const m = /local admin `admin` \/ `([^`]+)`/.exec(readFileSync(SECRETS, 'utf8'));
+  if (!m) throw new Error('local admin password not found in SECRETS.md');
+  return m[1];
+}
+
 export const results = [];
 export function check(name, pass, evidence) {
   results.push({ name, pass: !!pass, evidence });
@@ -86,7 +93,10 @@ export async function agentToken(ctx, user, client = 'drawio-mcp-claude') {
   return (await r.json()).access_token;
 }
 
+// the DrawSpace login page is the entry; "Sign in with SSO" leads to Keycloak
 export async function keycloakLogin(page, user) {
+  await page.waitForURL(u => /auth\.lab\.local/.test(u.host) || /^\/login$/.test(u.pathname), { timeout: 30000 });
+  if (/^\/login$/.test(new URL(page.url()).pathname)) await page.click('#sso');
   await page.waitForURL(/auth\.lab\.local\/realms\/lab\/protocol\/openid-connect\/auth/, { timeout: 30000 });
   await page.fill('#username', user);
   await page.fill('#password', password(user));

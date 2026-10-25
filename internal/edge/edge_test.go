@@ -154,6 +154,21 @@ func newEnv(t *testing.T, mut func(*config.Gateway)) *env {
 		e.plat.Lock()
 		e.plat.auth, e.plat.cookie, e.plat.path, e.plat.origin = r.Header.Get("Authorization"), r.Header.Get("Cookie"), r.URL.Path, r.Header.Get("Origin")
 		e.plat.Unlock()
+		if r.URL.Path == "/api/v1/internal/auth/local" { // the platform's credential check (service token only)
+			c, err := e.verifier.Verify(strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer "), "platform")
+			if err != nil || c.ActorType != "service" || c.Subject != "gateway-auth" {
+				http.Error(w, "service token required", http.StatusForbidden)
+				return
+			}
+			var in struct{ Username, Password string }
+			_ = json.NewDecoder(r.Body).Decode(&in)
+			if in.Username == "budi" && in.Password == "correct horse battery" {
+				_, _ = io.WriteString(w, `{"sub":"local:budi","username":"budi","name":"Budi","email":"b@x.test","role":"user"}`)
+				return
+			}
+			http.Error(w, `{"error":{"code":"invalid_credentials"}}`, http.StatusUnauthorized)
+			return
+		}
 		w.Header().Set("Server", "platform")
 		w.Header().Set("Set-Cookie", "x=y")
 		_, _ = io.WriteString(w, `{"documents":[]}`)
@@ -223,7 +238,7 @@ var nav = map[string]string{"Sec-Fetch-Mode": "navigate", "Accept": "text/html"}
 // loginWith runs the browser side of the code flow against the fake IdP and returns the callback response.
 func (e *env) loginWith(j jar, entry codeEntry) *http.Response {
 	e.t.Helper()
-	res := e.do(j, "GET", "/login?return_to=/editor/index.html", nav)
+	res := e.do(j, "GET", "/login/sso?return_to=/editor/index.html", nav)
 	if res.StatusCode != http.StatusFound {
 		e.t.Fatalf("login status %d", res.StatusCode)
 	}
@@ -356,7 +371,7 @@ func TestCallbackRejections(t *testing.T) {
 func TestLoginStateIsBoundSingleUseAndShortLived(t *testing.T) {
 	e := newEnv(t, nil)
 	start := func(j jar) (state string) {
-		res := e.do(j, "GET", "/login", nav)
+		res := e.do(j, "GET", "/login/sso", nav)
 		loc, _ := url.Parse(res.Header.Get("Location"))
 		return loc.Query().Get("state")
 	}
@@ -440,11 +455,14 @@ func TestUpstreamDownAndIdPDown(t *testing.T) {
 	}
 	e2 := newEnv(t, nil)
 	e2.idp.srv.Close()
-	if res := e2.do(nil, "GET", "/login", nav); res.StatusCode != 503 {
+	if res := e2.do(nil, "GET", "/login/sso", nav); res.StatusCode != 503 {
 		t.Fatalf("idp down on login: %d", res.StatusCode)
 	}
-	if res := e2.do(nil, "GET", "/readyz", nil); res.StatusCode != 503 {
-		t.Fatalf("readyz idp down: %d", res.StatusCode)
+	if res := e2.do(nil, "GET", "/readyz", nil); res.StatusCode != 200 || res.Header.Get("X-SSO") != "unavailable" {
+		t.Fatalf("readyz with the IdP down must stay ready (local accounts still work) and flag SSO: %d %q", res.StatusCode, res.Header.Get("X-SSO"))
+	}
+	if res := e2.do(nil, "GET", "/login", nav); res.StatusCode != 200 {
+		t.Fatalf("the sign-in page must render while the IdP is down: %d", res.StatusCode)
 	}
 }
 
@@ -503,7 +521,7 @@ func TestRateLimit(t *testing.T) {
 	e := newEnv(t, func(c *config.Gateway) { c.RateBurst = 3; c.RateRPS = 0.001 })
 	got429 := false
 	for i := 0; i < 8; i++ {
-		if res := e.do(nil, "GET", "/login", nav); res.StatusCode == 429 {
+		if res := e.do(nil, "GET", "/login/sso", nav); res.StatusCode == 429 {
 			got429 = true
 		}
 	}
@@ -634,5 +652,118 @@ func TestPlatformProxyMintsAnInternalTokenAndDropsBrowserCredentials(t *testing.
 	}
 	if r := e.do(j, "GET", "/d/abc", nav); r.StatusCode != 200 {
 		t.Fatalf("/d/{id} with session: %d", r.StatusCode)
+	}
+}
+
+func (e *env) postJSON(j jar, path string, body string, hdr map[string]string) *http.Response {
+	e.t.Helper()
+	r := httptest.NewRequest("POST", path, strings.NewReader(body))
+	r.Header.Set("Content-Type", "application/json")
+	r.Header.Set("Origin", "https://drawio.test")
+	for k, v := range hdr {
+		r.Header.Set(k, v)
+	}
+	for k, v := range j {
+		r.AddCookie(&http.Cookie{Name: k, Value: v})
+	}
+	w := httptest.NewRecorder()
+	e.h.ServeHTTP(w, r)
+	res := w.Result()
+	if j != nil {
+		j.absorb(res)
+	}
+	return res
+}
+
+func TestLoginPageAndLocalSignIn(t *testing.T) {
+	e := newEnv(t, nil)
+	res := e.do(nil, "GET", "/login", nav)
+	body, _ := io.ReadAll(res.Body)
+	csp := res.Header.Get("Content-Security-Policy")
+	if res.StatusCode != 200 || !strings.Contains(string(body), "DrawSpace") || !strings.Contains(string(body), `href="/login/sso"`) || strings.Contains(csp, "unsafe-inline") ||
+		!strings.Contains(csp, "script-src 'self'") || !strings.Contains(csp, "frame-ancestors 'none'") || res.Header.Get("X-Frame-Options") != "DENY" {
+		t.Fatalf("login page: %d csp=%q", res.StatusCode, csp)
+	}
+	if r := e.do(nil, "GET", "/login-assets/login.js", nil); r.StatusCode != 200 || !strings.Contains(r.Header.Get("Content-Type"), "javascript") {
+		t.Fatalf("login.js: %d", r.StatusCode)
+	}
+	if r := e.do(nil, "GET", "/favicon.svg", nil); r.StatusCode != 200 || r.Header.Get("Content-Type") != "image/svg+xml" {
+		t.Fatalf("favicon: %d", r.StatusCode)
+	}
+	// wrong password: generic 401, no cookie
+	j := jar{}
+	if r := e.postJSON(j, "/login/local", `{"username":"budi","password":"nope nope nope"}`, nil); r.StatusCode != 401 || len(j) != 0 {
+		t.Fatalf("bad password: %d %v", r.StatusCode, j)
+	}
+	// cross-site sign-in attempts are refused by the origin rule
+	if r := e.postJSON(nil, "/login/local", `{"username":"budi","password":"correct horse battery"}`, map[string]string{"Origin": "https://evil.test"}); r.StatusCode != 403 {
+		t.Fatalf("cross-origin sign-in: %d", r.StatusCode)
+	}
+	// success: session cookie, redirect honours a same-site return_to only
+	r := e.postJSON(j, "/login/local", `{"username":" Budi ","password":"correct horse battery","return_to":"//evil.test/x"}`, nil)
+	var out map[string]string
+	_ = json.NewDecoder(r.Body).Decode(&out)
+	if r.StatusCode != 200 || out["redirect"] != "/" || j["__Host-drawio_sid"] == "" {
+		t.Fatalf("sign-in: %d %v %v", r.StatusCode, out, j)
+	}
+	me := e.do(j, "GET", "/api/me", nil)
+	var m map[string]any
+	_ = json.NewDecoder(me.Body).Decode(&m)
+	if m["username"] != "budi" || m["idp"] != "local" || m["sub"] != "local:budi" {
+		t.Fatalf("me: %v", m)
+	}
+	// the platform sees a gateway-minted token that says "local"
+	if r := e.do(j, "GET", "/api/v1/documents", nil); r.StatusCode != 200 {
+		t.Fatalf("api: %d", r.StatusCode)
+	}
+	e.plat.Lock()
+	auth := e.plat.auth
+	e.plat.Unlock()
+	c, err := e.verifier.Verify(strings.TrimPrefix(auth, "Bearer "), "platform")
+	if err != nil || c.Idp != "local" || c.Subject != "local:budi" || c.ActorType != "human" {
+		t.Fatalf("token: %+v %v", c, err)
+	}
+	// browsers can never reach the platform's service endpoint
+	if r := e.do(j, "GET", "/api/v1/internal/auth/local", nil); r.StatusCode != 404 {
+		t.Fatalf("internal endpoint reachable from a browser: %d", r.StatusCode)
+	}
+	if r := e.postJSON(j, "/api/v1/internal/auth/local", `{"username":"budi","password":"correct horse battery"}`, nil); r.StatusCode != 404 {
+		t.Fatalf("internal endpoint reachable from a browser (POST): %d", r.StatusCode)
+	}
+	// already signed in: the login page sends you on
+	if r := e.do(j, "GET", "/login?return_to=/d/abc", nav); r.StatusCode != 302 || r.Header.Get("Location") != "/d/abc" {
+		t.Fatalf("login page while signed in: %d %q", r.StatusCode, r.Header.Get("Location"))
+	}
+	// logout of a local session does not involve the IdP
+	lo := e.postJSON(j, "/logout", `{}`, map[string]string{"X-CSRF-Token": m["csrf"].(string)})
+	var lr map[string]string
+	_ = json.NewDecoder(lo.Body).Decode(&lr)
+	if lo.StatusCode != 200 || lr["redirect"] != "/logged-out" {
+		t.Fatalf("local logout: %d %v", lo.StatusCode, lr)
+	}
+}
+
+func TestLocalSignInLocksAfterRepeatedFailures(t *testing.T) {
+	e := newEnv(t, nil)
+	for i := 0; i < maxLocalFailures; i++ {
+		if r := e.postJSON(nil, "/login/local", `{"username":"budi","password":"wrong password"}`, nil); r.StatusCode != 401 {
+			t.Fatalf("attempt %d: %d", i, r.StatusCode)
+		}
+	}
+	// now even the right password is refused until the window passes
+	if r := e.postJSON(nil, "/login/local", `{"username":"budi","password":"correct horse battery"}`, nil); r.StatusCode != 429 || r.Header.Get("Retry-After") == "" {
+		t.Fatalf("locked account: %d", r.StatusCode)
+	}
+	e.advance(failWindow + time.Minute)
+	if r := e.postJSON(nil, "/login/local", `{"username":"budi","password":"correct horse battery"}`, nil); r.StatusCode != 200 {
+		t.Fatalf("after the window: %d", r.StatusCode)
+	}
+}
+
+func TestLocalSignInWorksWhileTheIdentityProviderIsDown(t *testing.T) {
+	e := newEnv(t, nil)
+	e.idp.srv.Close()
+	if r := e.postJSON(nil, "/login/local", `{"username":"budi","password":"correct horse battery"}`, nil); r.StatusCode != 200 {
+		t.Fatalf("local sign-in with SSO down: %d", r.StatusCode)
 	}
 }

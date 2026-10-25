@@ -82,6 +82,10 @@ func main() {
 	defer func() { _ = rdb.Close() }()
 
 	srv := platform.New(cfg, log, platform.NewStore(pool), blob, rdb)
+	if err := srv.EnsureLocalAdmin(ctx); err != nil {
+		log.Error("local admin bootstrap", "err", err.Error())
+		os.Exit(1)
+	}
 	srv.Start(ctx)
 	hs := &http.Server{Addr: ":" + cfg.Port, Handler: srv.Handler(), ReadHeaderTimeout: 10 * time.Second, IdleTimeout: 120 * time.Second}
 	go func() {

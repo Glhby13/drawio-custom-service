@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/Glhby13/drawio-custom-service/internal/identity"
@@ -55,10 +56,18 @@ func (s *Server) platformAPI(w http.ResponseWriter, r *http.Request, sess *sessi
 		http.NotFound(w, r)
 		return
 	}
+	if strings.HasPrefix(r.URL.Path, "/api/v1/internal/") { // service endpoints are for the gateway itself, never for browsers
+		http.NotFound(w, r)
+		return
+	}
+	idp := "sso"
+	if sess.Idp == "local" {
+		idp = "local"
+	}
 	sum := sha256.Sum256([]byte(sess.Subject + sess.CreatedAt.String()))
 	tok, err := s.signer.Sign(identity.Claims{
 		Subject: sess.Subject, Audience: platformAudience, ActorType: identity.ActorHuman,
-		Username: sess.Username, Name: sess.Name, Roles: sess.Roles, SessionID: hex.EncodeToString(sum[:6]),
+		Username: sess.Username, Name: sess.Name, Roles: sess.Roles, Idp: idp, SessionID: hex.EncodeToString(sum[:6]),
 	}, time.Minute)
 	if err != nil {
 		http.Error(w, "internal", http.StatusInternalServerError)

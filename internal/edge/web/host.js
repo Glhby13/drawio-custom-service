@@ -4,8 +4,10 @@
   'use strict';
   var $ = function (id) { return document.getElementById(id); };
   var statusEl = $('status'), csrf = '', me = null, adapter = null, doc = null;
+  // Features that exist in the code and the API but are switched off in the UI for now (comments: not useful yet; flip to re-enable).
+  var FEATURES = { comments: false };
 
-  function setStatus(state, text) { statusEl.dataset.state = state; statusEl.textContent = text; }
+  function setStatus(state, text) { statusEl.dataset.state = state; $('status-text').textContent = text; }
   function initials(name) {
     var parts = String(name || '').trim().split(/[\s._@-]+/).filter(Boolean);
     if (!parts.length) return '?';
@@ -138,7 +140,8 @@
     api('GET', '/documents/' + encodeURIComponent(id)).then(function (r) {
       doc = r;
       $('title').value = r.document.title;
-      document.title = r.document.title + ' · Diagrams';
+      $('docinfo').hidden = false;
+      document.title = r.document.title + ' · DrawSpace';
       applyRole(r.role);
       var frame = $('editor');
       frame.hidden = false;
@@ -151,26 +154,84 @@
         onToast: toast,
         onFatal: function (code, msg) { setStatus('error', 'Disconnected'); var b = $('banner'); b.textContent = msg; b.hidden = false; frame.hidden = true; },
         onSeq: function () { refreshPanelSoon(); },
+        onEditorReady: function (ui, win) { installEditorMenus(ui, win, id); },
       });
       window.__adapter = adapter; // used by the end-to-end suite
+      window.__app = { openPanel: function (kind) { openKind(kind, id); }, dirty: unsaved };
     }).catch(function (e) {
       setStatus('error', 'Unavailable');
       var b = $('banner'); b.textContent = e.status === 404 ? 'This diagram does not exist or is not shared with you.' : e.message; b.hidden = false;
-      $('btn-share').hidden = $('btn-history').hidden = $('btn-versions').hidden = $('btn-comments').hidden = $('btn-export').hidden = true;
+      $('btn-share').hidden = true;
     });
 
     $('title').onchange = function () {
       var t = this.value.trim(); if (!t) { this.value = doc.document.title; return; }
-      api('PATCH', '/documents/' + id, { title: t }).then(function () { doc.document.title = t; document.title = t + ' · Diagrams'; }).catch(function (e) { toast('error', e.message); $('title').value = doc.document.title; });
+      api('PATCH', '/documents/' + id, { title: t }).then(function () { doc.document.title = t; document.title = t + ' · DrawSpace'; }).catch(function (e) { toast('error', e.message); $('title').value = doc.document.title; });
     };
+    $('title').addEventListener('keydown', function (e) { if (e.key === 'Enter') this.blur(); });
     $('btn-share').onclick = function () { openShare(id); };
-    $('btn-history').onclick = function () { openPanel('History', id, renderHistory); };
-    $('btn-versions').onclick = function () { openPanel('Versions', id, renderVersions); };
-    $('btn-comments').onclick = function () { openPanel('Comments', id, renderComments); };
-    $('btn-export').onclick = function () { openExport(id); };
     $('panel-close').onclick = function () { $('panel').hidden = true; panelRender = null; panelKind = ''; clearInterval(panelPoll); };
-    window.addEventListener('beforeunload', function () { if (adapter) adapter.close(); });
+    window.addEventListener('beforeunload', function (e) {
+      if (unsaved()) { e.preventDefault(); e.returnValue = ''; return ''; } // only when something has not reached the server yet
+      if (adapter) adapter.close();
+    });
   }
+
+  function openKind(kind, id) {
+    if (kind === 'history') openPanel('History', id, renderHistory);
+    else if (kind === 'versions') openPanel('Versions', id, renderVersions);
+    else if (kind === 'comments' && FEATURES.comments) openPanel('Comments', id, renderComments);
+  }
+
+  // Our functions live INSIDE draw.io's own menu bar (one bar, no second toolbar): a "History" menu and the copy-as-image entries.
+  function installEditorMenus(ui, win, id) {
+    var Menu = win.Menu, canEdit = function () { return doc && doc.can && doc.can.edit; };
+    ui.menus.put('drawspace', new Menu(function (menu, parent) {
+      menu.addItem('Change history', null, function () { openKind('history', id); }, parent);
+      menu.addItem('Named versions', null, function () { openKind('versions', id); }, parent);
+      if (canEdit()) menu.addItem('Save version…', null, function () { saveVersionDialog(id); }, parent);
+      if (FEATURES.comments) menu.addItem('Comments', null, function () { openKind('comments', id); }, parent);
+    }));
+    var elt = ui.menubar.addMenu('History', ui.menus.get('drawspace').funct);
+    var help = Array.prototype.find.call(ui.menubar.container.children, function (c) { return c !== elt && /^help$/i.test((c.textContent || '').trim()); });
+    if (elt && help) ui.menubar.container.insertBefore(elt, help); // keep Help last, like draw.io does
+    // copy the selection as an image (the clipboard accepts PNG and SVG only; JPG is saved as a file through draw.io's own export dialog)
+    var graph = ui.editor.graph, act = function (name) { return function () { var a = ui.actions.get(name); if (a) a.funct(); }; };
+    function addCopyAs(menu, parent) {
+      menu.addSeparator(parent);
+      menu.addItem('Copy as PNG image', null, act('copyAsImage'), parent);
+      menu.addItem('Copy as SVG', null, act('copyAsSvg'), parent);
+      menu.addItem('Save selection as JPG…', null, act('exportJpg'), parent);
+    }
+    var origPopup = ui.menus.createPopupMenu;
+    ui.menus.createPopupMenu = function (menu, cell, evt) {
+      origPopup.apply(this, arguments);
+      if (graph.getSelectionCount() > 0) addCopyAs(menu, null);
+    };
+    var edit = ui.menus.get('edit'), origEdit = edit.funct;
+    edit.funct = function (menu, parent) { origEdit.apply(this, arguments); addCopyAs(menu, parent); };
+  }
+
+  function saveVersionDialog(id) {
+    prompt2('Save version', 'Name', '').then(function (n) {
+      if (!n) return;
+      api('POST', '/documents/' + id + '/versions', { name: n }).then(function () { toast('info', 'Version saved'); if (panelKind === 'versions' && panelRender) panelRender(); }).catch(function (e) { toast('error', e.message); });
+    });
+  }
+
+  // ---- unsaved work guard: no browser pop-up when everything is saved --------------------------------------------------------------------------------
+  function unsaved() { return !!(adapter && adapter.state && adapter.state().dirty); }
+  function guardedNavigate(go) {
+    if (!unsaved()) { go(); return; }
+    ask('Changes are still being saved', 'Your latest changes have not reached the server yet. If you leave now they may be lost.', 'Leave anyway').then(function (ok) { if (ok) { if (adapter) adapter.close(); go(); } });
+  }
+  document.addEventListener('click', function (e) {
+    var a = e.target.closest && e.target.closest('a[href]');
+    if (!a || a.target === '_blank' || e.defaultPrevented || e.metaKey || e.ctrlKey || e.shiftKey || a.origin !== location.origin) return;
+    if (!unsaved()) return;
+    e.preventDefault();
+    guardedNavigate(function () { location.href = a.href; });
+  });
 
   function applyRole(role) {
     var can = doc && doc.can || {};
@@ -179,7 +240,6 @@
     badge.hidden = false; badge.dataset.role = role; badge.textContent = role === 'owner' ? 'owner' : edit ? 'can edit' : role === 'commenter' ? 'can comment' : 'view only';
     $('title').readOnly = !(role === 'owner' || can.rename);
     $('btn-share').hidden = !(role === 'owner' || can.share);
-    $('btn-comments').hidden = !(role === 'owner' || role === 'editor' || role === 'commenter' || role === 'viewer');
     if (panelRender) panelRender();
   }
 
@@ -244,12 +304,7 @@
     body.textContent = 'Loading…';
     api('GET', '/documents/' + id + '/versions').then(function (r) {
       body.textContent = '';
-      if (doc.can && doc.can.edit) body.appendChild(el('button', { class: 'btn primary', type: 'button', id: 'save-version', text: 'Save current as version', onclick: function () {
-        prompt2('Save version', 'Name', '').then(function (n) {
-          if (!n) return;
-          api('POST', '/documents/' + id + '/versions', { name: n }).then(function () { renderVersions(id, body); }).catch(function (e) { toast('error', e.message); });
-        });
-      } }));
+      if (doc.can && doc.can.edit) body.appendChild(el('button', { class: 'btn primary', type: 'button', id: 'save-version', text: 'Save current as version', onclick: function () { saveVersionDialog(id); } }));
       (r.versions || []).forEach(function (v) {
         var btns = [];
         if (doc.can && doc.can.restore) btns.push(el('button', { class: 'btn', type: 'button', text: 'Restore', onclick: function () {
@@ -304,7 +359,7 @@
           var sel = el('select', { class: 'field', 'aria-label': 'Role of ' + p.subject, 'data-subject': p.subject }, ['viewer', 'commenter', 'editor'].map(function (x) { return el('option', { value: x, text: x }); }));
           sel.value = p.role;
           sel.onchange = function () { setRole(p.subject, sel.value); };
-          list.appendChild(el('div', { class: 'share-row' }, [el('span', { class: 'grow', text: p.subject === '*' ? 'Everyone with access to Diagrams' : p.subject }), sel,
+          list.appendChild(el('div', { class: 'share-row' }, [el('span', { class: 'grow', text: p.subject === '*' ? 'Everyone with access to DrawSpace' : p.subject }), sel,
             el('button', { class: 'btn danger', type: 'button', text: 'Remove', 'data-remove': p.subject, onclick: function () { setRole(p.subject, ''); } })]));
         });
       }
@@ -357,42 +412,117 @@
     }).catch(function (e) { toast('error', e.message); });
   }
 
-  function openExport(id) {
-    var wrap = el('div', null, [
-      el('a', { class: 'btn', id: 'export-xml', href: '/api/v1/documents/' + id + '/content?format=xml&download=1', text: 'draw.io file (.drawio)' }),
-      el('a', { class: 'btn', id: 'export-svg', href: '/api/v1/documents/' + id + '/content?format=svg&download=1', text: 'SVG image (first page)' }),
-    ]);
-    dialog('Export', wrap, [{ label: 'Close' }]);
+  // ---- users (local accounts, administrators only) ------------------------------------------------------------------------------------------------------
+  function showUsers() {
+    $('users-view').hidden = false; document.title = 'Users · DrawSpace'; setStatus('auth', 'Signed in');
+    if (!(me.roles || []).includes('admin')) { $('users-body').textContent = ''; toast('error', 'Administrators only'); return; }
+    loadUsers();
+    $('new-user').onclick = function () { userDialog(null); };
+  }
+  function loadUsers() {
+    api('GET', '/admin/local-users').then(function (r) {
+      var body = $('users-body'); body.textContent = '';
+      (r.users || []).forEach(function (u) {
+        var role = el('select', { class: 'field select', 'aria-label': 'Role of ' + u.username, 'data-user': u.username }, ['user', 'admin'].map(function (x) { return el('option', { value: x, text: x }); }));
+        role.value = u.role;
+        role.onchange = function () { patchUser(u.username, { role: role.value }); };
+        var enabled = el('span', { class: 'chip ' + (u.disabled ? 'off' : 'on'), text: u.disabled ? 'disabled' : 'active' });
+        body.appendChild(el('tr', { 'data-user': u.username }, [
+          el('td', { text: u.username }), el('td', { text: u.name }), el('td', null, [role]), el('td', null, [enabled]),
+          el('td', { text: u.lastLogin ? ago(u.lastLogin) : 'never' }),
+          el('td', null, [el('div', { class: 'actions' }, [
+            el('button', { class: 'btn', type: 'button', text: 'Edit', onclick: function () { userDialog(u); } }),
+            el('button', { class: 'btn', type: 'button', text: u.disabled ? 'Enable' : 'Disable', onclick: function () { patchUser(u.username, { disabled: !u.disabled }); } }),
+            el('button', { class: 'btn danger', type: 'button', text: 'Delete', onclick: function () {
+              ask('Delete ' + u.username, 'Delete this local account? Its diagrams must be deleted or it cannot be removed (disable it instead).', 'Delete').then(function (ok) {
+                if (ok) api('DELETE', '/admin/local-users/' + encodeURIComponent(u.username)).then(loadUsers).catch(function (e) { toast('error', e.message); });
+              });
+            } }),
+          ])]),
+        ]));
+      });
+    }).catch(function (e) { toast('error', e.message); });
+  }
+  function patchUser(name, body) { api('PATCH', '/admin/local-users/' + encodeURIComponent(name), body).then(loadUsers).catch(function (e) { toast('error', e.message); loadUsers(); }); }
+  function randomPassword() {
+    var a = new Uint8Array(15); crypto.getRandomValues(a);
+    return Array.from(a).map(function (b) { return 'abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789'[b % 57]; }).join('');
+  }
+  function userDialog(u) {
+    var f = { username: el('input', { class: 'field', id: 'nu-username', autocomplete: 'off', spellcheck: 'false', placeholder: 'e.g. budi', maxlength: '32' }),
+      name: el('input', { class: 'field', id: 'nu-name', autocomplete: 'off', maxlength: '80' }),
+      email: el('input', { class: 'field', id: 'nu-email', type: 'email', autocomplete: 'off', maxlength: '120' }),
+      role: el('select', { class: 'field select', id: 'nu-role' }, ['user', 'admin'].map(function (x) { return el('option', { value: x, text: x }); })),
+      pw: el('input', { class: 'field', id: 'nu-password', type: 'text', autocomplete: 'new-password', spellcheck: 'false', placeholder: u ? 'leave empty to keep' : 'at least 10 characters' }) };
+    if (u) { f.username.value = u.username; f.username.disabled = true; f.name.value = u.name; f.email.value = u.email || ''; f.role.value = u.role; }
+    var msg = el('div', { class: 'msg', hidden: true });
+    var gen = el('button', { class: 'btn', type: 'button', text: 'Generate', onclick: function () { f.pw.value = randomPassword(); } });
+    var body = el('div', { class: 'dlg-body' }, [msg, el('label', null, ['Username', f.username]), el('label', null, ['Display name', f.name]), el('label', null, ['Email (optional)', f.email]), el('label', null, ['Role', f.role]),
+      el('label', null, [u ? 'New password' : 'Initial password', el('div', { class: 'pwrow' }, [f.pw, gen])]),
+      el('small', { text: 'The user can change it after signing in. Share it through a safe channel.' })]);
+    dialog(u ? 'Edit ' + u.username : 'New local user', body, [{ label: 'Cancel' }, { label: u ? 'Save' : 'Create user', cls: 'primary', keep: true, fn: function () {
+      var req = u ? api('PATCH', '/admin/local-users/' + encodeURIComponent(u.username), { name: f.name.value, email: f.email.value, role: f.role.value, password: f.pw.value || undefined })
+        : api('POST', '/admin/local-users', { username: f.username.value, name: f.name.value, email: f.email.value, role: f.role.value, password: f.pw.value });
+      req.then(function () { $('dlg').close(); loadUsers(); toast('info', u ? 'User updated' : 'User created'); }).catch(function (e) { msg.textContent = e.message; msg.hidden = false; });
+      return false;
+    } }]);
+    setTimeout(function () { (u ? f.name : f.username).focus(); }, 30);
+  }
+  function passwordDialog() {
+    var cur = el('input', { class: 'field', id: 'pw-current', type: 'password', autocomplete: 'current-password' });
+    var nw = el('input', { class: 'field', id: 'pw-new', type: 'password', autocomplete: 'new-password' });
+    var rep = el('input', { class: 'field', id: 'pw-repeat', type: 'password', autocomplete: 'new-password' });
+    var msg = el('div', { class: 'msg', hidden: true });
+    dialog('Change password', el('div', { class: 'dlg-body' }, [msg, el('label', null, ['Current password', cur]), el('label', null, ['New password (at least 10 characters)', nw]), el('label', null, ['Repeat new password', rep])]),
+      [{ label: 'Cancel' }, { label: 'Change password', cls: 'primary', keep: true, fn: function () {
+        if (nw.value !== rep.value) { msg.textContent = 'The new passwords do not match.'; msg.hidden = false; return false; }
+        api('POST', '/me/password', { current: cur.value, new: nw.value }).then(function () { $('dlg').close(); toast('info', 'Password changed'); }).catch(function (e) { msg.textContent = e.message; msg.hidden = false; });
+        return false;
+      } }]);
+    setTimeout(function () { cur.focus(); }, 30);
   }
 
   // ---- boot ------------------------------------------------------------------------------------------------------------
+  var menu = $('menu'), userbtn = $('userbtn');
+  function closeMenu() { menu.hidden = true; userbtn.setAttribute('aria-expanded', 'false'); }
+  userbtn.addEventListener('click', function (e) { e.stopPropagation(); var open = menu.hidden; menu.hidden = !open; userbtn.setAttribute('aria-expanded', String(open)); if (open) { var f = menu.querySelector('.menu-item:not([hidden])'); if (f) f.focus(); } });
+  document.addEventListener('click', function (e) { if (!menu.hidden && !$('user').contains(e.target)) closeMenu(); });
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !menu.hidden) { closeMenu(); userbtn.focus(); } });
+  $('mi-password').addEventListener('click', function () { closeMenu(); passwordDialog(); });
+
   fetch('/api/me', { credentials: 'same-origin' })
     .then(function (r) { if (!r.ok) throw new Error('unauthenticated'); return r.json(); })
     .then(function (m) {
       me = m; csrf = m.csrf;
-      var name = m.name || m.username || '';
+      var name = m.name || m.username || '', isAdmin = Array.isArray(m.roles) && m.roles.indexOf('admin') >= 0;
       $('who').textContent = name; $('avatar').textContent = initials(name);
-      $('user').title = m.email || name;
-      if (Array.isArray(m.roles) && m.roles.indexOf('admin') >= 0) $('role').hidden = false;
+      $('menu-name').textContent = name;
+      $('menu-sub').textContent = (m.username || '') + ' · ' + (m.idp === 'local' ? 'local account' : 'SSO') + (isAdmin ? ' · administrator' : '');
+      if (isAdmin) { $('role').hidden = false; $('mi-users').hidden = false; }
+      if (m.idp === 'local') $('mi-password').hidden = false;
       $('user').hidden = false;
       var match = /^\/d\/([^/]+)\/?$/.exec(location.pathname);
-      if (match) showEditor(decodeURIComponent(match[1])); else showList();
+      if (match) showEditor(decodeURIComponent(match[1]));
+      else if (location.pathname === '/admin/users') showUsers();
+      else showList();
     })
     .catch(function () { location.href = '/login?return_to=' + encodeURIComponent(location.pathname); });
 
   $('logout').addEventListener('click', function () {
-    var btn = $('logout');
-    if (btn.getAttribute('aria-busy') === 'true') return;
-    btn.setAttribute('aria-busy', 'true');
-    $('logout-label').textContent = 'Signing out…';
-    if (adapter) adapter.close();
-    fetch('/logout', { method: 'POST', credentials: 'same-origin', headers: { 'X-CSRF-Token': csrf } })
-      .then(function (r) { if (!r.ok) throw new Error('logout failed'); return r.json(); })
-      .then(function (j) { location.href = j.redirect; })
-      .catch(function () {
-        btn.removeAttribute('aria-busy');
-        $('logout-label').textContent = 'Sign out';
-        setStatus('error', 'Sign-out failed, try again');
-      });
+    guardedNavigate(function () {
+      var btn = $('logout');
+      if (btn.getAttribute('aria-busy') === 'true') return;
+      btn.setAttribute('aria-busy', 'true');
+      $('logout-label').textContent = 'Signing out…';
+      if (adapter) adapter.close();
+      fetch('/logout', { method: 'POST', credentials: 'same-origin', headers: { 'X-CSRF-Token': csrf } })
+        .then(function (r) { if (!r.ok) throw new Error('logout failed'); return r.json(); })
+        .then(function (j) { location.href = j.redirect; })
+        .catch(function () {
+          btn.removeAttribute('aria-busy');
+          $('logout-label').textContent = 'Sign out';
+          setStatus('error', 'Sign-out failed, try again');
+        });
+    });
   });
 })();

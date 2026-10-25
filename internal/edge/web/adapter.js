@@ -76,7 +76,7 @@
     var ui = null, ws = null, you = '', role = '', closed = false;
     var C = M.newDoc(), pending = [], T = M.newDoc(), E = M.newDoc(), joined = false; // E = what the editor is known to contain
     var busy = false, again = false, backoff = 500, lastHash = null, hashTimer = null, reconnectTimer = null, pingTimer = null;
-    var presence = null, loadedInEditor = false, embedReady = false, pendingLoad = null, patchWaiters = [];
+    var presence = null, offlineEdits = false, loadedInEditor = false, embedReady = false, pendingLoad = null, patchWaiters = [];
     var stats = { sent: 0, acked: 0, nacked: 0, remote: 0, resyncs: 0, patches: 0, hashChecks: 0, hashBad: 0 };
 
     function status(s, t) { if (opts.onStatus) opts.onStatus(s, t); }
@@ -100,7 +100,7 @@
       var msg;
       try { msg = JSON.parse(ev.data); } catch (e) { return; }
       if (msg.event === 'init') { embedReady = true; maybeLoad(); }
-      else if (msg.event === 'autosave') { if (loadedInEditor) schedule(); }
+      else if (msg.event === 'autosave') { if (loadedInEditor) { if (!joined) offlineEdits = true; schedule(); } }
       else if (msg.event === 'patch') { var ws2 = patchWaiters; patchWaiters = []; ws2.forEach(function (w) { w(); }); }
     });
 
@@ -123,14 +123,26 @@
         // the load itself is complete when the first 'load' event arrives; poll until pages exist
         var n = 0;
         (function wait() {
-          if (ui.pages && ui.pages.length) { loadedInEditor = true; startPresence(); applyRole(); status('ready', 'Connected'); window.dispatchEvent(new CustomEvent('drawio-adapter-ready')); schedule(); return; }
+          if (ui.pages && ui.pages.length) { loadedInEditor = true; startPresence(); applyRole(); status('ready', 'All changes saved'); window.dispatchEvent(new CustomEvent('drawio-adapter-ready')); schedule(); return; }
           if (++n > 300) { status('error', 'Editor did not start'); return; }
           setTimeout(wait, 100);
         })();
       }).catch(function () { status('error', 'Editor plugin could not be attached'); });
     }
 
+    function silenceEditorUnloadPrompt() {
+      // draw.io thinks it is never "saved" (we persist through the collaboration layer), so it would ask before every page leave.
+      // The host asks only when something has really not reached the server (see host.js unsaved()).
+      try {
+        var w = ui.editor.graph.container.ownerDocument.defaultView;
+        w.onbeforeunload = null;
+        Object.defineProperty(w, 'onbeforeunload', { configurable: true, get: function () { return null; }, set: function () { /* ignored */ } });
+      } catch (e) { /* best effort */ }
+    }
+
     function startPresence() {
+      silenceEditorUnloadPrompt();
+      if (opts.onEditorReady) { try { opts.onEditorReady(ui, ui.editor.graph.container.ownerDocument.defaultView); } catch (e) { if (window.console) console.error('onEditorReady', e); } }
       if (presence || !window.DrawioPresence) return;
       presence = window.DrawioPresence.create({ ui: ui, send: function (act) { wsSend({ t: 'act', act: act }); } });
     }
@@ -173,6 +185,7 @@
             var d = B.diff(E, L);
             if (d.mismatch && window.console) console.warn('diff does not reproduce the live state (model gap)');
             if (d.ops.length) sendBatch(d.ops);
+            offlineEdits = false;
           }
           var r = B.toPatch(L, T);
           E = M.clone(T);
@@ -202,7 +215,7 @@
         wsSend({ t: 'ops', batch: id, base: C.seq, ops: c });
       });
       rebuild();
-      status('syncing', 'Saving…');
+      status('syncing', pending.length > 1 ? 'Saving… (' + pending.length + ')' : 'Saving…');
     }
 
     function wsSend(o) { if (ws && ws.readyState === 1) ws.send(JSON.stringify(o)); }
@@ -211,7 +224,7 @@
     function dropPending(batch) {
       var i = pending.findIndex(function (b) { return b.batch === batch; });
       if (i >= 0) pending.splice(i, 1);
-      if (!pending.length) status('ready', 'All changes saved');
+      if (!pending.length && !offlineEdits) { status('ready', 'All changes saved'); try { ui.editor.setModified(false); } catch (e) { /* ignore */ } }
     }
 
     function onMessage(m) {
@@ -250,6 +263,7 @@
         // resend what was not acknowledged before the connection dropped (idempotent by batch id)
         pending.forEach(function (b) { wsSend({ t: 'ops', batch: b.batch, base: C.seq, ops: b.ops }); });
         applyRole(); schedule();
+        if (!pending.length && !offlineEdits && loadedInEditor) status('ready', 'All changes saved');
         return;
       }
       forceFull = false;
@@ -259,7 +273,7 @@
       if (drop.length && opts.onToast) opts.onToast('info', 'The diagram was reloaded from the server');
       rebuild(); joined = true;
       verify(m.seq, m.hash);
-      loadFull(m.xml).then(function () { E = M.clone(C); applyRole(); schedule(); });
+      loadFull(m.xml).then(function () { E = M.clone(C); applyRole(); schedule(); if (!pending.length && !offlineEdits) status('ready', 'All changes saved'); });
     }
 
     function onOp(o, hash) {
@@ -297,7 +311,7 @@
     // ---- socket ----------------------------------------------------------------------------------------------------------
     function connect() {
       if (closed) return;
-      status('loading', joined ? 'Reconnecting…' : 'Connecting…');
+      status(joinedOnce ? 'offline' : 'loading', joinedOnce ? 'Offline · reconnecting…' : 'Connecting…');
       var url = (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws/v1/documents/' + encodeURIComponent(opts.docId);
       var sock = new WebSocket(url);
       ws = sock;
@@ -317,7 +331,7 @@
         if (closed) return;
         if (ev.code === 4403 || ev.code === 4404) { closed = true; if (opts.onFatal) opts.onFatal(ev.code, ev.code === 4403 ? 'Your access to this diagram was removed' : 'This diagram no longer exists'); return; }
         if (ev.code === 1006 && !joinedOnce) { closed = true; if (opts.onFatal) opts.onFatal(404, 'Diagram not found or not shared with you'); return; }
-        status('loading', 'Reconnecting…');
+        status('offline', pending.length || offlineEdits ? 'Offline · changes not saved yet' : 'Offline · reconnecting…');
         reconnectTimer = setTimeout(connect, backoff);
         backoff = Math.min(backoff * 2, 8000);
       };
@@ -329,7 +343,7 @@
       stats: stats,
       presence: function () { return presence; },
       rawAct: function (a) { wsSend({ t: 'act', act: a }); }, // test hook: sends an arbitrary activity report
-      state: function () { return { seq: C.seq, pending: pending.length, role: role, joined: joined, you: you }; },
+      state: function () { return { seq: C.seq, pending: pending.length, role: role, joined: joined, you: you, busy: busy, dirty: pending.length > 0 || busy || offlineEdits }; },
       confirmed: function () { return C; },
       predicted: function () { return T; },
       live: function () { return ui ? fromLive(ui, T) : null; },

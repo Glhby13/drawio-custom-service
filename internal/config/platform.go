@@ -29,6 +29,7 @@ type Platform struct {
 	AdminRole, UserRole                                      string
 	AIDefaultMaxOpsPerMin, AIDefaultMaxDelete                int
 	PublicURL                                                string
+	LocalAdminUser, LocalAdminPassword                       string // optional bootstrap of the first local admin (only when none exists)
 }
 
 // LoadPlatform reads and validates the environment.
@@ -39,7 +40,7 @@ func LoadPlatform(getenv func(string) string) (Platform, error) {
 		S3Endpoint: getenv("S3_ENDPOINT"), S3Bucket: or(getenv("S3_BUCKET"), "drawio-documents"), S3AccessKey: getenv("S3_ACCESS_KEY"), S3SecretKey: getenv("S3_SECRET_KEY"),
 		S3Region: or(getenv("S3_REGION"), "us-east-1"), S3UseSSL: getenv("S3_USE_SSL") == "true",
 		RedisAddr: getenv("REDIS_ADDR"), RedisUser: getenv("REDIS_USER"), RedisPassword: getenv("REDIS_PASSWORD"), CAFile: getenv("EXTRA_CA_FILE"),
-		AdminRole: or(getenv("ADMIN_ROLE"), "admin"), UserRole: or(getenv("REQUIRED_ROLE"), "user"), PublicURL: getenv("PUBLIC_URL"),
+		AdminRole: or(getenv("ADMIN_ROLE"), "admin"), UserRole: or(getenv("REQUIRED_ROLE"), "user"), PublicURL: getenv("PUBLIC_URL"), LocalAdminUser: or(getenv("LOCAL_ADMIN_USERNAME"), "admin"), LocalAdminPassword: getenv("LOCAL_ADMIN_PASSWORD"),
 		SnapshotEvery: 200, AIDefaultMaxOpsPerMin: 300, AIDefaultMaxDelete: 20,
 	}
 	var errs []error

@@ -29,6 +29,7 @@ type Session struct {
 	Roles     []string  `json:"roles"`
 	CSRF      string    `json:"csrf"`
 	IDToken   string    `json:"idToken"`
+	Idp       string    `json:"idp,omitempty"` // "local" or "sso"
 	CreatedAt time.Time `json:"createdAt"`
 	ExpiresAt time.Time `json:"expiresAt"` // absolute limit
 }
@@ -49,6 +50,10 @@ type Store interface {
 	PutLogin(ctx context.Context, state string, l Login) error
 	TakeLogin(ctx context.Context, state string) (Login, error)
 	Ping(ctx context.Context) error
+	// Fail counts one failed local sign-in under key (window = how long the counter lives); Failures reads it; ClearFail resets it.
+	Fail(ctx context.Context, key string, window time.Duration) (int64, error)
+	Failures(ctx context.Context, key string) (int64, error)
+	ClearFail(ctx context.Context, key string) error
 }
 
 // Redis implements Store.
@@ -161,3 +166,31 @@ func (r *Redis) TakeLogin(ctx context.Context, state string) (Login, error) {
 
 // Ping checks connectivity (readiness).
 func (r *Redis) Ping(ctx context.Context) error { return r.c.Ping(ctx).Err() }
+
+func failKey(k string) string { return "drawio:lf:" + Hash(k) }
+
+// Fail increments the failed-sign-in counter of key and (re)arms its expiry on the first failure.
+func (r *Redis) Fail(ctx context.Context, key string, window time.Duration) (int64, error) {
+	n, err := r.c.Incr(ctx, failKey(key)).Result()
+	if err != nil {
+		return 0, err
+	}
+	if n == 1 {
+		_ = r.c.Expire(ctx, failKey(key), window).Err()
+	}
+	return n, nil
+}
+
+// Failures returns the current failed-sign-in count (0 when none).
+func (r *Redis) Failures(ctx context.Context, key string) (int64, error) {
+	n, err := r.c.Get(ctx, failKey(key)).Int64()
+	if errors.Is(err, redis.Nil) {
+		return 0, nil
+	}
+	return n, err
+}
+
+// ClearFail forgets the counter after a successful sign-in.
+func (r *Redis) ClearFail(ctx context.Context, key string) error {
+	return r.c.Del(ctx, failKey(key)).Err()
+}

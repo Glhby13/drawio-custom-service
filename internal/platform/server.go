@@ -31,6 +31,7 @@ type Server struct {
 	replica string
 	seen    sync.Map // username -> last upsert time
 	rate    *rateLimiter
+	local   localCache   // 15 s cache of local-account state used by authn
 	actRate *rateLimiter // live presence reports per session (best effort, dropped when exceeded)
 	started time.Time
 }
@@ -46,6 +47,7 @@ type Principal struct {
 	IsAdmin  bool
 	IsAI     bool
 	Session  string
+	Idp      string // "local" (DrawSpace account), "sso" or "" (AI actors)
 }
 
 // New builds the server; the caller owns pool/blob/redis lifetime.
@@ -170,8 +172,32 @@ func (s *Server) authn(r *http.Request) (*Principal, error) {
 			p.IsAdmin = true
 		}
 	}
-	if !p.IsAdmin && !hasRole(c.Roles, s.cfg.UserRole) {
-		return nil, errNoAppRole
+	p.Idp = c.Idp
+	if c.Idp == "local" {
+		// a local account: only the gateway may vouch for it, and the database (not the token) decides role and status
+		if c.Issuer != "drawio-gateway" || !strings.HasPrefix(c.Subject, "local:") {
+			return nil, errNoAppRole
+		}
+		st, err := s.localState(r.Context(), username)
+		if err != nil {
+			return nil, err
+		}
+		if !st.exists || st.disabled {
+			return nil, errLocalNotAllowed
+		}
+		p.IsAdmin = st.role == "admin"
+	} else {
+		// everybody else must not share a username with a local account (it would inherit that account's diagrams and shares)
+		st, err := s.localState(r.Context(), username)
+		if err != nil {
+			return nil, err
+		}
+		if st.exists {
+			return nil, errLocalCollision
+		}
+		if !p.IsAdmin && !hasRole(c.Roles, s.cfg.UserRole) {
+			return nil, errNoAppRole
+		}
 	}
 	p.IsAI = c.ActorType == identity.ActorAI
 	p.Actor = model.Actor{ID: username, Type: c.ActorType, Name: c.Name, OnBehalfOf: c.OnBehalfOf, Agent: c.Agent, Model: c.Model}
@@ -188,7 +214,7 @@ func (s *Server) authn(r *http.Request) (*Principal, error) {
 		if p.IsAI {
 			kind = "ai"
 		}
-		go func() {
+		go func() { //nolint:gosec // best-effort write that must outlive the request
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
 			if err := s.store.UpsertUser(ctx, p.Sub, p.Username, p.Name, p.Email, kind); err != nil {

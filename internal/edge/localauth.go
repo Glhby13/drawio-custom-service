@@ -1,0 +1,146 @@
+package edge
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"errors"
+	"io"
+	"net/http"
+	"strings"
+	"time"
+
+	"github.com/Glhby13/drawio-custom-service/internal/identity"
+	"github.com/Glhby13/drawio-custom-service/internal/session"
+)
+
+// Local sign-in (DrawSpace accounts). The gateway never sees a password hash: it forwards the credentials to the platform over the
+// cluster network with a short-lived service token, and the platform answers yes (identity + role) or no. Failures are counted per
+// username and per client address in Redis; five failures lock that username for the rest of a 15 minute window.
+const (
+	maxLocalFailures = 5
+	failWindow       = 15 * time.Minute
+)
+
+type localIdentity struct {
+	Sub, Username, Name, Email, Role string
+}
+
+var (
+	errBadCredentials = errors.New("invalid credentials")
+	errAuthBackend    = errors.New("platform unavailable")
+)
+
+func (s *Server) loginPage(w http.ResponseWriter, r *http.Request) {
+	// already signed in? go where the user wanted to be
+	if c, err := r.Cookie(s.cookie); err == nil {
+		if _, err := s.store.GetSession(r.Context(), c.Value); err == nil {
+			http.Redirect(w, r, safeReturn(r.URL.Query().Get("return_to")), http.StatusFound) //nolint:gosec // safeReturn only yields a same-site absolute path
+			return
+		}
+	}
+	h := w.Header()
+	h.Set("Content-Security-Policy", s.loginCSP)
+	h.Set("X-Frame-Options", "DENY")
+	h.Set("X-Content-Type-Options", "nosniff")
+	h.Set("Referrer-Policy", "same-origin")
+	h.Set("Cache-Control", "no-store")
+	h.Set("Content-Type", "text/html; charset=utf-8")
+	_, _ = w.Write(s.loginBody)
+}
+
+func (s *Server) loginLocal(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-store")
+	fail := func(code int, msg string) {
+		w.WriteHeader(code)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": msg})
+	}
+	if s.platform == nil || s.cfg.PlatformUpstream == nil {
+		fail(http.StatusServiceUnavailable, "unavailable")
+		return
+	}
+	var in struct {
+		Username string `json:"username"`
+		Password string `json:"password"`
+		ReturnTo string `json:"return_to"`
+	}
+	if err := json.NewDecoder(io.LimitReader(r.Body, 4096)).Decode(&in); err != nil || in.Username == "" || in.Password == "" || len(in.Username) > 64 || len(in.Password) > 256 {
+		fail(http.StatusBadRequest, "bad_request")
+		return
+	}
+	user := strings.ToLower(strings.TrimSpace(in.Username))
+	ip := clientIP(r)
+	ctx := r.Context()
+	for _, k := range []string{"u:" + user, "ip:" + ip} {
+		if n, err := s.store.Failures(ctx, k); err != nil {
+			fail(http.StatusServiceUnavailable, "unavailable")
+			return
+		} else if n >= maxLocalFailures*4 && strings.HasPrefix(k, "ip:") || n >= maxLocalFailures && strings.HasPrefix(k, "u:") {
+			w.Header().Set("Retry-After", "900")
+			s.log.Warn("local sign-in locked", "request_id", RequestID(ctx), "key", strings.SplitN(k, ":", 2)[0])
+			fail(http.StatusTooManyRequests, "locked")
+			return
+		}
+	}
+	id, err := s.verifyLocal(ctx, user, in.Password)
+	switch {
+	case errors.Is(err, errBadCredentials):
+		_, _ = s.store.Fail(ctx, "u:"+user, failWindow)
+		_, _ = s.store.Fail(ctx, "ip:"+ip, failWindow)
+		s.log.Info("local sign-in refused", "request_id", RequestID(ctx))
+		fail(http.StatusUnauthorized, "invalid_credentials")
+		return
+	case err != nil:
+		s.log.Error("local sign-in backend", "request_id", RequestID(ctx), "err", err.Error())
+		fail(http.StatusServiceUnavailable, "unavailable")
+		return
+	}
+	_ = s.store.ClearFail(ctx, "u:"+user)
+	now := time.Now()
+	sess := &session.Session{Subject: id.Sub, Username: id.Username, Name: id.Name, Email: id.Email, Roles: []string{id.Role},
+		CSRF: session.RandomToken(24), Idp: "local", CreatedAt: now, ExpiresAt: now.Add(s.cfg.SessionTTL)}
+	sid, err := s.store.CreateSession(ctx, sess)
+	if err != nil {
+		fail(http.StatusServiceUnavailable, "unavailable")
+		return
+	}
+	http.SetCookie(w, s.secureCookie(s.cookie, sid, int(s.cfg.SessionTTL.Seconds())))
+	s.log.Info("login ok", "request_id", RequestID(ctx), "actor", id.Sub, "actor_type", identity.ActorHuman, "idp", "local")
+	_ = json.NewEncoder(w).Encode(map[string]string{"redirect": safeReturn(in.ReturnTo)})
+}
+
+// verifyLocal asks the platform whether the credentials are valid.
+func (s *Server) verifyLocal(ctx context.Context, username, password string) (*localIdentity, error) {
+	tok, err := s.signer.Sign(identity.Claims{Subject: "gateway-auth", Audience: platformAudience, ActorType: identity.ActorService}, 30*time.Second)
+	if err != nil {
+		return nil, err
+	}
+	body, _ := json.Marshal(map[string]string{"username": username, "password": password})
+	u := strings.TrimRight(s.cfg.PlatformUpstream.String(), "/") + "/api/v1/internal/auth/local"
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, u, bytes.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Authorization", "Bearer "+tok)
+	req.Header.Set("Content-Type", "application/json")
+	c := &http.Client{Timeout: 10 * time.Second}
+	resp, err := c.Do(req)
+	if err != nil {
+		return nil, errAuthBackend
+	}
+	defer func() { _ = resp.Body.Close() }()
+	switch resp.StatusCode {
+	case http.StatusOK:
+		var id localIdentity
+		var raw struct{ Sub, Username, Name, Email, Role string }
+		if err := json.NewDecoder(io.LimitReader(resp.Body, 8192)).Decode(&raw); err != nil || raw.Sub == "" || (raw.Role != "user" && raw.Role != "admin") {
+			return nil, errAuthBackend
+		}
+		id = localIdentity(raw)
+		return &id, nil
+	case http.StatusUnauthorized:
+		return nil, errBadCredentials
+	}
+	return nil, errAuthBackend
+}

@@ -46,6 +46,12 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/v1/documents/{id}/comments", s.api(s.postComment))
 	mux.HandleFunc("GET /api/v1/documents/{id}/audit", s.api(s.getAudit))
 	mux.HandleFunc("GET /api/v1/users", s.api(s.searchUsers))
+	mux.HandleFunc("POST /api/v1/internal/auth/local", s.localVerify) // gateway service token only (not reachable from browsers)
+	mux.HandleFunc("GET /api/v1/admin/local-users", s.api(s.listLocalUsers))
+	mux.HandleFunc("POST /api/v1/admin/local-users", s.api(s.createLocalUser))
+	mux.HandleFunc("PATCH /api/v1/admin/local-users/{username}", s.api(s.patchLocalUser))
+	mux.HandleFunc("DELETE /api/v1/admin/local-users/{username}", s.api(s.deleteLocalUser))
+	mux.HandleFunc("POST /api/v1/me/password", s.api(s.changeOwnPassword))
 	mux.HandleFunc("GET /ws/v1/documents/{id}", s.wsHandler)
 	return s.logging(mux)
 }
@@ -102,7 +108,7 @@ func (s *Server) api(fn apiFn) http.HandlerFunc {
 		p, err := s.authn(r)
 		if err != nil {
 			code := http.StatusUnauthorized
-			if errors.Is(err, errNoAppRole) {
+			if errors.Is(err, errNoAppRole) || errors.Is(err, errLocalCollision) || errors.Is(err, errLocalNotAllowed) {
 				code = http.StatusForbidden
 			}
 			writeErr(w, code, "unauthenticated", "valid internal token with a drawio role required")
