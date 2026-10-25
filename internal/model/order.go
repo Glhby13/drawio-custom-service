@@ -90,3 +90,39 @@ func Spread(n int) []string {
 	}
 	return keys
 }
+
+// FillOrders gives every addCell / addPage in ops that has no order key the next key after the current last sibling
+// (top of the z-order / last page), counting siblings added earlier in the same batch. It is for API callers (MCP, AI,
+// automation) that do not hold the live sibling list; browsers always send explicit keys. ops is modified in place.
+func (d *Doc) FillOrders(ops []Op) {
+	lastCell := map[string]string{} // page|parent -> last key
+	lastPage := ""
+	for _, p := range d.SortedPages() {
+		lastPage = p.Order.V
+	}
+	for i := range ops {
+		o := &ops[i]
+		switch o.T {
+		case OpAddPage:
+			if o.Order == "" {
+				o.Order = Between(lastPage, "")
+			}
+			lastPage = o.Order
+		case OpAddCell:
+			if o.Order != "" {
+				continue
+			}
+			k := o.Page + "|" + o.Parent
+			last, seen := lastCell[k]
+			if !seen {
+				if p := d.Pages[o.Page]; p != nil && p.Dead == 0 {
+					for _, c := range p.childIndex()[o.Parent] {
+						last = c.Order.V
+					}
+				}
+			}
+			o.Order = Between(last, "")
+			lastCell[k] = o.Order
+		}
+	}
+}

@@ -36,6 +36,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("PUT /api/v1/documents/{id}/ai-policy", s.api(s.putAIPolicy))
 	mux.HandleFunc("GET /api/v1/documents/{id}/content", s.api(s.getContent))
 	mux.HandleFunc("POST /api/v1/documents/{id}/operations", s.api(s.postOperations))
+	mux.HandleFunc("POST /api/v1/documents/{id}/layout", s.api(s.postLayout))
 	mux.HandleFunc("GET /api/v1/documents/{id}/history", s.api(s.getHistory))
 	mux.HandleFunc("POST /api/v1/documents/{id}/revert", s.api(s.postRevert))
 	mux.HandleFunc("GET /api/v1/documents/{id}/versions", s.api(s.getVersions))
@@ -492,6 +493,65 @@ func (s *Server) postOperations(w http.ResponseWriter, r *http.Request, p *Princ
 		_ = s.store.Audit(r.Context(), p.Actor, d.ID, "ops", "ok", map[string]any{"batch": in.Batch, "ops": len(res.Applied)})
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"batch": in.Batch, "seqs": seqs, "duplicate": res.Duplicate, "overridden": res.Overridden})
+}
+
+// postLayout arranges the top-level vertices of one page ("layered" or "grid") as ordinary setPos operations, so the result
+// is attributed, authorised, versioned and revertible like any other edit.
+func (s *Server) postLayout(w http.ResponseWriter, r *http.Request, p *Principal) {
+	d, _, ok := s.access(w, r, p, ActEdit)
+	if !ok {
+		return
+	}
+	var in struct {
+		Page string `json:"page"`
+		Algo string `json:"algo"`
+	}
+	if !readJSON(w, r, &in, 4096) {
+		return
+	}
+	if in.Algo == "" {
+		in.Algo = "layered"
+	}
+	if in.Algo != "layered" && in.Algo != "grid" {
+		writeErr(w, http.StatusBadRequest, "bad_request", "algo must be layered or grid")
+		return
+	}
+	var ops []model.Op
+	err := s.hub.Read(r.Context(), d.ID, func(doc *model.Doc) error {
+		page := in.Page
+		if page == "" {
+			for _, pg := range doc.SortedPages() {
+				page = pg.ID
+				break
+			}
+		}
+		var err error
+		ops, err = doc.LayoutOps(page, in.Algo, "l"+newID(6))
+		return err
+	})
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, "bad_request", err.Error())
+		return
+	}
+	if len(ops) == 0 {
+		writeJSON(w, http.StatusOK, map[string]any{"moved": 0})
+		return
+	}
+	if !s.aiQuota(r.Context(), d, p, len(ops)) {
+		writeErr(w, http.StatusTooManyRequests, "ai_rate_limited", "AI operation quota exceeded")
+		return
+	}
+	res, err := s.Sequence(r.Context(), d.ID, d, p, "lay-"+newID(8), ops, 0, SeqBestEffort)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, "internal", "")
+		return
+	}
+	if res.Err != nil && len(res.Applied) == 0 {
+		writeErr(w, http.StatusUnprocessableEntity, res.Err.Code, res.Err.Msg)
+		return
+	}
+	_ = s.store.Audit(r.Context(), p.Actor, d.ID, "layout", "ok", map[string]any{"algo": in.Algo, "moved": len(res.Applied)})
+	writeJSON(w, http.StatusOK, map[string]any{"moved": len(res.Applied)})
 }
 
 // ---- history / revert ------------------------------------------------------------------------------------------------------

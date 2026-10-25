@@ -284,6 +284,7 @@ func (s *Server) Sequence(ctx context.Context, docID string, meta *DocMeta, p *P
 				a := p.Actor
 				stamped[i].Actor, stamped[i].Batch = &a, batch
 			}
+			dh.doc.FillOrders(stamped)
 			target := dh.doc
 			if p.IsAI || mode == SeqBestEffort {
 				target = dh.doc.Clone()
