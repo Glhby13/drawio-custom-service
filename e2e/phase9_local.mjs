@@ -164,7 +164,7 @@ await lu.page.click('#dlg-actions .primary');
 check('PASSWORD: a wrong current password is refused', await lu.page.waitForSelector('#dlg .msg:not([hidden])', { timeout: 8000 }).then(() => true).catch(() => false));
 await lu.page.fill('#pw-current', PW1); await lu.page.click('#dlg-actions .primary');
 await lu.page.waitForSelector('#dlg[open]', { state: 'detached', timeout: 8000 }).catch(() => {});
-check('PASSWORD: change succeeds', (await lu.page.locator('.toast', { hasText: 'Password changed' }).count()) >= 1);
+check('PASSWORD: change succeeds', await lu.page.locator('.toast', { hasText: 'Password changed' }).first().waitFor({ timeout: 8000 }).then(() => true).catch(() => false));
 const bad = await newPage(browser);
 await bad.page.goto(BASE + '/'); await bad.page.waitForSelector('#f'); await bad.page.fill('#username', LU); await bad.page.fill('#password', PW1); await bad.page.click('#submit');
 check('PASSWORD: the old password no longer works', await bad.page.waitForSelector('#err:not([hidden])', { timeout: 8000 }).then(() => true).catch(() => false));
