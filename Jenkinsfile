@@ -90,7 +90,9 @@ pipeline {
     }
 
     stage('Lint & Test') {
-      parallel {
+      // Sequential on purpose: on the small lab nodes lint (which compiles the Go toolchain it needs) and the tests together drove the worker to
+      // load ~90 and golangci-lint timed out while loading packages. One heavy Go process at a time is faster overall than thrashing.
+      stages {
         stage('Go lint') {
           steps { script { runIn(BUILD_MODE, GOLANGCI_IMAGE, 'golangci', 'golangci-lint run --timeout 10m ./cmd/... ./internal/...') } }
         }
