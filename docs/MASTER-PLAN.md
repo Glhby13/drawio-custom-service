@@ -39,7 +39,7 @@ Label bukti: **EVIDENCE** (dijalankan/dibaca, hasil tercatat) · **INFERENCE** �
 4. Aktor AI di lab dibuktikan dengan **Claude Code sebagai klien MCP** (identitas Keycloak khusus, `actorType=ai`, delegasi). Platform tidak punya dependensi runtime ke API AI mana pun; perilaku agen lain/model on-prem tetap UNVERIFIED.
 5. Tidak diwarisi dari n8n-custom-service: `InsecureSkipVerify`, penerimaan ID token tanpa verifikasi JWKS (ADR-0012 §11).
 
-## Status Phase 2 — gateway (2026-10-25, Claude Code): kode + E2E lab LULUS, menunggu persetujuan push GitOps/repo
+## Status Phase 2 — gateway (2026-10-25, Claude Code): **PASS (lab)** — di-push, Jenkins #1 SUCCESS, ArgoCD Synced/Healthy, E2E 24/24 dari deploy GitOps
 | Capability | Status | Bukti |
 |---|---|---|
 | OIDC code + PKCE, verifikasi JWKS (ID + access token), nonce, state sekali pakai, binding cookie | **PROVEN (lab)** | tes handler dengan IdP palsu + E2E Chrome vs Keycloak lab |
@@ -50,10 +50,10 @@ Label bukti: **EVIDENCE** (dijalankan/dibaca, hasil tercatat) · **INFERENCE** �
 | Logout menyeluruh (sesi server + SSO Keycloak) | **PROVEN (lab)** | E2E |
 | draw.io mati → 502 terlihat, pulih otomatis | **PROVEN (lab)** | E2E |
 | Image: Trivy 0 vuln, SBOM CycloneDX, `CGO_ENABLED=0`, non-root, rootfs read-only | **PROVEN (lab, arm64 + amd64 build)** | Trivy/SBOM, `go version -m` |
-| Deploy lewat ArgoCD + CI Jenkins | **UNVERIFIED** | menunggu persetujuan push; deploy sementara via kubectl hanya untuk validasi |
+| Deploy lewat ArgoCD + CI Jenkins | **PROVEN (lab)** | Jenkins #1 (commit `1af3447`): lint 0 issue, tes cov 83–88 %, govulncheck bersih, Kaniko → Harbor `gateway:1af3447d`, bump tag+digest `fdd28a2`; ArgoCD `lab-drawio-custom-gateway-dev-lab` Synced/Healthy, pod `imageID` = digest Harbor `a1484da6…`; E2E ulang 24/24; 0 aplikasi ArgoCD lain tidak sehat |
 | Rate limit | **PARTIAL** | proses-lokal (38/80 → 429); batas ingress = Phase 8 |
 | Token internal | **PROVEN (unit)** | belum dipakai service lain (Phase 3) |
-Pengesampingan gate kantor Phase 2 dicatat di "Keputusan user: program lab-first". Phase 3 belum dimulai.
+Catatan: image CI = arsitektur agen (arm64 di lab); manifest-list multi-arch dari CI = Phase 8. Pengesampingan gate kantor Phase 2 dicatat di "Keputusan user: program lab-first". Phase 3 belum dimulai.
 
 ## 1. Executive Summary
 draw.io Community dipakai **apa adanya** sebagai editor; `drawio-custom-service` adalah lapisan enterprise (SSO, penyimpanan terpusat, izin, versi, kolaborasi, audit, MCP, AI)
