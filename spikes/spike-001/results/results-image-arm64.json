@@ -1,0 +1,3652 @@
+{
+  "startedAt": "2026-10-24T16:53:47.174Z",
+  "env": {},
+  "experiments": {
+    "E0": {
+      "drawioVersion": "32.6.1",
+      "ua": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/156.0.0.0 Safari/537.36",
+      "cspMeta": "default-src 'self'; script-src 'self' https://storage.googleapis.com https://api...",
+      "editorPath": "/editor/",
+      "sameOriginFetch": "ok 200",
+      "crossOriginFetch": "blocked/failed",
+      "websocketSameOrigin": "constructed",
+      "violations": [
+        {
+          "directive": "connect-src",
+          "blocked": "http://127.0.0.1:8790/api/ping"
+        }
+      ],
+      "httpErrors": [],
+      "consoleErrors": [
+        "Failed to load resource: the server responded with a status of 404 (Not Found)",
+        "Connecting to 'http://127.0.0.1:8790/api/ping' violates the following Content Security Policy directive: \"connect-src 'self' https://*.dropboxapi.com https://api.trello.com https://api.github.com https://raw.githubusercontent.com https://*.googleapis.com https://*.googleusercontent.com https://graph.microsoft.com https://*.1drv.com https://*.sharepoint.com https://gitlab.com https://*.google.com https://fonts.gstatic.com https://fonts.googleapis.com\". The action has been blocked.",
+        "Fetch API cannot load http://127.0.0.1:8790/api/ping. Refused to connect because it violates the document's Content Security Policy."
+      ]
+    },
+    "E1": {
+      "hostInjectedLoadPlugin": {
+        "attached": true,
+        "hasGraph": true
+      },
+      "urlParamP": {
+        "loaded": false,
+        "console": [
+          "Unknown plugin: /spike-plugin.js"
+        ]
+      },
+      "settingsPluginDefaultConfig": {
+        "loaded": false,
+        "console": [
+          "Unknown plugin: /spike-plugin.js"
+        ]
+      },
+      "settingsPluginAllowCustom": {
+        "loaded": true,
+        "console": []
+      }
+    },
+    "E2": [
+      {
+        "op": "move",
+        "args": [
+          "X",
+          10,
+          5
+        ],
+        "changeTypes": [
+          "mxGeometryChange"
+        ],
+        "changes": [
+          {
+            "type": "mxGeometryChange",
+            "cell": "X",
+            "geometry": "<mxGeometry height=\"60\" width=\"120\" x=\"50\" y=\"45\"/>",
+            "codecXmlBytes": 0
+          }
+        ],
+        "autosaveCount": 1,
+        "xmlOnlyAutosaves": 0,
+        "patches": [
+          {
+            "u": {
+              "p1": {
+                "cells": {
+                  "u": {
+                    "X": {
+                      "geometry": "<mxGeometry height=\"60\" width=\"120\" x=\"50\" y=\"45\"/>"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        ],
+        "patchBytes": 109
+      },
+      {
+        "op": "resize",
+        "args": [
+          "X",
+          200
+        ],
+        "changeTypes": [
+          "mxGeometryChange"
+        ],
+        "changes": [
+          {
+            "type": "mxGeometryChange",
+            "cell": "X",
+            "geometry": "<mxGeometry height=\"60\" width=\"200\" x=\"40\" y=\"40\"/>",
+            "codecXmlBytes": 0
+          }
+        ],
+        "autosaveCount": 1,
+        "xmlOnlyAutosaves": 0,
+        "patches": [
+          {
+            "u": {
+              "p1": {
+                "cells": {
+                  "u": {
+                    "X": {
+                      "geometry": "<mxGeometry height=\"60\" width=\"200\" x=\"40\" y=\"40\"/>"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        ],
+        "patchBytes": 109
+      },
+      {
+        "op": "label",
+        "args": [
+          "X",
+          "Hello"
+        ],
+        "changeTypes": [
+          "mxValueChange"
+        ],
+        "changes": [
+          {
+            "type": "mxValueChange",
+            "cell": "X",
+            "value": "Hello",
+            "codecXmlBytes": 0
+          }
+        ],
+        "autosaveCount": 1,
+        "xmlOnlyAutosaves": 0,
+        "patches": [
+          {
+            "u": {
+              "p1": {
+                "cells": {
+                  "u": {
+                    "X": {
+                      "value": "Hello"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        ],
+        "patchBytes": 52
+      },
+      {
+        "op": "style",
+        "args": [
+          "X",
+          "fillColor",
+          "#ff0000"
+        ],
+        "changeTypes": [
+          "mxStyleChange"
+        ],
+        "changes": [
+          {
+            "type": "mxStyleChange",
+            "cell": "X",
+            "style": "rounded=0;whiteSpace=wrap;html=1;fillColor=#ff0000;",
+            "previous": "rounded=0;whiteSpace=wrap;html=1;",
+            "codecXmlBytes": 0
+          }
+        ],
+        "autosaveCount": 1,
+        "xmlOnlyAutosaves": 0,
+        "patches": [
+          {
+            "u": {
+              "p1": {
+                "cells": {
+                  "u": {
+                    "X": {
+                      "style": "rounded=0;whiteSpace=wrap;html=1;fillColor=#ff0000;"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        ],
+        "patchBytes": 98
+      },
+      {
+        "op": "attr",
+        "args": [
+          "X",
+          "owner",
+          "alice"
+        ],
+        "changeTypes": [
+          "mxValueChange"
+        ],
+        "changes": [
+          {
+            "type": "mxValueChange",
+            "cell": "X",
+            "value": "<UserObject label=\"X\" owner=\"alice\"/>",
+            "codecXmlBytes": 0
+          }
+        ],
+        "autosaveCount": 1,
+        "xmlOnlyAutosaves": 0,
+        "patches": [
+          {
+            "u": {
+              "p1": {
+                "cells": {
+                  "u": {
+                    "X": {
+                      "xmlValue": "<UserObject label=\"X\" owner=\"alice\"/>"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        ],
+        "patchBytes": 91
+      },
+      {
+        "op": "add",
+        "args": [
+          "N1",
+          60,
+          320
+        ],
+        "changeTypes": [
+          "mxChildChange"
+        ],
+        "changes": [
+          {
+            "type": "mxChildChange",
+            "child": "N1",
+            "parent": "1",
+            "previous": null,
+            "index": 5,
+            "previousIndex": 0,
+            "codecXmlBytes": 0
+          }
+        ],
+        "autosaveCount": 1,
+        "xmlOnlyAutosaves": 0,
+        "patches": [
+          {
+            "u": {
+              "p1": {
+                "cells": {
+                  "i": [
+                    {
+                      "id": "N1",
+                      "vertex": 1,
+                      "parent": "1",
+                      "previous": "E",
+                      "style": "rounded=1;",
+                      "geometry": "<mxGeometry height=\"40\" width=\"80\" x=\"60\" y=\"320\"/>",
+                      "value": "N1"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        ],
+        "patchBytes": 188
+      },
+      {
+        "op": "connect",
+        "args": [
+          "E2",
+          "X",
+          "Z"
+        ],
+        "changeTypes": [
+          "mxChildChange",
+          "mxTerminalChange"
+        ],
+        "changes": [
+          {
+            "type": "mxChildChange",
+            "child": "E2",
+            "parent": "1",
+            "previous": null,
+            "index": 5,
+            "previousIndex": 0,
+            "codecXmlBytes": 0
+          },
+          {
+            "type": "mxTerminalChange",
+            "cell": "E2",
+            "terminal": "X",
+            "previous": null,
+            "source": true,
+            "codecXmlBytes": 0
+          },
+          {
+            "type": "mxTerminalChange",
+            "cell": "E2",
+            "terminal": "Z",
+            "previous": null,
+            "source": false,
+            "codecXmlBytes": 0
+          }
+        ],
+        "autosaveCount": 1,
+        "xmlOnlyAutosaves": 0,
+        "patches": [
+          {
+            "u": {
+              "p1": {
+                "cells": {
+                  "i": [
+                    {
+                      "id": "E2",
+                      "edge": 1,
+                      "parent": "1",
+                      "previous": "E",
+                      "source": "X",
+                      "target": "Z",
+                      "geometry": "<mxGeometry relative=\"1\"/>",
+                      "value": ""
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        ],
+        "patchBytes": 158
+      },
+      {
+        "op": "disconnect",
+        "args": [
+          "E"
+        ],
+        "changeTypes": [
+          "mxTerminalChange"
+        ],
+        "changes": [
+          {
+            "type": "mxTerminalChange",
+            "cell": "E",
+            "terminal": null,
+            "previous": "Y",
+            "source": false,
+            "codecXmlBytes": 0
+          }
+        ],
+        "autosaveCount": 1,
+        "xmlOnlyAutosaves": 0,
+        "patches": [
+          {
+            "u": {
+              "p1": {
+                "cells": {
+                  "u": {
+                    "E": {
+                      "target": ""
+                    }
+                  }
+                }
+              }
+            }
+          }
+        ],
+        "patchBytes": 48
+      },
+      {
+        "op": "group",
+        "args": [
+          [
+            "X",
+            "Y"
+          ]
+        ],
+        "changeTypes": [
+          "mxGeometryChange",
+          "mxChildChange"
+        ],
+        "changes": [
+          {
+            "type": "mxGeometryChange",
+            "cell": "vGJdeusHzeqMGZhNpuYx-1",
+            "geometry": "<mxGeometry/>",
+            "codecXmlBytes": 231
+          },
+          {
+            "type": "mxGeometryChange",
+            "cell": "vGJdeusHzeqMGZhNpuYx-1",
+            "geometry": "<mxGeometry height=\"60\" width=\"320\" x=\"40\" y=\"40\"/>",
+            "codecXmlBytes": 330
+          },
+          {
+            "type": "mxChildChange",
+            "child": "vGJdeusHzeqMGZhNpuYx-1",
+            "parent": "1",
+            "previous": null,
+            "index": 5,
+            "previousIndex": 0,
+            "codecXmlBytes": 0
+          },
+          {
+            "type": "mxChildChange",
+            "child": "X",
+            "parent": "vGJdeusHzeqMGZhNpuYx-1",
+            "previous": "1",
+            "index": 0,
+            "previousIndex": 0,
+            "codecXmlBytes": 0
+          },
+          {
+            "type": "mxChildChange",
+            "child": "Y",
+            "parent": "vGJdeusHzeqMGZhNpuYx-1",
+            "previous": "1",
+            "index": 1,
+            "previousIndex": 0,
+            "codecXmlBytes": 0
+          },
+          {
+            "type": "mxGeometryChange",
+            "cell": "E",
+            "geometry": "<mxGeometry relative=\"1\"/>",
+            "codecXmlBytes": 0
+          },
+          {
+            "type": "mxChildChange",
+            "child": "E",
+            "parent": "vGJdeusHzeqMGZhNpuYx-1",
+            "previous": "1",
+            "index": 2,
+            "previousIndex": 2,
+            "codecXmlBytes": 0
+          },
+          {
+            "type": "mxGeometryChange",
+            "cell": "X",
+            "geometry": "<mxGeometry height=\"60\" width=\"120\"/>",
+            "codecXmlBytes": 0
+          },
+          {
+            "type": "mxGeometryChange",
+            "cell": "Y",
+            "geometry": "<mxGeometry height=\"60\" width=\"120\" x=\"200\"/>",
+            "codecXmlBytes": 0
+          }
+        ],
+        "autosaveCount": 1,
+        "xmlOnlyAutosaves": 0,
+        "patches": [
+          {
+            "u": {
+              "p1": {
+                "cells": {
+                  "u": {
+                    "X": {
+                      "parent": "vGJdeusHzeqMGZhNpuYx-1",
+                      "geometry": "<mxGeometry height=\"60\" width=\"120\"/>",
+                      "previous": ""
+                    },
+                    "Y": {
+                      "parent": "vGJdeusHzeqMGZhNpuYx-1",
+                      "geometry": "<mxGeometry height=\"60\" width=\"120\" x=\"200\"/>",
+                      "previous": "X"
+                    },
+                    "Z": {
+                      "previous": ""
+                    },
+                    "E": {
+                      "parent": "vGJdeusHzeqMGZhNpuYx-1",
+                      "previous": "Y"
+                    }
+                  },
+                  "i": [
+                    {
+                      "id": "vGJdeusHzeqMGZhNpuYx-1",
+                      "vertex": 1,
+                      "connectable": 0,
+                      "parent": "1",
+                      "previous": "C",
+                      "style": "group",
+                      "geometry": "<mxGeometry height=\"60\" width=\"320\" x=\"40\" y=\"40\"/>",
+                      "value": ""
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        ],
+        "patchBytes": 527
+      },
+      {
+        "op": "reparent",
+        "args": [
+          "Z",
+          "C"
+        ],
+        "changeTypes": [
+          "mxChildChange"
+        ],
+        "changes": [
+          {
+            "type": "mxChildChange",
+            "child": "Z",
+            "parent": "C",
+            "previous": "1",
+            "index": 0,
+            "previousIndex": 2,
+            "codecXmlBytes": 0
+          }
+        ],
+        "autosaveCount": 1,
+        "xmlOnlyAutosaves": 0,
+        "patches": [
+          {
+            "u": {
+              "p1": {
+                "cells": {
+                  "u": {
+                    "Z": {
+                      "parent": "C",
+                      "previous": ""
+                    },
+                    "C": {
+                      "previous": "Y"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        ],
+        "patchBytes": 84
+      },
+      {
+        "op": "toBack",
+        "args": [
+          "Y"
+        ],
+        "changeTypes": [
+          "mxChildChange"
+        ],
+        "changes": [
+          {
+            "type": "mxChildChange",
+            "child": "Y",
+            "parent": "1",
+            "previous": "1",
+            "index": 0,
+            "previousIndex": 1,
+            "codecXmlBytes": 0
+          }
+        ],
+        "autosaveCount": 1,
+        "xmlOnlyAutosaves": 0,
+        "patches": [
+          {
+            "u": {
+              "p1": {
+                "cells": {
+                  "u": {
+                    "X": {
+                      "previous": "Y"
+                    },
+                    "Y": {
+                      "previous": ""
+                    },
+                    "Z": {
+                      "previous": "X"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        ],
+        "patchBytes": 92
+      },
+      {
+        "op": "del",
+        "args": [
+          "Z"
+        ],
+        "changeTypes": [
+          "mxChildChange"
+        ],
+        "changes": [
+          {
+            "type": "mxChildChange",
+            "child": "Z",
+            "parent": null,
+            "previous": "1",
+            "previousIndex": 2,
+            "codecXmlBytes": 0
+          }
+        ],
+        "autosaveCount": 1,
+        "xmlOnlyAutosaves": 0,
+        "patches": [
+          {
+            "u": {
+              "p1": {
+                "cells": {
+                  "u": {
+                    "C": {
+                      "previous": "Y"
+                    }
+                  },
+                  "r": [
+                    "Z"
+                  ]
+                }
+              }
+            }
+          }
+        ],
+        "patchBytes": 61
+      },
+      {
+        "op": "addPage",
+        "args": [
+          "Page-3"
+        ],
+        "changeTypes": [
+          "ChangePage"
+        ],
+        "changes": [
+          {
+            "type": "ChangePage",
+            "page": "WsnH-jvjxKZaArrZyFnu",
+            "index": null,
+            "previousIndex": 2,
+            "codecXmlBytes": 0
+          }
+        ],
+        "autosaveCount": 1,
+        "xmlOnlyAutosaves": 0,
+        "patches": [
+          {
+            "i": [
+              {
+                "id": "WsnH-jvjxKZaArrZyFnu",
+                "data": "<diagram id=\"WsnH-jvjxKZaArrZyFnu\" name=\"Page-3\"><mxGraphModel dx=\"616\" dy=\"366\" grid=\"1\" gridSize=\"10\" guides=\"1\" tooltips=\"1\" connect=\"1\" arrows=\"1\" fold=\"1\" page=\"1\" pageScale=\"1\" pageWidth=\"850\" pageHeight=\"1100\" math=\"0\" shadow=\"0\"><root><mxCell id=\"0\"/><mxCell id=\"1\" parent=\"0\"/></root></mxGraphModel></diagram>",
+                "previous": "p2"
+              }
+            ]
+          }
+        ],
+        "patchBytes": 421
+      },
+      {
+        "op": "renamePage",
+        "args": [
+          1,
+          "Renamed"
+        ],
+        "changeTypes": [
+          "RenamePage"
+        ],
+        "changes": [
+          {
+            "type": "RenamePage",
+            "page": "p2",
+            "name": "Renamed",
+            "codecXmlBytes": 0
+          }
+        ],
+        "autosaveCount": 1,
+        "xmlOnlyAutosaves": 0,
+        "patches": [
+          {
+            "u": {
+              "p2": {
+                "name": "Renamed"
+              }
+            }
+          }
+        ],
+        "patchBytes": 31
+      },
+      {
+        "op": "selectPage",
+        "args": [
+          1
+        ],
+        "changeTypes": [
+          "SelectPage"
+        ],
+        "changes": [
+          {
+            "type": "SelectPage",
+            "codecXmlBytes": 0
+          }
+        ],
+        "autosaveCount": 1,
+        "xmlOnlyAutosaves": 1,
+        "patches": [],
+        "patchBytes": 0
+      }
+    ],
+    "E3": {
+      "ops": [
+        "move",
+        "label",
+        "style",
+        "add",
+        "connect",
+        "group",
+        "reparent",
+        "toBack",
+        "addPage",
+        "selectPage",
+        "del",
+        "undo",
+        "undo"
+      ],
+      "autosaves": 11,
+      "withoutPatch": 1,
+      "replayEqual": true,
+      "checksumA": -1209872749,
+      "checksumB": -1209872749
+    },
+    "E4": {
+      "before": {
+        "undo": 1,
+        "next": 1,
+        "page": "p1",
+        "sel": [
+          "Z"
+        ]
+      },
+      "after": {
+        "undo": 1,
+        "next": 1,
+        "page": "p1",
+        "sel": [
+          "Z"
+        ],
+        "xX": 140
+      },
+      "echoesOnApply": 0,
+      "checksumMatch": false,
+      "duplicate": {
+        "echoes": 0,
+        "xBefore": 140,
+        "xAfter": 140,
+        "error": null
+      },
+      "afterLocalUndo": {
+        "label": "Y",
+        "xX": 140
+      },
+      "remoteDeleteOfSelected": {
+        "error": null,
+        "selection": []
+      },
+      "remoteWhileOtherPage": {
+        "error": null,
+        "currentPage": "p2",
+        "echoes": 0
+      },
+      "applyLatencyMs": 9.300000000745058
+    },
+    "E5": [
+      {
+        "id": "move-move-same",
+        "S1": {
+          "repairMethod": null,
+          "repaired": {},
+          "patches": {
+            "a": 1,
+            "b": 1
+          },
+          "convergedAB": false,
+          "aEqualsR": true,
+          "bEqualsR": false,
+          "checksums": {
+            "A": -667170859,
+            "B": 308521071,
+            "R": -667170859
+          },
+          "resultR": null,
+          "resultA": null,
+          "resultB": null,
+          "errors": [],
+          "patchSample": {
+            "a": {
+              "u": {
+                "p1": {
+                  "cells": {
+                    "u": {
+                      "X": {
+                        "geometry": "<mxGeometry height=\"60\" width=\"120\" x=\"90\" y=\"40\"/>"
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "b": {
+              "u": {
+                "p1": {
+                  "cells": {
+                    "u": {
+                      "X": {
+                        "geometry": "<mxGeometry height=\"60\" width=\"120\" x=\"40\" y=\"120\"/>"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "S3": {
+          "repairMethod": null,
+          "repaired": {},
+          "patches": {
+            "a": 1,
+            "b": 1
+          },
+          "convergedAB": true,
+          "aEqualsR": true,
+          "bEqualsR": true,
+          "checksums": {
+            "A": -667170859,
+            "B": -667170859,
+            "R": -667170859
+          },
+          "resultR": null,
+          "resultA": null,
+          "resultB": null,
+          "errors": [],
+          "patchSample": {
+            "a": {
+              "u": {
+                "p1": {
+                  "cells": {
+                    "u": {
+                      "X": {
+                        "geometry": "<mxGeometry height=\"60\" width=\"120\" x=\"90\" y=\"40\"/>"
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "b": {
+              "u": {
+                "p1": {
+                  "cells": {
+                    "u": {
+                      "X": {
+                        "geometry": "<mxGeometry height=\"60\" width=\"120\" x=\"40\" y=\"120\"/>"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      {
+        "id": "move-resize-same-cell",
+        "S1": {
+          "repairMethod": null,
+          "repaired": {},
+          "patches": {
+            "a": 1,
+            "b": 1
+          },
+          "convergedAB": false,
+          "aEqualsR": true,
+          "bEqualsR": false,
+          "checksums": {
+            "A": -399477306,
+            "B": 308521071,
+            "R": -399477306
+          },
+          "resultR": {
+            "moved": false,
+            "resized": true
+          },
+          "resultA": {
+            "moved": false,
+            "resized": true
+          },
+          "resultB": {
+            "moved": true,
+            "resized": false
+          },
+          "errors": [],
+          "patchSample": {
+            "a": {
+              "u": {
+                "p1": {
+                  "cells": {
+                    "u": {
+                      "X": {
+                        "geometry": "<mxGeometry height=\"60\" width=\"120\" x=\"90\" y=\"40\"/>"
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "b": {
+              "u": {
+                "p1": {
+                  "cells": {
+                    "u": {
+                      "X": {
+                        "geometry": "<mxGeometry height=\"60\" width=\"300\" x=\"40\" y=\"40\"/>"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "S3": {
+          "repairMethod": null,
+          "repaired": {},
+          "patches": {
+            "a": 1,
+            "b": 1
+          },
+          "convergedAB": true,
+          "aEqualsR": true,
+          "bEqualsR": true,
+          "checksums": {
+            "A": -399477306,
+            "B": -399477306,
+            "R": -399477306
+          },
+          "resultR": {
+            "moved": false,
+            "resized": true
+          },
+          "resultA": {
+            "moved": false,
+            "resized": true
+          },
+          "resultB": {
+            "moved": false,
+            "resized": true
+          },
+          "errors": [],
+          "patchSample": {
+            "a": {
+              "u": {
+                "p1": {
+                  "cells": {
+                    "u": {
+                      "X": {
+                        "geometry": "<mxGeometry height=\"60\" width=\"120\" x=\"90\" y=\"40\"/>"
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "b": {
+              "u": {
+                "p1": {
+                  "cells": {
+                    "u": {
+                      "X": {
+                        "geometry": "<mxGeometry height=\"60\" width=\"300\" x=\"40\" y=\"40\"/>"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      {
+        "id": "label-label-same",
+        "S1": {
+          "repairMethod": null,
+          "repaired": {},
+          "patches": {
+            "a": 1,
+            "b": 1
+          },
+          "convergedAB": false,
+          "aEqualsR": true,
+          "bEqualsR": false,
+          "checksums": {
+            "A": 1565406189,
+            "B": 804206314,
+            "R": 1565406189
+          },
+          "resultR": null,
+          "resultA": null,
+          "resultB": null,
+          "errors": [],
+          "patchSample": {
+            "a": {
+              "u": {
+                "p1": {
+                  "cells": {
+                    "u": {
+                      "X": {
+                        "value": "A-label"
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "b": {
+              "u": {
+                "p1": {
+                  "cells": {
+                    "u": {
+                      "X": {
+                        "value": "B-label"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "S3": {
+          "repairMethod": null,
+          "repaired": {},
+          "patches": {
+            "a": 1,
+            "b": 1
+          },
+          "convergedAB": true,
+          "aEqualsR": true,
+          "bEqualsR": true,
+          "checksums": {
+            "A": 1565406189,
+            "B": 1565406189,
+            "R": 1565406189
+          },
+          "resultR": null,
+          "resultA": null,
+          "resultB": null,
+          "errors": [],
+          "patchSample": {
+            "a": {
+              "u": {
+                "p1": {
+                  "cells": {
+                    "u": {
+                      "X": {
+                        "value": "A-label"
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "b": {
+              "u": {
+                "p1": {
+                  "cells": {
+                    "u": {
+                      "X": {
+                        "value": "B-label"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      {
+        "id": "style-diff-keys-same-cell",
+        "S1": {
+          "repairMethod": null,
+          "repaired": {},
+          "patches": {
+            "a": 1,
+            "b": 1
+          },
+          "convergedAB": false,
+          "aEqualsR": true,
+          "bEqualsR": false,
+          "checksums": {
+            "A": 1782265588,
+            "B": -649957071,
+            "R": 1782265588
+          },
+          "resultR": {
+            "fillKept": false,
+            "strokeKept": true
+          },
+          "resultA": {
+            "fillKept": false,
+            "strokeKept": true
+          },
+          "resultB": {
+            "fillKept": true,
+            "strokeKept": false
+          },
+          "errors": [],
+          "patchSample": {
+            "a": {
+              "u": {
+                "p1": {
+                  "cells": {
+                    "u": {
+                      "X": {
+                        "style": "rounded=0;whiteSpace=wrap;html=1;fillColor=#ff0000;"
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "b": {
+              "u": {
+                "p1": {
+                  "cells": {
+                    "u": {
+                      "X": {
+                        "style": "rounded=0;whiteSpace=wrap;html=1;strokeColor=#0000ff;"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "S3": {
+          "repairMethod": null,
+          "repaired": {},
+          "patches": {
+            "a": 1,
+            "b": 1
+          },
+          "convergedAB": true,
+          "aEqualsR": true,
+          "bEqualsR": true,
+          "checksums": {
+            "A": 1782265588,
+            "B": 1782265588,
+            "R": 1782265588
+          },
+          "resultR": {
+            "fillKept": false,
+            "strokeKept": true
+          },
+          "resultA": {
+            "fillKept": false,
+            "strokeKept": true
+          },
+          "resultB": {
+            "fillKept": false,
+            "strokeKept": true
+          },
+          "errors": [],
+          "patchSample": {
+            "a": {
+              "u": {
+                "p1": {
+                  "cells": {
+                    "u": {
+                      "X": {
+                        "style": "rounded=0;whiteSpace=wrap;html=1;fillColor=#ff0000;"
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "b": {
+              "u": {
+                "p1": {
+                  "cells": {
+                    "u": {
+                      "X": {
+                        "style": "rounded=0;whiteSpace=wrap;html=1;strokeColor=#0000ff;"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      {
+        "id": "style-same-key",
+        "S1": {
+          "repairMethod": null,
+          "repaired": {},
+          "patches": {
+            "a": 1,
+            "b": 1
+          },
+          "convergedAB": false,
+          "aEqualsR": true,
+          "bEqualsR": false,
+          "checksums": {
+            "A": -1417567951,
+            "B": -649957071,
+            "R": -1417567951
+          },
+          "resultR": null,
+          "resultA": null,
+          "resultB": null,
+          "errors": [],
+          "patchSample": {
+            "a": {
+              "u": {
+                "p1": {
+                  "cells": {
+                    "u": {
+                      "X": {
+                        "style": "rounded=0;whiteSpace=wrap;html=1;fillColor=#ff0000;"
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "b": {
+              "u": {
+                "p1": {
+                  "cells": {
+                    "u": {
+                      "X": {
+                        "style": "rounded=0;whiteSpace=wrap;html=1;fillColor=#00ff00;"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "S3": {
+          "repairMethod": null,
+          "repaired": {},
+          "patches": {
+            "a": 1,
+            "b": 1
+          },
+          "convergedAB": true,
+          "aEqualsR": true,
+          "bEqualsR": true,
+          "checksums": {
+            "A": -1417567951,
+            "B": -1417567951,
+            "R": -1417567951
+          },
+          "resultR": null,
+          "resultA": null,
+          "resultB": null,
+          "errors": [],
+          "patchSample": {
+            "a": {
+              "u": {
+                "p1": {
+                  "cells": {
+                    "u": {
+                      "X": {
+                        "style": "rounded=0;whiteSpace=wrap;html=1;fillColor=#ff0000;"
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "b": {
+              "u": {
+                "p1": {
+                  "cells": {
+                    "u": {
+                      "X": {
+                        "style": "rounded=0;whiteSpace=wrap;html=1;fillColor=#00ff00;"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      {
+        "id": "attr-diff-keys-same-cell",
+        "S1": {
+          "repairMethod": null,
+          "repaired": {},
+          "patches": {
+            "a": 1,
+            "b": 1
+          },
+          "convergedAB": false,
+          "aEqualsR": true,
+          "bEqualsR": false,
+          "checksums": {
+            "A": -2011555712,
+            "B": 1998309366,
+            "R": -2011555712
+          },
+          "resultR": {
+            "k1Kept": false,
+            "k2Kept": true
+          },
+          "resultA": {
+            "k1Kept": false,
+            "k2Kept": true
+          },
+          "resultB": {
+            "k1Kept": true,
+            "k2Kept": false
+          },
+          "errors": [],
+          "patchSample": {
+            "a": {
+              "u": {
+                "p1": {
+                  "cells": {
+                    "u": {
+                      "X": {
+                        "xmlValue": "<UserObject label=\"X\" k1=\"a\"/>"
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "b": {
+              "u": {
+                "p1": {
+                  "cells": {
+                    "u": {
+                      "X": {
+                        "xmlValue": "<UserObject label=\"X\" k2=\"b\"/>"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "S3": {
+          "repairMethod": null,
+          "repaired": {},
+          "patches": {
+            "a": 1,
+            "b": 1
+          },
+          "convergedAB": true,
+          "aEqualsR": true,
+          "bEqualsR": true,
+          "checksums": {
+            "A": -2011555712,
+            "B": -2011555712,
+            "R": -2011555712
+          },
+          "resultR": {
+            "k1Kept": false,
+            "k2Kept": true
+          },
+          "resultA": {
+            "k1Kept": false,
+            "k2Kept": true
+          },
+          "resultB": {
+            "k1Kept": false,
+            "k2Kept": true
+          },
+          "errors": [],
+          "patchSample": {
+            "a": {
+              "u": {
+                "p1": {
+                  "cells": {
+                    "u": {
+                      "X": {
+                        "xmlValue": "<UserObject label=\"X\" k1=\"a\"/>"
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "b": {
+              "u": {
+                "p1": {
+                  "cells": {
+                    "u": {
+                      "X": {
+                        "xmlValue": "<UserObject label=\"X\" k2=\"b\"/>"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      {
+        "id": "delete-vs-edit",
+        "S1": {
+          "repairMethod": null,
+          "repaired": {},
+          "patches": {
+            "a": 1,
+            "b": 1
+          },
+          "convergedAB": true,
+          "aEqualsR": true,
+          "bEqualsR": true,
+          "checksums": {
+            "A": 1788266969,
+            "B": 1788266969,
+            "R": 1788266969
+          },
+          "resultR": {
+            "xExists": false
+          },
+          "resultA": {
+            "xExists": false
+          },
+          "resultB": {
+            "xExists": false
+          },
+          "errors": [],
+          "patchSample": {
+            "a": {
+              "u": {
+                "p1": {
+                  "cells": {
+                    "u": {
+                      "Y": {
+                        "previous": ""
+                      }
+                    },
+                    "r": [
+                      "X",
+                      "E"
+                    ]
+                  }
+                }
+              }
+            },
+            "b": {
+              "u": {
+                "p1": {
+                  "cells": {
+                    "u": {
+                      "X": {
+                        "value": "edited"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "S3": {
+          "repairMethod": null,
+          "repaired": {},
+          "patches": {
+            "a": 1,
+            "b": 1
+          },
+          "convergedAB": true,
+          "aEqualsR": true,
+          "bEqualsR": true,
+          "checksums": {
+            "A": 1788266969,
+            "B": 1788266969,
+            "R": 1788266969
+          },
+          "resultR": {
+            "xExists": false
+          },
+          "resultA": {
+            "xExists": false
+          },
+          "resultB": {
+            "xExists": false
+          },
+          "errors": [],
+          "patchSample": {
+            "a": {
+              "u": {
+                "p1": {
+                  "cells": {
+                    "u": {
+                      "Y": {
+                        "previous": ""
+                      }
+                    },
+                    "r": [
+                      "X",
+                      "E"
+                    ]
+                  }
+                }
+              }
+            },
+            "b": {
+              "u": {
+                "p1": {
+                  "cells": {
+                    "u": {
+                      "X": {
+                        "value": "edited"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      {
+        "id": "edit-vs-delete",
+        "S1": {
+          "repairMethod": null,
+          "repaired": {},
+          "patches": {
+            "a": 1,
+            "b": 1
+          },
+          "convergedAB": true,
+          "aEqualsR": true,
+          "bEqualsR": true,
+          "checksums": {
+            "A": 1788266969,
+            "B": 1788266969,
+            "R": 1788266969
+          },
+          "resultR": {
+            "xExists": false
+          },
+          "resultA": {
+            "xExists": false
+          },
+          "resultB": {
+            "xExists": false
+          },
+          "errors": [],
+          "patchSample": {
+            "a": {
+              "u": {
+                "p1": {
+                  "cells": {
+                    "u": {
+                      "X": {
+                        "value": "edited"
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "b": {
+              "u": {
+                "p1": {
+                  "cells": {
+                    "u": {
+                      "Y": {
+                        "previous": ""
+                      }
+                    },
+                    "r": [
+                      "X",
+                      "E"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "S3": {
+          "repairMethod": null,
+          "repaired": {},
+          "patches": {
+            "a": 1,
+            "b": 1
+          },
+          "convergedAB": true,
+          "aEqualsR": true,
+          "bEqualsR": true,
+          "checksums": {
+            "A": 1788266969,
+            "B": 1788266969,
+            "R": 1788266969
+          },
+          "resultR": {
+            "xExists": false
+          },
+          "resultA": {
+            "xExists": false
+          },
+          "resultB": {
+            "xExists": false
+          },
+          "errors": [],
+          "patchSample": {
+            "a": {
+              "u": {
+                "p1": {
+                  "cells": {
+                    "u": {
+                      "X": {
+                        "value": "edited"
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "b": {
+              "u": {
+                "p1": {
+                  "cells": {
+                    "u": {
+                      "Y": {
+                        "previous": ""
+                      }
+                    },
+                    "r": [
+                      "X",
+                      "E"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      {
+        "id": "group-vs-move",
+        "S1": {
+          "repairMethod": null,
+          "repaired": {},
+          "patches": {
+            "a": 1,
+            "b": 1
+          },
+          "convergedAB": false,
+          "aEqualsR": true,
+          "bEqualsR": false,
+          "checksums": {
+            "A": -47600552,
+            "B": 1233114538,
+            "R": -47600552
+          },
+          "resultR": {
+            "xParent": "X0qpbTLCja97rer3tnfO-1",
+            "xGeo": {
+              "x": 40,
+              "y": 140,
+              "w": 120,
+              "h": 60
+            }
+          },
+          "resultA": {
+            "xParent": "X0qpbTLCja97rer3tnfO-1",
+            "xGeo": {
+              "x": 40,
+              "y": 140,
+              "w": 120,
+              "h": 60
+            }
+          },
+          "resultB": {
+            "xParent": "X0qpbTLCja97rer3tnfO-1",
+            "xGeo": {
+              "x": 0,
+              "y": 0,
+              "w": 120,
+              "h": 60
+            }
+          },
+          "errors": [],
+          "patchSample": {
+            "a": {
+              "u": {
+                "p1": {
+                  "cells": {
+                    "u": {
+                      "X": {
+                        "parent": "X0qpbTLCja97rer3tnfO-1",
+                        "geometry": "<mxGeometry height=\"60\" width=\"120\"/>",
+                        "previous": ""
+                      },
+                      "Y": {
+                        "parent": "X0qpbTLCja97rer3tnfO-1",
+                        "geometry": "<mxGeometry height=\"60\" width=\"120\" x=\"200\"/>",
+                        "previous": "X"
+                      },
+                      "Z": {
+                        "previous": ""
+                      },
+                      "E": {
+                        "parent": "X0qpbTLCja97rer3tnfO-1",
+                        "previous": "Y"
+                      }
+                    },
+                    "i": [
+                      {
+                        "id": "X0qpbTLCja97rer3tnfO-1",
+                        "vertex": 1,
+                        "connectable": 0,
+                        "parent": "1",
+                        "previous": "C",
+                        "style": "group",
+                        "geometry": "<mxGeometry height=\"60\" width=\"320\" x=\"40\" y=\"40\"/>",
+                        "value": ""
+                      }
+                    ]
+                  }
+                }
+              }
+            },
+            "b": {
+              "u": {
+                "p1": {
+                  "cells": {
+                    "u": {
+                      "X": {
+                        "geometry": "<mxGeometry height=\"60\" width=\"120\" x=\"40\" y=\"140\"/>"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "S3": {
+          "repairMethod": null,
+          "repaired": {},
+          "patches": {
+            "a": 1,
+            "b": 1
+          },
+          "convergedAB": true,
+          "aEqualsR": true,
+          "bEqualsR": true,
+          "checksums": {
+            "A": 796723804,
+            "B": 796723804,
+            "R": 796723804
+          },
+          "resultR": {
+            "xParent": "_UVChKh9_yKqnWkItgAU-1",
+            "xGeo": {
+              "x": 40,
+              "y": 140,
+              "w": 120,
+              "h": 60
+            }
+          },
+          "resultA": {
+            "xParent": "_UVChKh9_yKqnWkItgAU-1",
+            "xGeo": {
+              "x": 40,
+              "y": 140,
+              "w": 120,
+              "h": 60
+            }
+          },
+          "resultB": {
+            "xParent": "_UVChKh9_yKqnWkItgAU-1",
+            "xGeo": {
+              "x": 40,
+              "y": 140,
+              "w": 120,
+              "h": 60
+            }
+          },
+          "errors": [],
+          "patchSample": {
+            "a": {
+              "u": {
+                "p1": {
+                  "cells": {
+                    "u": {
+                      "X": {
+                        "parent": "_UVChKh9_yKqnWkItgAU-1",
+                        "geometry": "<mxGeometry height=\"60\" width=\"120\"/>",
+                        "previous": ""
+                      },
+                      "Y": {
+                        "parent": "_UVChKh9_yKqnWkItgAU-1",
+                        "geometry": "<mxGeometry height=\"60\" width=\"120\" x=\"200\"/>",
+                        "previous": "X"
+                      },
+                      "Z": {
+                        "previous": ""
+                      },
+                      "E": {
+                        "parent": "_UVChKh9_yKqnWkItgAU-1",
+                        "previous": "Y"
+                      }
+                    },
+                    "i": [
+                      {
+                        "id": "_UVChKh9_yKqnWkItgAU-1",
+                        "vertex": 1,
+                        "connectable": 0,
+                        "parent": "1",
+                        "previous": "C",
+                        "style": "group",
+                        "geometry": "<mxGeometry height=\"60\" width=\"320\" x=\"40\" y=\"40\"/>",
+                        "value": ""
+                      }
+                    ]
+                  }
+                }
+              }
+            },
+            "b": {
+              "u": {
+                "p1": {
+                  "cells": {
+                    "u": {
+                      "X": {
+                        "geometry": "<mxGeometry height=\"60\" width=\"120\" x=\"40\" y=\"140\"/>"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      {
+        "id": "reorder-diff-cells",
+        "S1": {
+          "repairMethod": null,
+          "repaired": {},
+          "patches": {
+            "a": 0,
+            "b": 1
+          },
+          "convergedAB": true,
+          "aEqualsR": true,
+          "bEqualsR": true,
+          "checksums": {
+            "A": 305961934,
+            "B": 305961934,
+            "R": 305961934
+          },
+          "resultR": {
+            "order": "X,Z,C,E,Y"
+          },
+          "resultA": {
+            "order": "X,Z,C,E,Y"
+          },
+          "resultB": {
+            "order": "X,Z,C,E,Y"
+          },
+          "errors": [],
+          "patchSample": {
+            "a": null,
+            "b": {
+              "u": {
+                "p1": {
+                  "cells": {
+                    "u": {
+                      "Y": {
+                        "previous": "E"
+                      },
+                      "Z": {
+                        "previous": "X"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "S3": {
+          "repairMethod": null,
+          "repaired": {},
+          "patches": {
+            "a": 0,
+            "b": 1
+          },
+          "convergedAB": true,
+          "aEqualsR": true,
+          "bEqualsR": true,
+          "checksums": {
+            "A": 305961934,
+            "B": 305961934,
+            "R": 305961934
+          },
+          "resultR": {
+            "order": "X,Z,C,E,Y"
+          },
+          "resultA": {
+            "order": "X,Z,C,E,Y"
+          },
+          "resultB": {
+            "order": "X,Z,C,E,Y"
+          },
+          "errors": [],
+          "patchSample": {
+            "a": null,
+            "b": {
+              "u": {
+                "p1": {
+                  "cells": {
+                    "u": {
+                      "Y": {
+                        "previous": "E"
+                      },
+                      "Z": {
+                        "previous": "X"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      {
+        "id": "reorder-same-cell",
+        "S1": {
+          "repairMethod": null,
+          "repaired": {},
+          "patches": {
+            "a": 0,
+            "b": 1
+          },
+          "convergedAB": true,
+          "aEqualsR": true,
+          "bEqualsR": true,
+          "checksums": {
+            "A": -67054898,
+            "B": -67054898,
+            "R": -67054898
+          },
+          "resultR": {
+            "order": "Y,Z,C,E,X"
+          },
+          "resultA": {
+            "order": "Y,Z,C,E,X"
+          },
+          "resultB": {
+            "order": "Y,Z,C,E,X"
+          },
+          "errors": [],
+          "patchSample": {
+            "a": null,
+            "b": {
+              "u": {
+                "p1": {
+                  "cells": {
+                    "u": {
+                      "X": {
+                        "previous": "E"
+                      },
+                      "Y": {
+                        "previous": ""
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "S3": {
+          "repairMethod": null,
+          "repaired": {},
+          "patches": {
+            "a": 0,
+            "b": 1
+          },
+          "convergedAB": true,
+          "aEqualsR": true,
+          "bEqualsR": true,
+          "checksums": {
+            "A": -67054898,
+            "B": -67054898,
+            "R": -67054898
+          },
+          "resultR": {
+            "order": "Y,Z,C,E,X"
+          },
+          "resultA": {
+            "order": "Y,Z,C,E,X"
+          },
+          "resultB": {
+            "order": "Y,Z,C,E,X"
+          },
+          "errors": [],
+          "patchSample": {
+            "a": null,
+            "b": {
+              "u": {
+                "p1": {
+                  "cells": {
+                    "u": {
+                      "X": {
+                        "previous": "E"
+                      },
+                      "Y": {
+                        "previous": ""
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      {
+        "id": "addpage-addpage",
+        "S1": {
+          "repairMethod": null,
+          "repaired": {},
+          "patches": {
+            "a": 1,
+            "b": 1
+          },
+          "convergedAB": false,
+          "aEqualsR": true,
+          "bEqualsR": false,
+          "checksums": {
+            "A": -1105641717,
+            "B": -1110341431,
+            "R": -1105641717
+          },
+          "resultR": {
+            "pages": "Page-1,Page-2,PB,PA"
+          },
+          "resultA": {
+            "pages": "Page-1,Page-2,PB,PA"
+          },
+          "resultB": {
+            "pages": "Page-1,Page-2,PA,PB"
+          },
+          "errors": [],
+          "patchSample": {
+            "a": {
+              "i": [
+                {
+                  "id": "C3ugayHZjLAJ-JRBEewZ",
+                  "data": "<diagram id=\"C3ugayHZjLAJ-JRBEewZ\" name=\"PA\"><mxGraphModel dx=\"616\" dy=\"366\" grid=\"1\" gridSize=\"10\" guides=\"1\" tooltips=\"1\" connect=\"1\" arrows=\"1\" fold=\"1\" page=\"1\" pageScale=\"1\" pageWidth=\"850\" pageHeight=\"1100\" math=\"0\" shadow=\"0\"><root><mxCell id=\"0\"/><mxCell id=\"1\" parent=\"0\"/></root></mxGraphModel></diagram>",
+                  "previous": "p2"
+                }
+              ]
+            },
+            "b": {
+              "i": [
+                {
+                  "id": "9EdTU8Nm0zoPCt5FHdVE",
+                  "data": "<diagram id=\"9EdTU8Nm0zoPCt5FHdVE\" name=\"PB\"><mxGraphModel dx=\"616\" dy=\"366\" grid=\"1\" gridSize=\"10\" guides=\"1\" tooltips=\"1\" connect=\"1\" arrows=\"1\" fold=\"1\" page=\"1\" pageScale=\"1\" pageWidth=\"850\" pageHeight=\"1100\" math=\"0\" shadow=\"0\"><root><mxCell id=\"0\"/><mxCell id=\"1\" parent=\"0\"/></root></mxGraphModel></diagram>",
+                  "previous": "p2"
+                }
+              ]
+            }
+          }
+        },
+        "S3": {
+          "repairMethod": null,
+          "repaired": {},
+          "patches": {
+            "a": 1,
+            "b": 1
+          },
+          "convergedAB": false,
+          "aEqualsR": true,
+          "bEqualsR": false,
+          "checksums": {
+            "A": 1594941173,
+            "B": 1734805151,
+            "R": 1594941173
+          },
+          "resultR": {
+            "pages": "Page-1,Page-2,PB,PA"
+          },
+          "resultA": {
+            "pages": "Page-1,Page-2,PB,PA"
+          },
+          "resultB": {
+            "pages": "Page-1,Page-2,PA,PB"
+          },
+          "errors": [],
+          "patchSample": {
+            "a": {
+              "i": [
+                {
+                  "id": "po99NFr266i3j59yyzg5",
+                  "data": "<diagram id=\"po99NFr266i3j59yyzg5\" name=\"PA\"><mxGraphModel dx=\"616\" dy=\"366\" grid=\"1\" gridSize=\"10\" guides=\"1\" tooltips=\"1\" connect=\"1\" arrows=\"1\" fold=\"1\" page=\"1\" pageScale=\"1\" pageWidth=\"850\" pageHeight=\"1100\" math=\"0\" shadow=\"0\"><root><mxCell id=\"0\"/><mxCell id=\"1\" parent=\"0\"/></root></mxGraphModel></diagram>",
+                  "previous": "p2"
+                }
+              ]
+            },
+            "b": {
+              "i": [
+                {
+                  "id": "M6rUZaTgM-cJnqu2jZKF",
+                  "data": "<diagram id=\"M6rUZaTgM-cJnqu2jZKF\" name=\"PB\"><mxGraphModel dx=\"616\" dy=\"366\" grid=\"1\" gridSize=\"10\" guides=\"1\" tooltips=\"1\" connect=\"1\" arrows=\"1\" fold=\"1\" page=\"1\" pageScale=\"1\" pageWidth=\"850\" pageHeight=\"1100\" math=\"0\" shadow=\"0\"><root><mxCell id=\"0\"/><mxCell id=\"1\" parent=\"0\"/></root></mxGraphModel></diagram>",
+                  "previous": "p2"
+                }
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": "reparent-vs-move",
+        "S1": {
+          "repairMethod": null,
+          "repaired": {},
+          "patches": {
+            "a": 1,
+            "b": 1
+          },
+          "convergedAB": true,
+          "aEqualsR": true,
+          "bEqualsR": true,
+          "checksums": {
+            "A": -1776188159,
+            "B": -1776188159,
+            "R": -1776188159
+          },
+          "resultR": {
+            "xParent": "C",
+            "xGeo": {
+              "x": 40,
+              "y": 140,
+              "w": 120,
+              "h": 60
+            }
+          },
+          "resultA": {
+            "xParent": "C",
+            "xGeo": {
+              "x": 40,
+              "y": 140,
+              "w": 120,
+              "h": 60
+            }
+          },
+          "resultB": {
+            "xParent": "C",
+            "xGeo": {
+              "x": 40,
+              "y": 140,
+              "w": 120,
+              "h": 60
+            }
+          },
+          "errors": [],
+          "patchSample": {
+            "a": {
+              "u": {
+                "p1": {
+                  "cells": {
+                    "u": {
+                      "X": {
+                        "parent": "C",
+                        "previous": ""
+                      },
+                      "Y": {
+                        "previous": ""
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "b": {
+              "u": {
+                "p1": {
+                  "cells": {
+                    "u": {
+                      "X": {
+                        "geometry": "<mxGeometry height=\"60\" width=\"120\" x=\"40\" y=\"140\"/>"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "S3": {
+          "repairMethod": null,
+          "repaired": {},
+          "patches": {
+            "a": 1,
+            "b": 1
+          },
+          "convergedAB": true,
+          "aEqualsR": true,
+          "bEqualsR": true,
+          "checksums": {
+            "A": -1776188159,
+            "B": -1776188159,
+            "R": -1776188159
+          },
+          "resultR": {
+            "xParent": "C",
+            "xGeo": {
+              "x": 40,
+              "y": 140,
+              "w": 120,
+              "h": 60
+            }
+          },
+          "resultA": {
+            "xParent": "C",
+            "xGeo": {
+              "x": 40,
+              "y": 140,
+              "w": 120,
+              "h": 60
+            }
+          },
+          "resultB": {
+            "xParent": "C",
+            "xGeo": {
+              "x": 40,
+              "y": 140,
+              "w": 120,
+              "h": 60
+            }
+          },
+          "errors": [],
+          "patchSample": {
+            "a": {
+              "u": {
+                "p1": {
+                  "cells": {
+                    "u": {
+                      "X": {
+                        "parent": "C",
+                        "previous": ""
+                      },
+                      "Y": {
+                        "previous": ""
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "b": {
+              "u": {
+                "p1": {
+                  "cells": {
+                    "u": {
+                      "X": {
+                        "geometry": "<mxGeometry height=\"60\" width=\"120\" x=\"40\" y=\"140\"/>"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      {
+        "id": "reparent-vs-delete-parent",
+        "S1": {
+          "repairMethod": null,
+          "repaired": {},
+          "patches": {
+            "a": 1,
+            "b": 1
+          },
+          "convergedAB": false,
+          "aEqualsR": true,
+          "bEqualsR": false,
+          "checksums": {
+            "A": 1380425503,
+            "B": 1788271356,
+            "R": 1380425503
+          },
+          "resultR": {
+            "xExists": false,
+            "cExists": false,
+            "xParent": null
+          },
+          "resultA": {
+            "xExists": false,
+            "cExists": false,
+            "xParent": null
+          },
+          "resultB": {
+            "xExists": true,
+            "cExists": false,
+            "xParent": "1"
+          },
+          "errors": [],
+          "patchSample": {
+            "a": {
+              "u": {
+                "p1": {
+                  "cells": {
+                    "u": {
+                      "X": {
+                        "parent": "C",
+                        "previous": ""
+                      },
+                      "Y": {
+                        "previous": ""
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "b": {
+              "u": {
+                "p1": {
+                  "cells": {
+                    "u": {
+                      "E": {
+                        "previous": "Z"
+                      }
+                    },
+                    "r": [
+                      "C"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "S3": {
+          "repairMethod": null,
+          "repaired": {},
+          "patches": {
+            "a": 1,
+            "b": 1
+          },
+          "convergedAB": false,
+          "aEqualsR": true,
+          "bEqualsR": false,
+          "checksums": {
+            "A": 1380425503,
+            "B": 1788271356,
+            "R": 1380425503
+          },
+          "resultR": {
+            "xExists": false,
+            "cExists": false,
+            "xParent": null
+          },
+          "resultA": {
+            "xExists": false,
+            "cExists": false,
+            "xParent": null
+          },
+          "resultB": {
+            "xExists": true,
+            "cExists": false,
+            "xParent": "1"
+          },
+          "errors": [],
+          "patchSample": {
+            "a": {
+              "u": {
+                "p1": {
+                  "cells": {
+                    "u": {
+                      "X": {
+                        "parent": "C",
+                        "previous": ""
+                      },
+                      "Y": {
+                        "previous": ""
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "b": {
+              "u": {
+                "p1": {
+                  "cells": {
+                    "u": {
+                      "E": {
+                        "previous": "Z"
+                      }
+                    },
+                    "r": [
+                      "C"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      {
+        "id": "diff-cells",
+        "S1": {
+          "repairMethod": null,
+          "repaired": {},
+          "patches": {
+            "a": 1,
+            "b": 1
+          },
+          "convergedAB": true,
+          "aEqualsR": true,
+          "bEqualsR": true,
+          "checksums": {
+            "A": 956857663,
+            "B": 956857663,
+            "R": 956857663
+          },
+          "resultR": {
+            "moved": true,
+            "labelled": true
+          },
+          "resultA": {
+            "moved": true,
+            "labelled": true
+          },
+          "resultB": {
+            "moved": true,
+            "labelled": true
+          },
+          "errors": [],
+          "patchSample": {
+            "a": {
+              "u": {
+                "p1": {
+                  "cells": {
+                    "u": {
+                      "X": {
+                        "geometry": "<mxGeometry height=\"60\" width=\"120\" x=\"90\" y=\"40\"/>"
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "b": {
+              "u": {
+                "p1": {
+                  "cells": {
+                    "u": {
+                      "Y": {
+                        "value": "B-label"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "S3": {
+          "repairMethod": null,
+          "repaired": {},
+          "patches": {
+            "a": 1,
+            "b": 1
+          },
+          "convergedAB": true,
+          "aEqualsR": true,
+          "bEqualsR": true,
+          "checksums": {
+            "A": 956857663,
+            "B": 956857663,
+            "R": 956857663
+          },
+          "resultR": {
+            "moved": true,
+            "labelled": true
+          },
+          "resultA": {
+            "moved": true,
+            "labelled": true
+          },
+          "resultB": {
+            "moved": true,
+            "labelled": true
+          },
+          "errors": [],
+          "patchSample": {
+            "a": {
+              "u": {
+                "p1": {
+                  "cells": {
+                    "u": {
+                      "X": {
+                        "geometry": "<mxGeometry height=\"60\" width=\"120\" x=\"90\" y=\"40\"/>"
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "b": {
+              "u": {
+                "p1": {
+                  "cells": {
+                    "u": {
+                      "Y": {
+                        "value": "B-label"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      {
+        "id": "add-add",
+        "S1": {
+          "repairMethod": null,
+          "repaired": {},
+          "patches": {
+            "a": 1,
+            "b": 1
+          },
+          "convergedAB": false,
+          "aEqualsR": true,
+          "bEqualsR": false,
+          "checksums": {
+            "A": -616605598,
+            "B": -571586158,
+            "R": -616605598
+          },
+          "resultR": {
+            "na": true,
+            "nb": true
+          },
+          "resultA": {
+            "na": true,
+            "nb": true
+          },
+          "resultB": {
+            "na": true,
+            "nb": true
+          },
+          "errors": [],
+          "patchSample": {
+            "a": {
+              "u": {
+                "p1": {
+                  "cells": {
+                    "i": [
+                      {
+                        "id": "NA",
+                        "vertex": 1,
+                        "parent": "1",
+                        "previous": "E",
+                        "style": "rounded=1;",
+                        "geometry": "<mxGeometry height=\"40\" width=\"80\" x=\"60\" y=\"320\"/>",
+                        "value": "NA"
+                      }
+                    ]
+                  }
+                }
+              }
+            },
+            "b": {
+              "u": {
+                "p1": {
+                  "cells": {
+                    "i": [
+                      {
+                        "id": "NB",
+                        "vertex": 1,
+                        "parent": "1",
+                        "previous": "E",
+                        "style": "rounded=1;",
+                        "geometry": "<mxGeometry height=\"40\" width=\"80\" x=\"200\" y=\"320\"/>",
+                        "value": "NB"
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "S3": {
+          "repairMethod": null,
+          "repaired": {},
+          "patches": {
+            "a": 1,
+            "b": 1
+          },
+          "convergedAB": false,
+          "aEqualsR": true,
+          "bEqualsR": false,
+          "checksums": {
+            "A": -616605598,
+            "B": -571586158,
+            "R": -616605598
+          },
+          "resultR": {
+            "na": true,
+            "nb": true
+          },
+          "resultA": {
+            "na": true,
+            "nb": true
+          },
+          "resultB": {
+            "na": true,
+            "nb": true
+          },
+          "errors": [],
+          "patchSample": {
+            "a": {
+              "u": {
+                "p1": {
+                  "cells": {
+                    "i": [
+                      {
+                        "id": "NA",
+                        "vertex": 1,
+                        "parent": "1",
+                        "previous": "E",
+                        "style": "rounded=1;",
+                        "geometry": "<mxGeometry height=\"40\" width=\"80\" x=\"60\" y=\"320\"/>",
+                        "value": "NA"
+                      }
+                    ]
+                  }
+                }
+              }
+            },
+            "b": {
+              "u": {
+                "p1": {
+                  "cells": {
+                    "i": [
+                      {
+                        "id": "NB",
+                        "vertex": 1,
+                        "parent": "1",
+                        "previous": "E",
+                        "style": "rounded=1;",
+                        "geometry": "<mxGeometry height=\"40\" width=\"80\" x=\"200\" y=\"320\"/>",
+                        "value": "NB"
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      {
+        "id": "connect-vs-delete-target",
+        "S1": {
+          "repairMethod": null,
+          "repaired": {},
+          "patches": {
+            "a": 1,
+            "b": 1
+          },
+          "convergedAB": true,
+          "aEqualsR": true,
+          "bEqualsR": true,
+          "checksums": {
+            "A": 40769563,
+            "B": 40769563,
+            "R": 40769563
+          },
+          "resultR": {
+            "e2": {
+              "source": "X",
+              "target": null
+            },
+            "z": false
+          },
+          "resultA": {
+            "e2": {
+              "source": "X",
+              "target": null
+            },
+            "z": false
+          },
+          "resultB": {
+            "e2": {
+              "source": "X",
+              "target": null
+            },
+            "z": false
+          },
+          "errors": [],
+          "patchSample": {
+            "a": {
+              "u": {
+                "p1": {
+                  "cells": {
+                    "i": [
+                      {
+                        "id": "E2",
+                        "edge": 1,
+                        "parent": "1",
+                        "previous": "E",
+                        "source": "X",
+                        "target": "Z",
+                        "geometry": "<mxGeometry relative=\"1\"/>",
+                        "value": ""
+                      }
+                    ]
+                  }
+                }
+              }
+            },
+            "b": {
+              "u": {
+                "p1": {
+                  "cells": {
+                    "u": {
+                      "C": {
+                        "previous": "Y"
+                      }
+                    },
+                    "r": [
+                      "Z"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "S3": {
+          "repairMethod": null,
+          "repaired": {},
+          "patches": {
+            "a": 1,
+            "b": 1
+          },
+          "convergedAB": true,
+          "aEqualsR": true,
+          "bEqualsR": true,
+          "checksums": {
+            "A": 40769563,
+            "B": 40769563,
+            "R": 40769563
+          },
+          "resultR": {
+            "e2": {
+              "source": "X",
+              "target": null
+            },
+            "z": false
+          },
+          "resultA": {
+            "e2": {
+              "source": "X",
+              "target": null
+            },
+            "z": false
+          },
+          "resultB": {
+            "e2": {
+              "source": "X",
+              "target": null
+            },
+            "z": false
+          },
+          "errors": [],
+          "patchSample": {
+            "a": {
+              "u": {
+                "p1": {
+                  "cells": {
+                    "i": [
+                      {
+                        "id": "E2",
+                        "edge": 1,
+                        "parent": "1",
+                        "previous": "E",
+                        "source": "X",
+                        "target": "Z",
+                        "geometry": "<mxGeometry relative=\"1\"/>",
+                        "value": ""
+                      }
+                    ]
+                  }
+                }
+              }
+            },
+            "b": {
+              "u": {
+                "p1": {
+                  "cells": {
+                    "u": {
+                      "C": {
+                        "previous": "Y"
+                      }
+                    },
+                    "r": [
+                      "Z"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      {
+        "id": "offline-reconnect",
+        "S1": {
+          "repairMethod": null,
+          "repaired": {},
+          "patches": {
+            "a": 3,
+            "b": 2
+          },
+          "convergedAB": true,
+          "aEqualsR": true,
+          "bEqualsR": true,
+          "checksums": {
+            "A": 108818164,
+            "B": 108818164,
+            "R": 108818164
+          },
+          "resultR": {
+            "xMoved": true,
+            "xLabel": "B-on",
+            "yLabel": "A-off",
+            "z": false
+          },
+          "resultA": {
+            "xMoved": true,
+            "xLabel": "B-on",
+            "yLabel": "A-off",
+            "z": false
+          },
+          "resultB": {
+            "xMoved": true,
+            "xLabel": "B-on",
+            "yLabel": "A-off",
+            "z": false
+          },
+          "errors": [],
+          "patchSample": {
+            "a": {
+              "u": {
+                "p1": {
+                  "cells": {
+                    "u": {
+                      "X": {
+                        "geometry": "<mxGeometry height=\"60\" width=\"120\" x=\"90\" y=\"40\"/>"
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "b": {
+              "u": {
+                "p1": {
+                  "cells": {
+                    "u": {
+                      "X": {
+                        "value": "B-on"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "S3": {
+          "repairMethod": null,
+          "repaired": {},
+          "patches": {
+            "a": 3,
+            "b": 2
+          },
+          "convergedAB": true,
+          "aEqualsR": true,
+          "bEqualsR": true,
+          "checksums": {
+            "A": 108818164,
+            "B": 108818164,
+            "R": 108818164
+          },
+          "resultR": {
+            "xMoved": true,
+            "xLabel": "B-on",
+            "yLabel": "A-off",
+            "z": false
+          },
+          "resultA": {
+            "xMoved": true,
+            "xLabel": "B-on",
+            "yLabel": "A-off",
+            "z": false
+          },
+          "resultB": {
+            "xMoved": true,
+            "xLabel": "B-on",
+            "yLabel": "A-off",
+            "z": false
+          },
+          "errors": [],
+          "patchSample": {
+            "a": {
+              "u": {
+                "p1": {
+                  "cells": {
+                    "u": {
+                      "X": {
+                        "geometry": "<mxGeometry height=\"60\" width=\"120\" x=\"90\" y=\"40\"/>"
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "b": {
+              "u": {
+                "p1": {
+                  "cells": {
+                    "u": {
+                      "X": {
+                        "value": "B-on"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    ],
+    "E5R": [
+      {
+        "id": "move-resize-same-cell",
+        "merge": {
+          "repairMethod": "merge",
+          "repaired": {},
+          "patches": {
+            "a": 1,
+            "b": 1
+          },
+          "convergedAB": true,
+          "aEqualsR": true,
+          "bEqualsR": true,
+          "checksums": {
+            "A": -399477306,
+            "B": -399477306,
+            "R": -399477306
+          },
+          "resultR": {
+            "moved": false,
+            "resized": true
+          },
+          "resultA": {
+            "moved": false,
+            "resized": true
+          },
+          "resultB": {
+            "moved": false,
+            "resized": true
+          },
+          "errors": [],
+          "patchSample": {
+            "a": {
+              "u": {
+                "p1": {
+                  "cells": {
+                    "u": {
+                      "X": {
+                        "geometry": "<mxGeometry height=\"60\" width=\"120\" x=\"90\" y=\"40\"/>"
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "b": {
+              "u": {
+                "p1": {
+                  "cells": {
+                    "u": {
+                      "X": {
+                        "geometry": "<mxGeometry height=\"60\" width=\"300\" x=\"40\" y=\"40\"/>"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "adapterDiff": {
+          "repairMethod": "adapterDiff",
+          "repaired": {},
+          "patches": {
+            "a": 1,
+            "b": 1
+          },
+          "convergedAB": true,
+          "aEqualsR": true,
+          "bEqualsR": true,
+          "checksums": {
+            "A": -399477306,
+            "B": -399477306,
+            "R": -399477306
+          },
+          "resultR": {
+            "moved": false,
+            "resized": true
+          },
+          "resultA": {
+            "moved": false,
+            "resized": true
+          },
+          "resultB": {
+            "moved": false,
+            "resized": true
+          },
+          "errors": [],
+          "patchSample": {
+            "a": {
+              "u": {
+                "p1": {
+                  "cells": {
+                    "u": {
+                      "X": {
+                        "geometry": "<mxGeometry height=\"60\" width=\"120\" x=\"90\" y=\"40\"/>"
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "b": {
+              "u": {
+                "p1": {
+                  "cells": {
+                    "u": {
+                      "X": {
+                        "geometry": "<mxGeometry height=\"60\" width=\"300\" x=\"40\" y=\"40\"/>"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      {
+        "id": "addpage-addpage",
+        "merge": {
+          "repairMethod": "merge",
+          "repaired": {
+            "B": false
+          },
+          "patches": {
+            "a": 1,
+            "b": 1
+          },
+          "convergedAB": false,
+          "aEqualsR": true,
+          "bEqualsR": false,
+          "checksums": {
+            "A": 351970171,
+            "B": 792614617,
+            "R": 351970171
+          },
+          "resultR": {
+            "pages": "Page-1,Page-2,PB,PA"
+          },
+          "resultA": {
+            "pages": "Page-1,Page-2,PB,PA"
+          },
+          "resultB": {
+            "pages": "Page-1,Page-2,PA,PB"
+          },
+          "errors": [],
+          "patchSample": {
+            "a": {
+              "i": [
+                {
+                  "id": "R8FfFcocs4TCsIg2a81S",
+                  "data": "<diagram id=\"R8FfFcocs4TCsIg2a81S\" name=\"PA\"><mxGraphModel dx=\"616\" dy=\"366\" grid=\"1\" gridSize=\"10\" guides=\"1\" tooltips=\"1\" connect=\"1\" arrows=\"1\" fold=\"1\" page=\"1\" pageScale=\"1\" pageWidth=\"850\" pageHeight=\"1100\" math=\"0\" shadow=\"0\"><root><mxCell id=\"0\"/><mxCell id=\"1\" parent=\"0\"/></root></mxGraphModel></diagram>",
+                  "previous": "p2"
+                }
+              ]
+            },
+            "b": {
+              "i": [
+                {
+                  "id": "RCsPohMAW4Xc3-FfSM3d",
+                  "data": "<diagram id=\"RCsPohMAW4Xc3-FfSM3d\" name=\"PB\"><mxGraphModel dx=\"616\" dy=\"366\" grid=\"1\" gridSize=\"10\" guides=\"1\" tooltips=\"1\" connect=\"1\" arrows=\"1\" fold=\"1\" page=\"1\" pageScale=\"1\" pageWidth=\"850\" pageHeight=\"1100\" math=\"0\" shadow=\"0\"><root><mxCell id=\"0\"/><mxCell id=\"1\" parent=\"0\"/></root></mxGraphModel></diagram>",
+                  "previous": "p2"
+                }
+              ]
+            }
+          }
+        },
+        "adapterDiff": {
+          "repairMethod": "adapterDiff",
+          "repaired": {
+            "B": true
+          },
+          "patches": {
+            "a": 1,
+            "b": 1
+          },
+          "convergedAB": true,
+          "aEqualsR": true,
+          "bEqualsR": true,
+          "checksums": {
+            "A": -204888699,
+            "B": -204888699,
+            "R": -204888699
+          },
+          "resultR": {
+            "pages": "Page-1,Page-2,PB,PA"
+          },
+          "resultA": {
+            "pages": "Page-1,Page-2,PB,PA"
+          },
+          "resultB": {
+            "pages": "Page-1,Page-2,PB,PA"
+          },
+          "errors": [],
+          "patchSample": {
+            "a": {
+              "i": [
+                {
+                  "id": "BQVMiqtCJK1Xnh5kFeag",
+                  "data": "<diagram id=\"BQVMiqtCJK1Xnh5kFeag\" name=\"PA\"><mxGraphModel dx=\"616\" dy=\"366\" grid=\"1\" gridSize=\"10\" guides=\"1\" tooltips=\"1\" connect=\"1\" arrows=\"1\" fold=\"1\" page=\"1\" pageScale=\"1\" pageWidth=\"850\" pageHeight=\"1100\" math=\"0\" shadow=\"0\"><root><mxCell id=\"0\"/><mxCell id=\"1\" parent=\"0\"/></root></mxGraphModel></diagram>",
+                  "previous": "p2"
+                }
+              ]
+            },
+            "b": {
+              "i": [
+                {
+                  "id": "mJL8abSJeSEFITYyy-A9",
+                  "data": "<diagram id=\"mJL8abSJeSEFITYyy-A9\" name=\"PB\"><mxGraphModel dx=\"616\" dy=\"366\" grid=\"1\" gridSize=\"10\" guides=\"1\" tooltips=\"1\" connect=\"1\" arrows=\"1\" fold=\"1\" page=\"1\" pageScale=\"1\" pageWidth=\"850\" pageHeight=\"1100\" math=\"0\" shadow=\"0\"><root><mxCell id=\"0\"/><mxCell id=\"1\" parent=\"0\"/></root></mxGraphModel></diagram>",
+                  "previous": "p2"
+                }
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": "reparent-vs-delete-parent",
+        "merge": {
+          "repairMethod": "merge",
+          "repaired": {
+            "B": true
+          },
+          "patches": {
+            "a": 1,
+            "b": 1
+          },
+          "convergedAB": true,
+          "aEqualsR": true,
+          "bEqualsR": true,
+          "checksums": {
+            "A": 1380425503,
+            "B": 1380425503,
+            "R": 1380425503
+          },
+          "resultR": {
+            "xExists": false,
+            "cExists": false,
+            "xParent": null
+          },
+          "resultA": {
+            "xExists": false,
+            "cExists": false,
+            "xParent": null
+          },
+          "resultB": {
+            "xExists": false,
+            "cExists": false,
+            "xParent": null
+          },
+          "errors": [],
+          "patchSample": {
+            "a": {
+              "u": {
+                "p1": {
+                  "cells": {
+                    "u": {
+                      "X": {
+                        "parent": "C",
+                        "previous": ""
+                      },
+                      "Y": {
+                        "previous": ""
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "b": {
+              "u": {
+                "p1": {
+                  "cells": {
+                    "u": {
+                      "E": {
+                        "previous": "Z"
+                      }
+                    },
+                    "r": [
+                      "C"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "adapterDiff": {
+          "repairMethod": "adapterDiff",
+          "repaired": {
+            "B": true
+          },
+          "patches": {
+            "a": 1,
+            "b": 1
+          },
+          "convergedAB": true,
+          "aEqualsR": true,
+          "bEqualsR": true,
+          "checksums": {
+            "A": 1380425503,
+            "B": 1380425503,
+            "R": 1380425503
+          },
+          "resultR": {
+            "xExists": false,
+            "cExists": false,
+            "xParent": null
+          },
+          "resultA": {
+            "xExists": false,
+            "cExists": false,
+            "xParent": null
+          },
+          "resultB": {
+            "xExists": false,
+            "cExists": false,
+            "xParent": null
+          },
+          "errors": [],
+          "patchSample": {
+            "a": {
+              "u": {
+                "p1": {
+                  "cells": {
+                    "u": {
+                      "X": {
+                        "parent": "C",
+                        "previous": ""
+                      },
+                      "Y": {
+                        "previous": ""
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "b": {
+              "u": {
+                "p1": {
+                  "cells": {
+                    "u": {
+                      "E": {
+                        "previous": "Z"
+                      }
+                    },
+                    "r": [
+                      "C"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      {
+        "id": "add-add",
+        "merge": {
+          "repairMethod": "merge",
+          "repaired": {
+            "B": false
+          },
+          "patches": {
+            "a": 1,
+            "b": 1
+          },
+          "convergedAB": false,
+          "aEqualsR": true,
+          "bEqualsR": false,
+          "checksums": {
+            "A": -616605598,
+            "B": -571586158,
+            "R": -616605598
+          },
+          "resultR": {
+            "na": true,
+            "nb": true
+          },
+          "resultA": {
+            "na": true,
+            "nb": true
+          },
+          "resultB": {
+            "na": true,
+            "nb": true
+          },
+          "errors": [],
+          "patchSample": {
+            "a": {
+              "u": {
+                "p1": {
+                  "cells": {
+                    "i": [
+                      {
+                        "id": "NA",
+                        "vertex": 1,
+                        "parent": "1",
+                        "previous": "E",
+                        "style": "rounded=1;",
+                        "geometry": "<mxGeometry height=\"40\" width=\"80\" x=\"60\" y=\"320\"/>",
+                        "value": "NA"
+                      }
+                    ]
+                  }
+                }
+              }
+            },
+            "b": {
+              "u": {
+                "p1": {
+                  "cells": {
+                    "i": [
+                      {
+                        "id": "NB",
+                        "vertex": 1,
+                        "parent": "1",
+                        "previous": "E",
+                        "style": "rounded=1;",
+                        "geometry": "<mxGeometry height=\"40\" width=\"80\" x=\"200\" y=\"320\"/>",
+                        "value": "NB"
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "adapterDiff": {
+          "repairMethod": "adapterDiff",
+          "repaired": {
+            "B": true
+          },
+          "patches": {
+            "a": 1,
+            "b": 1
+          },
+          "convergedAB": true,
+          "aEqualsR": true,
+          "bEqualsR": true,
+          "checksums": {
+            "A": -616605598,
+            "B": -616605598,
+            "R": -616605598
+          },
+          "resultR": {
+            "na": true,
+            "nb": true
+          },
+          "resultA": {
+            "na": true,
+            "nb": true
+          },
+          "resultB": {
+            "na": true,
+            "nb": true
+          },
+          "errors": [],
+          "patchSample": {
+            "a": {
+              "u": {
+                "p1": {
+                  "cells": {
+                    "i": [
+                      {
+                        "id": "NA",
+                        "vertex": 1,
+                        "parent": "1",
+                        "previous": "E",
+                        "style": "rounded=1;",
+                        "geometry": "<mxGeometry height=\"40\" width=\"80\" x=\"60\" y=\"320\"/>",
+                        "value": "NA"
+                      }
+                    ]
+                  }
+                }
+              }
+            },
+            "b": {
+              "u": {
+                "p1": {
+                  "cells": {
+                    "i": [
+                      {
+                        "id": "NB",
+                        "vertex": 1,
+                        "parent": "1",
+                        "previous": "E",
+                        "style": "rounded=1;",
+                        "geometry": "<mxGeometry height=\"40\" width=\"80\" x=\"200\" y=\"320\"/>",
+                        "value": "NB"
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    ],
+    "E6": [
+      {
+        "cells": 50,
+        "fullXmlBytes": 10164,
+        "fullXmlDeflateBytes": 745,
+        "loadMs": 393,
+        "nativePatchBytes": 102,
+        "semanticOpBytes": 220,
+        "medianOpToAutosaveMs": 9.8,
+        "medianPatchApplyMs": 11.2,
+        "fullMergeApplyMs": 16,
+        "checksumsOk": true,
+        "samples": [
+          {
+            "opToAutosaveMs": 90.80000000074506,
+            "applyMs": 88.90000000223517,
+            "patchBytes": 102,
+            "checksumOk": true
+          },
+          {
+            "opToAutosaveMs": 9.5,
+            "applyMs": 10.199999999254942,
+            "patchBytes": 102,
+            "checksumOk": true
+          },
+          {
+            "opToAutosaveMs": 10.099999997764826,
+            "applyMs": 10.5,
+            "patchBytes": 102,
+            "checksumOk": true
+          },
+          {
+            "opToAutosaveMs": 9.800000000745058,
+            "applyMs": 11.199999999254942,
+            "patchBytes": 102,
+            "checksumOk": true
+          },
+          {
+            "opToAutosaveMs": 9.699999999254942,
+            "applyMs": 11.5,
+            "patchBytes": 102,
+            "checksumOk": true
+          }
+        ]
+      },
+      {
+        "cells": 500,
+        "fullXmlBytes": 102065,
+        "fullXmlDeflateBytes": 4184,
+        "loadMs": 468,
+        "nativePatchBytes": 102,
+        "semanticOpBytes": 220,
+        "medianOpToAutosaveMs": 33.1,
+        "medianPatchApplyMs": 27.9,
+        "fullMergeApplyMs": 64,
+        "checksumsOk": true,
+        "samples": [
+          {
+            "opToAutosaveMs": 108.80000000074506,
+            "applyMs": 104.89999999850988,
+            "patchBytes": 102,
+            "checksumOk": true
+          },
+          {
+            "opToAutosaveMs": 29,
+            "applyMs": 28.399999998509884,
+            "patchBytes": 102,
+            "checksumOk": true
+          },
+          {
+            "opToAutosaveMs": 29.199999999254942,
+            "applyMs": 26.400000002235174,
+            "patchBytes": 102,
+            "checksumOk": true
+          },
+          {
+            "opToAutosaveMs": 34.600000001490116,
+            "applyMs": 27.900000002235174,
+            "patchBytes": 102,
+            "checksumOk": true
+          },
+          {
+            "opToAutosaveMs": 33.099999997764826,
+            "applyMs": 27.199999999254942,
+            "patchBytes": 102,
+            "checksumOk": true
+          }
+        ]
+      },
+      {
+        "cells": 5000,
+        "fullXmlBytes": 1035046,
+        "fullXmlDeflateBytes": 37484,
+        "loadMs": 948,
+        "nativePatchBytes": 102,
+        "semanticOpBytes": 220,
+        "medianOpToAutosaveMs": 268.9,
+        "medianPatchApplyMs": 197.1,
+        "fullMergeApplyMs": 547,
+        "checksumsOk": true,
+        "samples": [
+          {
+            "opToAutosaveMs": 310.30000000074506,
+            "applyMs": 313.8999999985099,
+            "patchBytes": 102,
+            "checksumOk": true
+          },
+          {
+            "opToAutosaveMs": 231.10000000149012,
+            "applyMs": 190.69999999925494,
+            "patchBytes": 102,
+            "checksumOk": true
+          },
+          {
+            "opToAutosaveMs": 236.60000000149012,
+            "applyMs": 197.09999999776483,
+            "patchBytes": 102,
+            "checksumOk": true
+          },
+          {
+            "opToAutosaveMs": 276,
+            "applyMs": 206.09999999776483,
+            "patchBytes": 102,
+            "checksumOk": true
+          },
+          {
+            "opToAutosaveMs": 268.8999999985099,
+            "applyMs": 188.40000000223517,
+            "patchBytes": 102,
+            "checksumOk": true
+          }
+        ]
+      }
+    ],
+    "E7": {
+      "handBuilt": {
+        "error": null,
+        "inserted": true,
+        "yRenamed": "renamed-by-ai"
+      },
+      "hostile": [
+        {
+          "error": null,
+          "mismatch": false
+        },
+        {
+          "error": null,
+          "mismatch": false
+        },
+        {
+          "error": null,
+          "mismatch": false
+        },
+        {
+          "error": null,
+          "mismatch": false
+        },
+        {
+          "error": null,
+          "mismatch": false
+        }
+      ],
+      "prototypePolluted": false,
+      "orphanInserted": false,
+      "stillUsable": true,
+      "consoleErrors": []
+    }
+  },
+  "finishedAt": "2026-10-24T16:56:03.303Z"
+}

@@ -1,0 +1,46 @@
+{
+  "startedAt": "2026-10-24T17:47:33.068Z",
+  "env": {},
+  "experiments": {
+    "E10": [
+      {
+        "cells": 50,
+        "clonePagesMs": 0.3,
+        "hashPagesMs": 0.5,
+        "diffPagesNoChangeMs": 0.3,
+        "xmlSerializeMs": 0.3,
+        "xmlBytes": 10074,
+        "modelMoveOnlyMs": 9.6,
+        "fullCycleOpToAutosaveMs": 12.8
+      },
+      {
+        "cells": 500,
+        "clonePagesMs": 2.8,
+        "hashPagesMs": 3.6,
+        "diffPagesNoChangeMs": 2.1,
+        "xmlSerializeMs": 1.8,
+        "xmlBytes": 101873,
+        "modelMoveOnlyMs": 31.8,
+        "fullCycleOpToAutosaveMs": 41.5
+      },
+      {
+        "cells": 5000,
+        "clonePagesMs": 30.8,
+        "hashPagesMs": 32.6,
+        "diffPagesNoChangeMs": 19.1,
+        "xmlSerializeMs": 17.8,
+        "xmlBytes": 1034422,
+        "modelMoveOnlyMs": 252.8,
+        "fullCycleOpToAutosaveMs": 337.3
+      }
+    ],
+    "E11": {
+      "blockedOrigins": [],
+      "editorReadyAndEditingWorksMs": 1105,
+      "patchApplied": true,
+      "moveReplicated": true,
+      "consoleNetworkMessages": []
+    }
+  },
+  "finishedAt": "2026-10-24T17:47:42.441Z"
+}

@@ -1,0 +1,72 @@
+{
+ "arch": "arm64",
+ "baseSeed": 900000,
+ "failureKinds": {
+  "client 0 still has 1 pending ops after q": 5,
+  "client 0 still has 10 pending ops after ": 7,
+  "client 0 still has 2 pending ops after q": 187,
+  "client 0 still has 3 pending ops after q": 37,
+  "client 0 still has 4 pending ops after q": 20,
+  "client 0 still has 5 pending ops after q": 44,
+  "client 0 still has 6 pending ops after q": 196,
+  "client 0 still has 7 pending ops after q": 49,
+  "client 0 still has 8 pending ops after q": 9,
+  "client 0 still has 9 pending ops after q": 42,
+  "client 1 still has 1 pending ops after q": 2,
+  "client 1 still has 2 pending ops after q": 2
+ },
+ "go": "go1.27.1",
+ "intentMode": true,
+ "metrics": {
+  "applied": 31140,
+  "concurrent_overwrite": 120,
+  "dup_ignored": 8358,
+  "generated": 55979,
+  "intent_violations": 0,
+  "log_len": 32340,
+  "nack_cell_gone": 9525,
+  "nack_cycle": 114,
+  "nack_forbidden": 4453,
+  "nack_page_gone": 2833,
+  "nack_parent_gone": 930,
+  "nack_terminal_gone": 94,
+  "offline": 2351,
+  "reconnects": 2351
+ },
+ "mutation": "silentdrop",
+ "nondeterministicRuns": 0,
+ "opsGenerated": 55979,
+ "os": "darwin",
+ "runs": 600,
+ "scriptsFailed": 600,
+ "seconds": 1.056931708,
+ "shrunk": [
+  {
+   "eventsAfter": 1,
+   "eventsBefore": 99,
+   "failures": [
+    "client 4 still has 1 pending ops after quiescence",
+    "ACCOUNTING: op o4_1 neither applied nor nacked (silent loss)"
+   ],
+   "seed": 900001
+  },
+  {
+   "eventsAfter": 1,
+   "eventsBefore": 72,
+   "failures": [
+    "client 4 still has 1 pending ops after quiescence",
+    "ACCOUNTING: op o4_1 neither applied nor nacked (silent loss)"
+   ],
+   "seed": 900000
+  },
+  {
+   "eventsAfter": 1,
+   "eventsBefore": 71,
+   "failures": [
+    "client 2 still has 1 pending ops after quiescence",
+    "ACCOUNTING: op o2_1 neither applied nor nacked (silent loss)"
+   ],
+   "seed": 900006
+  }
+ ]
+}

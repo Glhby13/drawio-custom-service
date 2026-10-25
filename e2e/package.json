@@ -1,0 +1,7 @@
+{
+  "name": "drawio-custom-service-e2e",
+  "private": true,
+  "type": "module",
+  "description": "Lab E2E (real Chrome via Playwright) for drawio-custom-service. Not shipped in any image.",
+  "dependencies": { "playwright-core": "1.63.0" }
+}

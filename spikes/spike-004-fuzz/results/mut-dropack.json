@@ -1,0 +1,30 @@
+{
+ "arch": "arm64",
+ "baseSeed": 900000,
+ "failureKinds": {},
+ "go": "go1.27.1",
+ "intentMode": true,
+ "metrics": {
+  "applied": 38730,
+  "concurrent_overwrite": 142,
+  "dup_ignored": 14024,
+  "generated": 56305,
+  "intent_violations": 0,
+  "log_len": 39930,
+  "nack_cell_gone": 8671,
+  "nack_cycle": 179,
+  "nack_forbidden": 5158,
+  "nack_page_gone": 2979,
+  "nack_parent_gone": 531,
+  "nack_terminal_gone": 57,
+  "offline": 2351,
+  "reconnects": 2351
+ },
+ "mutation": "dropack",
+ "nondeterministicRuns": 0,
+ "opsGenerated": 56305,
+ "os": "darwin",
+ "runs": 600,
+ "scriptsFailed": 0,
+ "seconds": 1.042076
+}

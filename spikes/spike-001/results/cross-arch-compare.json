@@ -1,0 +1,70 @@
+{
+ "functionalIdentical": true,
+ "differingSections": [],
+ "sections": [
+  "E0",
+  "E1",
+  "E2",
+  "E3",
+  "E4",
+  "E5",
+  "E5R",
+  "E6",
+  "E7"
+ ],
+ "timings": {
+  "image-arm64.json": {
+   "E6": [
+    {
+     "cells": 50,
+     "opToAutosaveMs": 9.8,
+     "applyMs": 11.2,
+     "mergeMs": 16,
+     "loadMs": 393
+    },
+    {
+     "cells": 500,
+     "opToAutosaveMs": 33.1,
+     "applyMs": 27.9,
+     "mergeMs": 64,
+     "loadMs": 468
+    },
+    {
+     "cells": 5000,
+     "opToAutosaveMs": 268.9,
+     "applyMs": 197.1,
+     "mergeMs": 547,
+     "loadMs": 948
+    }
+   ],
+   "E4_applyMs": 9.3
+  },
+  "image-amd64.json": {
+   "E6": [
+    {
+     "cells": 50,
+     "opToAutosaveMs": 543.3,
+     "applyMs": 473.2,
+     "mergeMs": 331,
+     "loadMs": 10162
+    },
+    {
+     "cells": 500,
+     "opToAutosaveMs": 36.6,
+     "applyMs": 35.3,
+     "mergeMs": 98,
+     "loadMs": 10566
+    },
+    {
+     "cells": 5000,
+     "opToAutosaveMs": 263.4,
+     "applyMs": 198.8,
+     "mergeMs": 3209,
+     "loadMs": 1468
+    }
+   ],
+   "E4_applyMs": 128
+  }
+ },
+ "E8E9_identical": true
+}

@@ -1,0 +1,126 @@
+{
+  "startedAt": "2026-10-24T17:06:56.637Z",
+  "env": {},
+  "experiments": {
+    "E8": [
+      {
+        "variant": "remote-geometry-same-cell",
+        "started": {
+          "editing": true,
+          "textareaBefore": "typed-by-B"
+        },
+        "patchError": null,
+        "afterPatch": {
+          "stillEditing": true,
+          "textarea": "typed-by-B"
+        },
+        "afterStopEditing": {
+          "error": null,
+          "xExists": true,
+          "value": "typed-by-B",
+          "x": 100
+        },
+        "autosavesFromB": 1
+      },
+      {
+        "variant": "remote-label-same-cell",
+        "started": {
+          "editing": true,
+          "textareaBefore": "typed-by-B"
+        },
+        "patchError": null,
+        "afterPatch": {
+          "stillEditing": true,
+          "textarea": "typed-by-B"
+        },
+        "afterStopEditing": {
+          "error": null,
+          "xExists": true,
+          "value": "typed-by-B",
+          "x": 40
+        },
+        "autosavesFromB": 1
+      },
+      {
+        "variant": "remote-label-other-cell",
+        "started": {
+          "editing": true,
+          "textareaBefore": "typed-by-B"
+        },
+        "patchError": null,
+        "afterPatch": {
+          "stillEditing": true,
+          "textarea": "typed-by-B"
+        },
+        "afterStopEditing": {
+          "error": null,
+          "xExists": true,
+          "value": "typed-by-B",
+          "x": 40
+        },
+        "autosavesFromB": 1
+      },
+      {
+        "variant": "remote-delete-same-cell",
+        "started": {
+          "editing": true,
+          "textareaBefore": "typed-by-B"
+        },
+        "patchError": null,
+        "afterPatch": {
+          "stillEditing": false,
+          "textarea": null
+        },
+        "afterStopEditing": {
+          "error": null,
+          "xExists": false,
+          "value": null,
+          "x": null
+        },
+        "autosavesFromB": 0
+      }
+    ],
+    "E9": [
+      {
+        "case": "U1 local label, remote move, local undo",
+        "undoAutosaves": 1,
+        "result": {
+          "label": "X",
+          "x": 110
+        },
+        "expected": {
+          "label": "X",
+          "x": 110
+        }
+      },
+      {
+        "case": "U2 local label A1, remote label B1, local undo",
+        "beforeUndo": "B1",
+        "afterUndo": "X",
+        "undoPatch": [
+          {
+            "u": {
+              "p1": {
+                "cells": {
+                  "u": {
+                    "X": {
+                      "value": "X"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        ]
+      },
+      {
+        "case": "U3 local add N1, remote delete N1, local undo",
+        "error": null,
+        "n1ExistsInA": false,
+        "undoAutosaves": 0,
+        "undoPatch": []
+      }
+    ]
+  },
+  "finishedAt": "2026-10-24T17:07:53.737Z"
+}

@@ -1,0 +1,245 @@
+{
+ "arch": "arm64",
+ "bulkAndReplay": {
+  "bulkInsertMs": 5423,
+  "bytesPerOp": 440,
+  "compactDeleteHalf": {
+   "bytesAfterVacuum": 440819712,
+   "ms": 266,
+   "rows": 500000,
+   "vacuumMs": 405
+  },
+  "reconnectGapRead": [
+   {
+    "gapOps": 10,
+    "p50ms": 0.305,
+    "p95ms": 0.548
+   },
+   {
+    "gapOps": 1000,
+    "p50ms": 1.162,
+    "p95ms": 2.458
+   },
+   {
+    "gapOps": 100000,
+    "p50ms": 90.361,
+    "p95ms": 116.343
+   }
+  ],
+  "replay": [
+   {
+    "fetchMs": 5,
+    "ops": 1000
+   },
+   {
+    "fetchMs": 31,
+    "ops": 10000
+   },
+   {
+    "fetchMs": 167,
+    "ops": 100000
+   },
+   {
+    "fetchMs": 1601,
+    "ops": 1000000
+   }
+  ],
+  "seedOps": 1000000,
+  "snapshotInsert40KB": {
+   "p50ms": 1.019,
+   "p95ms": 1.96
+  },
+  "tableBytes": 440803328
+ },
+ "go": "go1.27.1",
+ "openLoop": [
+  {
+   "targetOpsPerSec": 100,
+   "docs": 1,
+   "batchWindowMs": 0,
+   "achievedOpsPerSec": 99.9,
+   "ops": 1000,
+   "p50ms": 2.697,
+   "p95ms": 4.532,
+   "p99ms": 7.009,
+   "maxMs": 12.023,
+   "avgBatch": 1,
+   "errors": 0,
+   "backlogAtWindowEnd": 1,
+   "saturated": false
+  },
+  {
+   "targetOpsPerSec": 100,
+   "docs": 1,
+   "batchWindowMs": 2,
+   "achievedOpsPerSec": 99.9,
+   "ops": 1000,
+   "p50ms": 4.835,
+   "p95ms": 7.019,
+   "p99ms": 9.855,
+   "maxMs": 17.278,
+   "avgBatch": 1.001001001001001,
+   "errors": 0,
+   "backlogAtWindowEnd": 1,
+   "saturated": false
+  },
+  {
+   "targetOpsPerSec": 100,
+   "docs": 200,
+   "batchWindowMs": 0,
+   "achievedOpsPerSec": 99.9,
+   "ops": 1000,
+   "p50ms": 2.848,
+   "p95ms": 4.828,
+   "p99ms": 6.413,
+   "maxMs": 22.196,
+   "avgBatch": 1,
+   "errors": 0,
+   "backlogAtWindowEnd": 1,
+   "saturated": false
+  },
+  {
+   "targetOpsPerSec": 100,
+   "docs": 200,
+   "batchWindowMs": 2,
+   "achievedOpsPerSec": 99.9,
+   "ops": 1000,
+   "p50ms": 5.029,
+   "p95ms": 7.084,
+   "p99ms": 16.7,
+   "maxMs": 56.577,
+   "avgBatch": 1,
+   "errors": 0,
+   "backlogAtWindowEnd": 1,
+   "saturated": false
+  },
+  {
+   "targetOpsPerSec": 1000,
+   "docs": 1,
+   "batchWindowMs": 0,
+   "achievedOpsPerSec": 934.2,
+   "ops": 10000,
+   "p50ms": 312.444,
+   "p95ms": 662.267,
+   "p99ms": 709.264,
+   "maxMs": 716.388,
+   "avgBatch": 1,
+   "errors": 0,
+   "backlogAtWindowEnd": 658,
+   "saturated": true
+  },
+  {
+   "targetOpsPerSec": 1000,
+   "docs": 1,
+   "batchWindowMs": 2,
+   "achievedOpsPerSec": 999.5,
+   "ops": 10000,
+   "p50ms": 4.118,
+   "p95ms": 6.937,
+   "p99ms": 8.52,
+   "maxMs": 14.148,
+   "avgBatch": 4.050222762251924,
+   "errors": 0,
+   "backlogAtWindowEnd": 5,
+   "saturated": false
+  },
+  {
+   "targetOpsPerSec": 1000,
+   "docs": 200,
+   "batchWindowMs": 0,
+   "achievedOpsPerSec": 999.6,
+   "ops": 10000,
+   "p50ms": 1.103,
+   "p95ms": 2.238,
+   "p99ms": 3.351,
+   "maxMs": 27.019,
+   "avgBatch": 1,
+   "errors": 0,
+   "backlogAtWindowEnd": 4,
+   "saturated": false
+  },
+  {
+   "targetOpsPerSec": 1000,
+   "docs": 200,
+   "batchWindowMs": 2,
+   "achievedOpsPerSec": 999.6,
+   "ops": 10000,
+   "p50ms": 3.117,
+   "p95ms": 4.18,
+   "p99ms": 4.943,
+   "maxMs": 8.405,
+   "avgBatch": 1,
+   "errors": 0,
+   "backlogAtWindowEnd": 4,
+   "saturated": false
+  },
+  {
+   "targetOpsPerSec": 10000,
+   "docs": 1,
+   "batchWindowMs": 0,
+   "achievedOpsPerSec": 933,
+   "ops": 10230,
+   "p50ms": 4894.394,
+   "p95ms": 10423.732,
+   "p99ms": 10900.734,
+   "maxMs": 10996.059,
+   "avgBatch": 1,
+   "errors": 0,
+   "backlogAtWindowEnd": 36268,
+   "saturated": true
+  },
+  {
+   "targetOpsPerSec": 10000,
+   "docs": 1,
+   "batchWindowMs": 2,
+   "achievedOpsPerSec": 9946,
+   "ops": 99490,
+   "p50ms": 3.934,
+   "p95ms": 6.514,
+   "p99ms": 8.143,
+   "maxMs": 20.259,
+   "avgBatch": 39.621664675428114,
+   "errors": 0,
+   "backlogAtWindowEnd": 30,
+   "saturated": false
+  },
+  {
+   "targetOpsPerSec": 10000,
+   "docs": 200,
+   "batchWindowMs": 0,
+   "achievedOpsPerSec": 6724.25,
+   "ops": 40000,
+   "p50ms": 1017.987,
+   "p95ms": 1716.122,
+   "p99ms": 1782.715,
+   "maxMs": 1819.395,
+   "avgBatch": 1,
+   "errors": 0,
+   "backlogAtWindowEnd": 13103,
+   "saturated": true
+  },
+  {
+   "targetOpsPerSec": 10000,
+   "docs": 200,
+   "batchWindowMs": 2,
+   "achievedOpsPerSec": 9954.7,
+   "ops": 99930,
+   "p50ms": 39.622,
+   "p95ms": 56.071,
+   "p99ms": 66.464,
+   "maxMs": 93.063,
+   "avgBatch": 1.3879744989374558,
+   "errors": 0,
+   "backlogAtWindowEnd": 383,
+   "saturated": false
+  }
+ ],
+ "postgres": {
+  "fsync": "on",
+  "shared_buffers": "128MB",
+  "synchronous_commit": "on",
+  "version": "18.6 (Debian 18.6-1.pgdg13+2)",
+  "wal_sync_method": "fdatasync"
+ },
+ "ranAt": "2026-10-25T00:35:59+07:00"
+}

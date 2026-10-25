@@ -1,0 +1,9 @@
+**/node_modules
+**/results
+**/*.json
+!spike-005-pg/go.mod
+!spike-004-fuzz/go.mod
+!spike-003-checksum/go.mod
+!spike-005-pg/go.sum
+!spike-004-fuzz/go.sum
+**/*.mjs

@@ -1,0 +1,57 @@
+{
+ "a": "/tmp/static-all.json",
+ "b": "results/results-image-arm64.json",
+ "comparedSections": [
+  "E0",
+  "E1",
+  "E2",
+  "E3",
+  "E4",
+  "E5",
+  "E5R",
+  "E6",
+  "E7"
+ ],
+ "onlyInA": [],
+ "onlyInB": [],
+ "functionalIdentical": false,
+ "differingSections": [
+  "E0"
+ ],
+ "details": {
+  "E0": {
+   "a": {
+    "drawioVersion": "32.6.1",
+    "editorPath": "/editor/",
+    "sameOriginFetch": "ok 200",
+    "crossOriginFetch": "blocked/failed",
+    "websocketSameOrigin": "constructed",
+    "httpErrors": [],
+    "violations": [
+     {
+      "directive": "connect-src",
+      "blocked": "http://127.0.0.1:8792/api/ping"
+     }
+    ]
+   },
+   "b": {
+    "drawioVersion": "32.6.1",
+    "editorPath": "/editor/",
+    "sameOriginFetch": "ok 200",
+    "crossOriginFetch": "blocked/failed",
+    "websocketSameOrigin": "constructed",
+    "httpErrors": [],
+    "violations": [
+     {
+      "directive": "connect-src",
+      "blocked": "http://127.0.0.1:8790/api/ping"
+     }
+    ]
+   }
+  }
+ },
+ "userAgents": {
+  "a": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/155.0.0.0 Safari/537.36",
+  "b": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/156.0.0.0 Safari/537.36"
+ }
+}

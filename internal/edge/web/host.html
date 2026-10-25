@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Diagrams</title>
+<link rel="stylesheet" href="/static/host.css">
+</head>
+<body>
+<header id="bar">
+  <strong>Diagrams</strong>
+  <span id="status">loading…</span>
+  <span class="grow"></span>
+  <span id="who"></span>
+  <button id="logout" type="button">Sign out</button>
+</header>
+<iframe id="editor" title="draw.io editor"
+  src="/editor/?embed=1&proto=json&spin=1&ui=atlas&noSaveBtn=1&noExitBtn=1&saveAndExit=0&libraries=1"></iframe>
+<script src="/static/adapter.js"></script>
+<script src="/static/host.js"></script>
+</body>
+</html>

@@ -1,0 +1,6 @@
+.git
+.codegraph
+docs
+spikes
+node_modules
+*.md

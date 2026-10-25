@@ -1,0 +1,7 @@
+default-arm64            arm64  http=200 servedAt=/editor/ preconfigApplied=2 id=[uid=1001(tomcat) gid=999(tomcat) groups=999(tomcat)] warn=[]
+uid1234-gid0-arm64       arm64  http=200 servedAt=/editor/ preconfigApplied=2 id=[uid=1234(1234) gid=0(root) groups=0(root)] warn=[]
+uid1234-gid1234          arm64  http=200 servedAt=/ preconfigApplied=0 id=[uid=1234(1234) gid=1234(1234) groups=1234(1234)] warn=[WARNING: No write access to /usr/local/tomcat (running as UID 1234, GID 1234). 24-Oct-2026 17:23:19.249 WARNING [main] org.apache.catalina.core.StandardContext.setPath A context path must either be an empty string or start with a '/' and do not end with a '/'.]
+readonly-tmpfs           arm64  http=200 servedAt=/ preconfigApplied=0 id=[uid=1001(tomcat) gid=999(tomcat) groups=999(tomcat)] warn=[WARNING: No write access to /usr/local/tomcat (running as UID 1001, GID 999). 24-Oct-2026 17:23:36.351 WARNING [main] org.apache.catalina.core.StandardContext.setPath A context path must either be an empty string or start with a '/' and do not end with a '/'. ]
+capdrop-nonewpriv        arm64  http=200 servedAt=/editor/ preconfigApplied=2 id=[uid=1234(1234) gid=0(root) groups=0(root)] warn=[]
+uid1234-gid0-amd64       amd64  http=200 servedAt=/editor/ preconfigApplied=2 id=[uid=1234(1234) gid=0(root) groups=0(root)] warn=[]
+capdrop-amd64            amd64  http=200 servedAt=/editor/ preconfigApplied=2 id=[uid=1234(1234) gid=0(root) groups=0(root)] warn=[]

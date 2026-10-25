@@ -1,0 +1,9 @@
+{
+  "name": "spike-001-drawio-change-model",
+  "private": true,
+  "description": "BUKAN KODE PRODUKSI - disposable spike",
+  "type": "module",
+  "dependencies": {
+    "playwright-core": "1.63.0"
+  }
+}

@@ -1,0 +1,511 @@
+{
+  "startedAt": "2026-10-24T16:37:10.247Z",
+  "env": {},
+  "experiments": {
+    "E5R": [
+      {
+        "id": "move-resize-same-cell",
+        "merge": {
+          "repairMethod": "merge",
+          "repaired": {},
+          "patches": {
+            "a": 1,
+            "b": 1
+          },
+          "convergedAB": true,
+          "aEqualsR": true,
+          "bEqualsR": true,
+          "checksums": {
+            "A": -399477306,
+            "B": -399477306,
+            "R": -399477306
+          },
+          "resultR": {
+            "moved": false,
+            "resized": true
+          },
+          "resultA": {
+            "moved": false,
+            "resized": true
+          },
+          "resultB": {
+            "moved": false,
+            "resized": true
+          },
+          "errors": [],
+          "patchSample": {
+            "a": {
+              "u": {
+                "p1": {
+                  "cells": {
+                    "u": {
+                      "X": {
+                        "geometry": "<mxGeometry height=\"60\" width=\"120\" x=\"90\" y=\"40\"/>"
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "b": {
+              "u": {
+                "p1": {
+                  "cells": {
+                    "u": {
+                      "X": {
+                        "geometry": "<mxGeometry height=\"60\" width=\"300\" x=\"40\" y=\"40\"/>"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "adapterDiff": {
+          "repairMethod": "adapterDiff",
+          "repaired": {},
+          "patches": {
+            "a": 1,
+            "b": 1
+          },
+          "convergedAB": true,
+          "aEqualsR": true,
+          "bEqualsR": true,
+          "checksums": {
+            "A": -399477306,
+            "B": -399477306,
+            "R": -399477306
+          },
+          "resultR": {
+            "moved": false,
+            "resized": true
+          },
+          "resultA": {
+            "moved": false,
+            "resized": true
+          },
+          "resultB": {
+            "moved": false,
+            "resized": true
+          },
+          "errors": [],
+          "patchSample": {
+            "a": {
+              "u": {
+                "p1": {
+                  "cells": {
+                    "u": {
+                      "X": {
+                        "geometry": "<mxGeometry height=\"60\" width=\"120\" x=\"90\" y=\"40\"/>"
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "b": {
+              "u": {
+                "p1": {
+                  "cells": {
+                    "u": {
+                      "X": {
+                        "geometry": "<mxGeometry height=\"60\" width=\"300\" x=\"40\" y=\"40\"/>"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      {
+        "id": "addpage-addpage",
+        "merge": {
+          "repairMethod": "merge",
+          "repaired": {
+            "B": false
+          },
+          "patches": {
+            "a": 1,
+            "b": 1
+          },
+          "convergedAB": false,
+          "aEqualsR": true,
+          "bEqualsR": false,
+          "checksums": {
+            "A": 2066792931,
+            "B": 525101617,
+            "R": 2066792931
+          },
+          "resultR": {
+            "pages": "Page-1,Page-2,PB,PA"
+          },
+          "resultA": {
+            "pages": "Page-1,Page-2,PB,PA"
+          },
+          "resultB": {
+            "pages": "Page-1,Page-2,PA,PB"
+          },
+          "errors": [],
+          "patchSample": {
+            "a": {
+              "i": [
+                {
+                  "id": "rKjGIcx04O70aO0g_Nlx",
+                  "data": "<diagram id=\"rKjGIcx04O70aO0g_Nlx\" name=\"PA\"><mxGraphModel dx=\"616\" dy=\"366\" grid=\"1\" gridSize=\"10\" guides=\"1\" tooltips=\"1\" connect=\"1\" arrows=\"1\" fold=\"1\" page=\"1\" pageScale=\"1\" pageWidth=\"850\" pageHeight=\"1100\" math=\"0\" shadow=\"0\"><root><mxCell id=\"0\"/><mxCell id=\"1\" parent=\"0\"/></root></mxGraphModel></diagram>",
+                  "previous": "p2"
+                }
+              ]
+            },
+            "b": {
+              "i": [
+                {
+                  "id": "ieBwcIqd1gwrL07xV84u",
+                  "data": "<diagram id=\"ieBwcIqd1gwrL07xV84u\" name=\"PB\"><mxGraphModel dx=\"616\" dy=\"366\" grid=\"1\" gridSize=\"10\" guides=\"1\" tooltips=\"1\" connect=\"1\" arrows=\"1\" fold=\"1\" page=\"1\" pageScale=\"1\" pageWidth=\"850\" pageHeight=\"1100\" math=\"0\" shadow=\"0\"><root><mxCell id=\"0\"/><mxCell id=\"1\" parent=\"0\"/></root></mxGraphModel></diagram>",
+                  "previous": "p2"
+                }
+              ]
+            }
+          }
+        },
+        "adapterDiff": {
+          "repairMethod": "adapterDiff",
+          "repaired": {
+            "B": true
+          },
+          "patches": {
+            "a": 1,
+            "b": 1
+          },
+          "convergedAB": true,
+          "aEqualsR": true,
+          "bEqualsR": true,
+          "checksums": {
+            "A": -939412620,
+            "B": -939412620,
+            "R": -939412620
+          },
+          "resultR": {
+            "pages": "Page-1,Page-2,PB,PA"
+          },
+          "resultA": {
+            "pages": "Page-1,Page-2,PB,PA"
+          },
+          "resultB": {
+            "pages": "Page-1,Page-2,PB,PA"
+          },
+          "errors": [],
+          "patchSample": {
+            "a": {
+              "i": [
+                {
+                  "id": "nkzNoNhGBKFtqJ8Cev0T",
+                  "data": "<diagram id=\"nkzNoNhGBKFtqJ8Cev0T\" name=\"PA\"><mxGraphModel dx=\"616\" dy=\"366\" grid=\"1\" gridSize=\"10\" guides=\"1\" tooltips=\"1\" connect=\"1\" arrows=\"1\" fold=\"1\" page=\"1\" pageScale=\"1\" pageWidth=\"850\" pageHeight=\"1100\" math=\"0\" shadow=\"0\"><root><mxCell id=\"0\"/><mxCell id=\"1\" parent=\"0\"/></root></mxGraphModel></diagram>",
+                  "previous": "p2"
+                }
+              ]
+            },
+            "b": {
+              "i": [
+                {
+                  "id": "ejqlEv5GYcz_4HziKZEV",
+                  "data": "<diagram id=\"ejqlEv5GYcz_4HziKZEV\" name=\"PB\"><mxGraphModel dx=\"616\" dy=\"366\" grid=\"1\" gridSize=\"10\" guides=\"1\" tooltips=\"1\" connect=\"1\" arrows=\"1\" fold=\"1\" page=\"1\" pageScale=\"1\" pageWidth=\"850\" pageHeight=\"1100\" math=\"0\" shadow=\"0\"><root><mxCell id=\"0\"/><mxCell id=\"1\" parent=\"0\"/></root></mxGraphModel></diagram>",
+                  "previous": "p2"
+                }
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": "reparent-vs-delete-parent",
+        "merge": {
+          "repairMethod": "merge",
+          "repaired": {
+            "B": true
+          },
+          "patches": {
+            "a": 1,
+            "b": 1
+          },
+          "convergedAB": true,
+          "aEqualsR": true,
+          "bEqualsR": true,
+          "checksums": {
+            "A": 1380425503,
+            "B": 1380425503,
+            "R": 1380425503
+          },
+          "resultR": {
+            "xExists": false,
+            "cExists": false,
+            "xParent": null
+          },
+          "resultA": {
+            "xExists": false,
+            "cExists": false,
+            "xParent": null
+          },
+          "resultB": {
+            "xExists": false,
+            "cExists": false,
+            "xParent": null
+          },
+          "errors": [],
+          "patchSample": {
+            "a": {
+              "u": {
+                "p1": {
+                  "cells": {
+                    "u": {
+                      "X": {
+                        "parent": "C",
+                        "previous": ""
+                      },
+                      "Y": {
+                        "previous": ""
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "b": {
+              "u": {
+                "p1": {
+                  "cells": {
+                    "u": {
+                      "E": {
+                        "previous": "Z"
+                      }
+                    },
+                    "r": [
+                      "C"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "adapterDiff": {
+          "repairMethod": "adapterDiff",
+          "repaired": {
+            "B": true
+          },
+          "patches": {
+            "a": 1,
+            "b": 1
+          },
+          "convergedAB": true,
+          "aEqualsR": true,
+          "bEqualsR": true,
+          "checksums": {
+            "A": 1380425503,
+            "B": 1380425503,
+            "R": 1380425503
+          },
+          "resultR": {
+            "xExists": false,
+            "cExists": false,
+            "xParent": null
+          },
+          "resultA": {
+            "xExists": false,
+            "cExists": false,
+            "xParent": null
+          },
+          "resultB": {
+            "xExists": false,
+            "cExists": false,
+            "xParent": null
+          },
+          "errors": [],
+          "patchSample": {
+            "a": {
+              "u": {
+                "p1": {
+                  "cells": {
+                    "u": {
+                      "X": {
+                        "parent": "C",
+                        "previous": ""
+                      },
+                      "Y": {
+                        "previous": ""
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "b": {
+              "u": {
+                "p1": {
+                  "cells": {
+                    "u": {
+                      "E": {
+                        "previous": "Z"
+                      }
+                    },
+                    "r": [
+                      "C"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      {
+        "id": "add-add",
+        "merge": {
+          "repairMethod": "merge",
+          "repaired": {
+            "B": false
+          },
+          "patches": {
+            "a": 1,
+            "b": 1
+          },
+          "convergedAB": false,
+          "aEqualsR": true,
+          "bEqualsR": false,
+          "checksums": {
+            "A": -616605598,
+            "B": -571586158,
+            "R": -616605598
+          },
+          "resultR": {
+            "na": true,
+            "nb": true
+          },
+          "resultA": {
+            "na": true,
+            "nb": true
+          },
+          "resultB": {
+            "na": true,
+            "nb": true
+          },
+          "errors": [],
+          "patchSample": {
+            "a": {
+              "u": {
+                "p1": {
+                  "cells": {
+                    "i": [
+                      {
+                        "id": "NA",
+                        "vertex": 1,
+                        "parent": "1",
+                        "previous": "E",
+                        "style": "rounded=1;",
+                        "geometry": "<mxGeometry height=\"40\" width=\"80\" x=\"60\" y=\"320\"/>",
+                        "value": "NA"
+                      }
+                    ]
+                  }
+                }
+              }
+            },
+            "b": {
+              "u": {
+                "p1": {
+                  "cells": {
+                    "i": [
+                      {
+                        "id": "NB",
+                        "vertex": 1,
+                        "parent": "1",
+                        "previous": "E",
+                        "style": "rounded=1;",
+                        "geometry": "<mxGeometry height=\"40\" width=\"80\" x=\"200\" y=\"320\"/>",
+                        "value": "NB"
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "adapterDiff": {
+          "repairMethod": "adapterDiff",
+          "repaired": {
+            "B": true
+          },
+          "patches": {
+            "a": 1,
+            "b": 1
+          },
+          "convergedAB": true,
+          "aEqualsR": true,
+          "bEqualsR": true,
+          "checksums": {
+            "A": -616605598,
+            "B": -616605598,
+            "R": -616605598
+          },
+          "resultR": {
+            "na": true,
+            "nb": true
+          },
+          "resultA": {
+            "na": true,
+            "nb": true
+          },
+          "resultB": {
+            "na": true,
+            "nb": true
+          },
+          "errors": [],
+          "patchSample": {
+            "a": {
+              "u": {
+                "p1": {
+                  "cells": {
+                    "i": [
+                      {
+                        "id": "NA",
+                        "vertex": 1,
+                        "parent": "1",
+                        "previous": "E",
+                        "style": "rounded=1;",
+                        "geometry": "<mxGeometry height=\"40\" width=\"80\" x=\"60\" y=\"320\"/>",
+                        "value": "NA"
+                      }
+                    ]
+                  }
+                }
+              }
+            },
+            "b": {
+              "u": {
+                "p1": {
+                  "cells": {
+                    "i": [
+                      {
+                        "id": "NB",
+                        "vertex": 1,
+                        "parent": "1",
+                        "previous": "E",
+                        "style": "rounded=1;",
+                        "geometry": "<mxGeometry height=\"40\" width=\"80\" x=\"200\" y=\"320\"/>",
+                        "value": "NB"
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    ]
+  },
+  "finishedAt": "2026-10-24T16:37:47.858Z"
+}

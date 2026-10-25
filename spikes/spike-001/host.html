@@ -1,0 +1,62 @@
+<!doctype html>
+<!-- DISPOSABLE SPIKE — NOT PRODUCTION CODE (SPIKE-001): host page for the draw.io embed protocol. -->
+<html>
+<head>
+<meta charset="utf-8">
+<title>spike-001 host</title>
+<style>body{margin:0;display:flex;flex-wrap:wrap}iframe{width:640px;height:480px;border:1px solid #888}</style>
+</head>
+<body>
+<script>
+// Each editor is an iframe on /editor/ (same origin as this page, like behind the gateway).
+// H.open(name) waits for the embed 'init' event; every message is logged with its frame name.
+window.H = {
+  frames: {}, ui: {}, log: [], waiters: [],
+  editorUrl: '/editor/?embed=1&proto=json&spin=0&ui=min&noSaveBtn=1&noExitBtn=1&saveAndExit=0&lang=en',
+  open(name, extra) {
+    return new Promise((resolve, reject) => {
+      const f = document.createElement('iframe');
+      f.name = name;
+      f.src = this.editorUrl + (extra || '');
+      this.frames[name] = f;
+      document.body.appendChild(f);
+      this.wait(name, 'init', null, 150000).then(resolve, reject);
+    });
+  },
+  nameOf(source) {
+    for (const [n, f] of Object.entries(this.frames)) if (f.contentWindow === source) return n;
+    return '?';
+  },
+  send(name, msg) { this.frames[name].contentWindow.postMessage(JSON.stringify(msg), '*'); },
+  wait(name, event, pred, timeout) {
+    return new Promise((resolve, reject) => {
+      const w = { name, event, pred, resolve };
+      this.waiters.push(w);
+      setTimeout(() => { const i = this.waiters.indexOf(w); if (i >= 0) { this.waiters.splice(i, 1); reject(new Error(`timeout ${name}/${event}`)); } }, timeout || 10000);
+    });
+  },
+  // Gets the EditorUi through the official plugin entry point, called from this (same-origin) page.
+  attach(name) {
+    return new Promise((resolve, reject) => {
+      const win = this.frames[name].contentWindow;
+      if (!win.Draw || typeof win.Draw.loadPlugin !== 'function') return reject(new Error('Draw.loadPlugin missing'));
+      win.Draw.loadPlugin((ui) => { this.ui[name] = ui; resolve(true); });
+    });
+  },
+};
+window.addEventListener('message', (evt) => {
+  let data;
+  try { data = JSON.parse(evt.data); } catch (e) { return; }
+  const name = H.nameOf(evt.source);
+  const entry = { t: performance.now(), frame: name, data };
+  H.log.push(entry);
+  for (const w of H.waiters.slice()) {
+    if (w.name === name && data.event === w.event && (!w.pred || w.pred(data))) {
+      H.waiters.splice(H.waiters.indexOf(w), 1);
+      w.resolve(entry);
+    }
+  }
+});
+</script>
+</body>
+</html>

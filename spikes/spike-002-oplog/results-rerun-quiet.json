@@ -1,0 +1,58 @@
+{
+  "concurrentDocs": {
+    "documents": 200,
+    "opsPerDoc": 1000,
+    "opsPerSec": 6494191,
+    "totalMs": 30
+  },
+  "cpus": 14,
+  "go": "go1.27.1",
+  "replayFromSnapshot": [
+    {
+      "ops": 1000,
+      "replayMs": 1.276,
+      "snapshotCloneMs": 1.232
+    },
+    {
+      "ops": 10000,
+      "replayMs": 1.744,
+      "snapshotCloneMs": 1.318
+    },
+    {
+      "ops": 100000,
+      "replayMs": 3.587,
+      "snapshotCloneMs": 1.115
+    },
+    {
+      "ops": 1000000,
+      "replayMs": 14.262,
+      "snapshotCloneMs": 1.06
+    }
+  ],
+  "sequenceEncodeApply": [
+    {
+      "avgEncodedBytes": 263,
+      "cpuShareOfOneCorePct": 0.0298167,
+      "opsInBurst": 100,
+      "p50us": 1,
+      "p99us": 5,
+      "totalMs": 0.298
+    },
+    {
+      "avgEncodedBytes": 267,
+      "cpuShareOfOneCorePct": 0.19707919999999998,
+      "opsInBurst": 1000,
+      "p50us": 1,
+      "p99us": 5,
+      "totalMs": 1.97
+    },
+    {
+      "avgEncodedBytes": 270,
+      "cpuShareOfOneCorePct": 1.1422166,
+      "opsInBurst": 10000,
+      "p50us": 0,
+      "p99us": 2,
+      "totalMs": 11.422
+    }
+  ]
+}

@@ -1,0 +1,4 @@
+fractional index worst case front: 2000 inserts -> max key length 334
+fractional index worst case back : 2000 inserts -> max key length 401
+fractional index worst case gap  : 2000 inserts -> max key length 335
+selftest ok

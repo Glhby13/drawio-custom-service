@@ -1,0 +1,812 @@
+{
+  "startedAt": "2026-10-24T16:30:11.895Z",
+  "env": {},
+  "experiments": {
+    "E0": {
+      "drawioVersion": "32.6.1",
+      "ua": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/155.0.0.0 Safari/537.36",
+      "cspMeta": "default-src 'self'; script-src 'self' https://storage.googleapis.com https://api...",
+      "editorPath": "/editor/",
+      "sameOriginFetch": "ok 200",
+      "crossOriginFetch": "blocked/failed",
+      "websocketSameOrigin": "constructed",
+      "violations": [
+        {
+          "directive": "connect-src",
+          "blocked": "http://127.0.0.1:8792/api/ping"
+        }
+      ],
+      "httpErrors": [],
+      "consoleErrors": [
+        "Failed to load resource: the server responded with a status of 404 (Not Found)",
+        "Connecting to 'http://127.0.0.1:8792/api/ping' violates the following Content Security Policy directive: \"connect-src 'self' https://*.dropboxapi.com https://api.trello.com https://api.github.com https://raw.githubusercontent.com https://*.googleapis.com https://*.googleusercontent.com https://graph.microsoft.com https://*.1drv.com https://*.sharepoint.com https://gitlab.com https://*.google.com https://fonts.gstatic.com https://fonts.googleapis.com\". The action has been blocked.",
+        "Fetch API cannot load http://127.0.0.1:8792/api/ping. Refused to connect because it violates the document's Content Security Policy."
+      ]
+    },
+    "E1": {
+      "hostInjectedLoadPlugin": {
+        "attached": true,
+        "hasGraph": true
+      },
+      "urlParamP": {
+        "loaded": false,
+        "console": [
+          "Unknown plugin: /spike-plugin.js"
+        ]
+      },
+      "settingsPluginDefaultConfig": {
+        "loaded": false,
+        "console": [
+          "Unknown plugin: /spike-plugin.js"
+        ]
+      },
+      "settingsPluginAllowCustom": {
+        "loaded": true,
+        "console": []
+      }
+    },
+    "E2": [
+      {
+        "op": "move",
+        "args": [
+          "X",
+          10,
+          5
+        ],
+        "changeTypes": [
+          "mxGeometryChange"
+        ],
+        "changes": [
+          {
+            "type": "mxGeometryChange",
+            "cell": "X",
+            "geometry": "<mxGeometry height=\"60\" width=\"120\" x=\"50\" y=\"45\"/>",
+            "codecXmlBytes": 0
+          }
+        ],
+        "autosaveCount": 1,
+        "xmlOnlyAutosaves": 0,
+        "patches": [
+          {
+            "u": {
+              "p1": {
+                "cells": {
+                  "u": {
+                    "X": {
+                      "geometry": "<mxGeometry height=\"60\" width=\"120\" x=\"50\" y=\"45\"/>"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        ],
+        "patchBytes": 109
+      },
+      {
+        "op": "resize",
+        "args": [
+          "X",
+          200
+        ],
+        "changeTypes": [
+          "mxGeometryChange"
+        ],
+        "changes": [
+          {
+            "type": "mxGeometryChange",
+            "cell": "X",
+            "geometry": "<mxGeometry height=\"60\" width=\"200\" x=\"40\" y=\"40\"/>",
+            "codecXmlBytes": 0
+          }
+        ],
+        "autosaveCount": 1,
+        "xmlOnlyAutosaves": 0,
+        "patches": [
+          {
+            "u": {
+              "p1": {
+                "cells": {
+                  "u": {
+                    "X": {
+                      "geometry": "<mxGeometry height=\"60\" width=\"200\" x=\"40\" y=\"40\"/>"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        ],
+        "patchBytes": 109
+      },
+      {
+        "op": "label",
+        "args": [
+          "X",
+          "Hello"
+        ],
+        "changeTypes": [
+          "mxValueChange"
+        ],
+        "changes": [
+          {
+            "type": "mxValueChange",
+            "cell": "X",
+            "value": "Hello",
+            "codecXmlBytes": 0
+          }
+        ],
+        "autosaveCount": 1,
+        "xmlOnlyAutosaves": 0,
+        "patches": [
+          {
+            "u": {
+              "p1": {
+                "cells": {
+                  "u": {
+                    "X": {
+                      "value": "Hello"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        ],
+        "patchBytes": 52
+      },
+      {
+        "op": "style",
+        "args": [
+          "X",
+          "fillColor",
+          "#ff0000"
+        ],
+        "changeTypes": [
+          "mxStyleChange"
+        ],
+        "changes": [
+          {
+            "type": "mxStyleChange",
+            "cell": "X",
+            "style": "rounded=0;whiteSpace=wrap;html=1;fillColor=#ff0000;",
+            "previous": "rounded=0;whiteSpace=wrap;html=1;",
+            "codecXmlBytes": 0
+          }
+        ],
+        "autosaveCount": 1,
+        "xmlOnlyAutosaves": 0,
+        "patches": [
+          {
+            "u": {
+              "p1": {
+                "cells": {
+                  "u": {
+                    "X": {
+                      "style": "rounded=0;whiteSpace=wrap;html=1;fillColor=#ff0000;"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        ],
+        "patchBytes": 98
+      },
+      {
+        "op": "attr",
+        "args": [
+          "X",
+          "owner",
+          "alice"
+        ],
+        "changeTypes": [
+          "mxValueChange"
+        ],
+        "changes": [
+          {
+            "type": "mxValueChange",
+            "cell": "X",
+            "value": "<UserObject label=\"X\" owner=\"alice\"/>",
+            "codecXmlBytes": 0
+          }
+        ],
+        "autosaveCount": 1,
+        "xmlOnlyAutosaves": 0,
+        "patches": [
+          {
+            "u": {
+              "p1": {
+                "cells": {
+                  "u": {
+                    "X": {
+                      "xmlValue": "<UserObject label=\"X\" owner=\"alice\"/>"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        ],
+        "patchBytes": 91
+      },
+      {
+        "op": "add",
+        "args": [
+          "N1",
+          60,
+          320
+        ],
+        "changeTypes": [
+          "mxChildChange"
+        ],
+        "changes": [
+          {
+            "type": "mxChildChange",
+            "child": "N1",
+            "parent": "1",
+            "previous": null,
+            "index": 5,
+            "previousIndex": 0,
+            "codecXmlBytes": 0
+          }
+        ],
+        "autosaveCount": 1,
+        "xmlOnlyAutosaves": 0,
+        "patches": [
+          {
+            "u": {
+              "p1": {
+                "cells": {
+                  "i": [
+                    {
+                      "id": "N1",
+                      "vertex": 1,
+                      "parent": "1",
+                      "previous": "E",
+                      "style": "rounded=1;",
+                      "geometry": "<mxGeometry height=\"40\" width=\"80\" x=\"60\" y=\"320\"/>",
+                      "value": "N1"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        ],
+        "patchBytes": 188
+      },
+      {
+        "op": "connect",
+        "args": [
+          "E2",
+          "X",
+          "Z"
+        ],
+        "changeTypes": [
+          "mxChildChange",
+          "mxTerminalChange"
+        ],
+        "changes": [
+          {
+            "type": "mxChildChange",
+            "child": "E2",
+            "parent": "1",
+            "previous": null,
+            "index": 5,
+            "previousIndex": 0,
+            "codecXmlBytes": 0
+          },
+          {
+            "type": "mxTerminalChange",
+            "cell": "E2",
+            "terminal": "X",
+            "previous": null,
+            "source": true,
+            "codecXmlBytes": 0
+          },
+          {
+            "type": "mxTerminalChange",
+            "cell": "E2",
+            "terminal": "Z",
+            "previous": null,
+            "source": false,
+            "codecXmlBytes": 0
+          }
+        ],
+        "autosaveCount": 1,
+        "xmlOnlyAutosaves": 0,
+        "patches": [
+          {
+            "u": {
+              "p1": {
+                "cells": {
+                  "i": [
+                    {
+                      "id": "E2",
+                      "edge": 1,
+                      "parent": "1",
+                      "previous": "E",
+                      "source": "X",
+                      "target": "Z",
+                      "geometry": "<mxGeometry relative=\"1\"/>",
+                      "value": ""
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        ],
+        "patchBytes": 158
+      },
+      {
+        "op": "disconnect",
+        "args": [
+          "E"
+        ],
+        "changeTypes": [
+          "mxTerminalChange"
+        ],
+        "changes": [
+          {
+            "type": "mxTerminalChange",
+            "cell": "E",
+            "terminal": null,
+            "previous": "Y",
+            "source": false,
+            "codecXmlBytes": 0
+          }
+        ],
+        "autosaveCount": 1,
+        "xmlOnlyAutosaves": 0,
+        "patches": [
+          {
+            "u": {
+              "p1": {
+                "cells": {
+                  "u": {
+                    "E": {
+                      "target": ""
+                    }
+                  }
+                }
+              }
+            }
+          }
+        ],
+        "patchBytes": 48
+      },
+      {
+        "op": "group",
+        "args": [
+          [
+            "X",
+            "Y"
+          ]
+        ],
+        "changeTypes": [
+          "mxGeometryChange",
+          "mxChildChange"
+        ],
+        "changes": [
+          {
+            "type": "mxGeometryChange",
+            "cell": "FqBta3aE-U6RTuoH5RYC-1",
+            "geometry": "<mxGeometry/>",
+            "codecXmlBytes": 231
+          },
+          {
+            "type": "mxGeometryChange",
+            "cell": "FqBta3aE-U6RTuoH5RYC-1",
+            "geometry": "<mxGeometry height=\"60\" width=\"320\" x=\"40\" y=\"40\"/>",
+            "codecXmlBytes": 330
+          },
+          {
+            "type": "mxChildChange",
+            "child": "FqBta3aE-U6RTuoH5RYC-1",
+            "parent": "1",
+            "previous": null,
+            "index": 5,
+            "previousIndex": 0,
+            "codecXmlBytes": 0
+          },
+          {
+            "type": "mxChildChange",
+            "child": "X",
+            "parent": "FqBta3aE-U6RTuoH5RYC-1",
+            "previous": "1",
+            "index": 0,
+            "previousIndex": 0,
+            "codecXmlBytes": 0
+          },
+          {
+            "type": "mxChildChange",
+            "child": "Y",
+            "parent": "FqBta3aE-U6RTuoH5RYC-1",
+            "previous": "1",
+            "index": 1,
+            "previousIndex": 0,
+            "codecXmlBytes": 0
+          },
+          {
+            "type": "mxGeometryChange",
+            "cell": "E",
+            "geometry": "<mxGeometry relative=\"1\"/>",
+            "codecXmlBytes": 0
+          },
+          {
+            "type": "mxChildChange",
+            "child": "E",
+            "parent": "FqBta3aE-U6RTuoH5RYC-1",
+            "previous": "1",
+            "index": 2,
+            "previousIndex": 2,
+            "codecXmlBytes": 0
+          },
+          {
+            "type": "mxGeometryChange",
+            "cell": "X",
+            "geometry": "<mxGeometry height=\"60\" width=\"120\"/>",
+            "codecXmlBytes": 0
+          },
+          {
+            "type": "mxGeometryChange",
+            "cell": "Y",
+            "geometry": "<mxGeometry height=\"60\" width=\"120\" x=\"200\"/>",
+            "codecXmlBytes": 0
+          }
+        ],
+        "autosaveCount": 1,
+        "xmlOnlyAutosaves": 0,
+        "patches": [
+          {
+            "u": {
+              "p1": {
+                "cells": {
+                  "u": {
+                    "X": {
+                      "parent": "FqBta3aE-U6RTuoH5RYC-1",
+                      "geometry": "<mxGeometry height=\"60\" width=\"120\"/>",
+                      "previous": ""
+                    },
+                    "Y": {
+                      "parent": "FqBta3aE-U6RTuoH5RYC-1",
+                      "geometry": "<mxGeometry height=\"60\" width=\"120\" x=\"200\"/>",
+                      "previous": "X"
+                    },
+                    "Z": {
+                      "previous": ""
+                    },
+                    "E": {
+                      "parent": "FqBta3aE-U6RTuoH5RYC-1",
+                      "previous": "Y"
+                    }
+                  },
+                  "i": [
+                    {
+                      "id": "FqBta3aE-U6RTuoH5RYC-1",
+                      "vertex": 1,
+                      "connectable": 0,
+                      "parent": "1",
+                      "previous": "C",
+                      "style": "group",
+                      "geometry": "<mxGeometry height=\"60\" width=\"320\" x=\"40\" y=\"40\"/>",
+                      "value": ""
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        ],
+        "patchBytes": 527
+      },
+      {
+        "op": "reparent",
+        "args": [
+          "Z",
+          "C"
+        ],
+        "changeTypes": [
+          "mxChildChange"
+        ],
+        "changes": [
+          {
+            "type": "mxChildChange",
+            "child": "Z",
+            "parent": "C",
+            "previous": "1",
+            "index": 0,
+            "previousIndex": 2,
+            "codecXmlBytes": 0
+          }
+        ],
+        "autosaveCount": 1,
+        "xmlOnlyAutosaves": 0,
+        "patches": [
+          {
+            "u": {
+              "p1": {
+                "cells": {
+                  "u": {
+                    "Z": {
+                      "parent": "C",
+                      "previous": ""
+                    },
+                    "C": {
+                      "previous": "Y"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        ],
+        "patchBytes": 84
+      },
+      {
+        "op": "toBack",
+        "args": [
+          "Y"
+        ],
+        "changeTypes": [
+          "mxChildChange"
+        ],
+        "changes": [
+          {
+            "type": "mxChildChange",
+            "child": "Y",
+            "parent": "1",
+            "previous": "1",
+            "index": 0,
+            "previousIndex": 1,
+            "codecXmlBytes": 0
+          }
+        ],
+        "autosaveCount": 1,
+        "xmlOnlyAutosaves": 0,
+        "patches": [
+          {
+            "u": {
+              "p1": {
+                "cells": {
+                  "u": {
+                    "X": {
+                      "previous": "Y"
+                    },
+                    "Y": {
+                      "previous": ""
+                    },
+                    "Z": {
+                      "previous": "X"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        ],
+        "patchBytes": 92
+      },
+      {
+        "op": "del",
+        "args": [
+          "Z"
+        ],
+        "changeTypes": [
+          "mxChildChange"
+        ],
+        "changes": [
+          {
+            "type": "mxChildChange",
+            "child": "Z",
+            "parent": null,
+            "previous": "1",
+            "previousIndex": 2,
+            "codecXmlBytes": 0
+          }
+        ],
+        "autosaveCount": 1,
+        "xmlOnlyAutosaves": 0,
+        "patches": [
+          {
+            "u": {
+              "p1": {
+                "cells": {
+                  "u": {
+                    "C": {
+                      "previous": "Y"
+                    }
+                  },
+                  "r": [
+                    "Z"
+                  ]
+                }
+              }
+            }
+          }
+        ],
+        "patchBytes": 61
+      },
+      {
+        "op": "addPage",
+        "args": [
+          "Page-3"
+        ],
+        "changeTypes": [
+          "ChangePage"
+        ],
+        "changes": [
+          {
+            "type": "ChangePage",
+            "page": "NowhyMoj2hJLZilVzSMc",
+            "index": null,
+            "previousIndex": 2,
+            "codecXmlBytes": 0
+          }
+        ],
+        "autosaveCount": 1,
+        "xmlOnlyAutosaves": 0,
+        "patches": [
+          {
+            "i": [
+              {
+                "id": "NowhyMoj2hJLZilVzSMc",
+                "data": "<diagram id=\"NowhyMoj2hJLZilVzSMc\" name=\"Page-3\"><mxGraphModel dx=\"616\" dy=\"366\" grid=\"1\" gridSize=\"10\" guides=\"1\" tooltips=\"1\" connect=\"1\" arrows=\"1\" fold=\"1\" page=\"1\" pageScale=\"1\" pageWidth=\"850\" pageHeight=\"1100\" math=\"0\" shadow=\"0\"><root><mxCell id=\"0\"/><mxCell id=\"1\" parent=\"0\"/></root></mxGraphModel></diagram>",
+                "previous": "p2"
+              }
+            ]
+          }
+        ],
+        "patchBytes": 421
+      },
+      {
+        "op": "renamePage",
+        "args": [
+          1,
+          "Renamed"
+        ],
+        "changeTypes": [
+          "RenamePage"
+        ],
+        "changes": [
+          {
+            "type": "RenamePage",
+            "page": "p2",
+            "name": "Renamed",
+            "codecXmlBytes": 0
+          }
+        ],
+        "autosaveCount": 1,
+        "xmlOnlyAutosaves": 0,
+        "patches": [
+          {
+            "u": {
+              "p2": {
+                "name": "Renamed"
+              }
+            }
+          }
+        ],
+        "patchBytes": 31
+      },
+      {
+        "op": "selectPage",
+        "args": [
+          1
+        ],
+        "changeTypes": [
+          "SelectPage"
+        ],
+        "changes": [
+          {
+            "type": "SelectPage",
+            "codecXmlBytes": 0
+          }
+        ],
+        "autosaveCount": 1,
+        "xmlOnlyAutosaves": 1,
+        "patches": [],
+        "patchBytes": 0
+      }
+    ],
+    "E3": {
+      "ops": [
+        "move",
+        "label",
+        "style",
+        "add",
+        "connect",
+        "group",
+        "reparent",
+        "toBack",
+        "addPage",
+        "selectPage",
+        "del",
+        "undo",
+        "undo"
+      ],
+      "autosaves": 11,
+      "withoutPatch": 1,
+      "replayEqual": true,
+      "checksumA": -2053040233,
+      "checksumB": -2053040233
+    },
+    "E4": {
+      "before": {
+        "undo": 1,
+        "next": 1,
+        "page": "p1",
+        "sel": [
+          "Z"
+        ]
+      },
+      "after": {
+        "undo": 1,
+        "next": 1,
+        "page": "p1",
+        "sel": [
+          "Z"
+        ],
+        "xX": 140
+      },
+      "echoesOnApply": 0,
+      "checksumMatch": false,
+      "duplicate": {
+        "echoes": 0,
+        "xBefore": 140,
+        "xAfter": 140,
+        "error": null
+      },
+      "afterLocalUndo": {
+        "label": "Y",
+        "xX": 140
+      },
+      "remoteDeleteOfSelected": {
+        "error": null,
+        "selection": []
+      },
+      "remoteWhileOtherPage": {
+        "error": null,
+        "currentPage": "p2",
+        "echoes": 0
+      },
+      "applyLatencyMs": 39.69999999925494
+    },
+    "E7": {
+      "handBuilt": {
+        "error": null,
+        "inserted": true,
+        "yRenamed": "renamed-by-ai"
+      },
+      "hostile": [
+        {
+          "error": null,
+          "mismatch": false
+        },
+        {
+          "error": null,
+          "mismatch": false
+        },
+        {
+          "error": null,
+          "mismatch": false
+        },
+        {
+          "error": null,
+          "mismatch": false
+        },
+        {
+          "error": null,
+          "mismatch": false
+        }
+      ],
+      "prototypePolluted": false,
+      "orphanInserted": false,
+      "stillUsable": true,
+      "consoleErrors": []
+    }
+  },
+  "finishedAt": "2026-10-24T16:31:53.370Z"
+}

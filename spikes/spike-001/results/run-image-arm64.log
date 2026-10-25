@@ -1,0 +1,23 @@
+E5 move-move-same S1 conv=false S3 conv=true/R=true
+E5 move-resize-same-cell S1 conv=false S3 conv=true/R=true
+E5 label-label-same S1 conv=false S3 conv=true/R=true
+E5 style-diff-keys-same-cell S1 conv=false S3 conv=true/R=true
+E5 style-same-key S1 conv=false S3 conv=true/R=true
+E5 attr-diff-keys-same-cell S1 conv=false S3 conv=true/R=true
+E5 delete-vs-edit S1 conv=true S3 conv=true/R=true
+E5 edit-vs-delete S1 conv=true S3 conv=true/R=true
+E5 group-vs-move S1 conv=false S3 conv=true/R=true
+E5 reorder-diff-cells S1 conv=true S3 conv=true/R=true
+E5 reorder-same-cell S1 conv=true S3 conv=true/R=true
+E5 addpage-addpage S1 conv=false S3 conv=false/R=false
+E5 reparent-vs-move S1 conv=true S3 conv=true/R=true
+E5 reparent-vs-delete-parent S1 conv=false S3 conv=false/R=false
+E5 diff-cells S1 conv=true S3 conv=true/R=true
+E5 add-add S1 conv=false S3 conv=false/R=false
+E5 connect-vs-delete-target S1 conv=true S3 conv=true/R=true
+E5 offline-reconnect S1 conv=true S3 conv=true/R=true
+E6 50 done
+E6 500 done
+E6 5000 done
+results -> /Users/macbook/Documents/lab/drawio-custom-service/spikes/spike-001/results/results-image-arm64.json
+arm64-exit=0

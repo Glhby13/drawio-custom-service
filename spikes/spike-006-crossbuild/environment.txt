@@ -1,0 +1,41 @@
+# captured 2026-10-24T17:48:36Z on Darwin 27.0.0 arm64
+## docker version
+client=29.4.3 server=29.4.3 os/arch=linux/arm64
+## docker info
+cpus=14 mem=12528017408 arch=aarch64 storage-driver=overlayfs [[driver-type io.containerd.snapshotter.v1]] os=Docker Desktop
+## buildx ls
+NAME/NODE           DRIVER/ENDPOINT     STATUS    BUILDKIT   PLATFORMS
+default             docker                                   
+ \_ default          \_ default         running   v0.29.0    linux/amd64 (+2), linux/arm64, linux/ppc64le, linux/s390x, (2 more)
+desktop-linux*      docker                                   
+ \_ desktop-linux    \_ desktop-linux   running   v0.29.0    linux/amd64 (+2), linux/arm64, linux/ppc64le, linux/s390x, (2 more)
+## buildx inspect
+Name:          desktop-linux
+Driver:        docker
+Name:             desktop-linux
+BuildKit version: v0.29.0
+Platforms:        linux/arm64, linux/amd64, linux/amd64/v2, linux/riscv64, linux/ppc64le, linux/s390x, linux/386
+ Name:                  docker.com/gpu=webgpu
+## go
+go version go1.27.1 darwin/arm64
+arm64
+darwin
+1
+## node
+v26.5.0
+## jgraph/drawio:32.6.1 platforms
+Name:      docker.io/jgraph/drawio:32.6.1
+Digest:    sha256:3d0a5a5ffb4f76abcecd9d17ae1373e3eefd0db07b657c545637dc9c6a7412e1
+  Name:        docker.io/jgraph/drawio:32.6.1@sha256:71d6ada4e11b163ff50593d8773b45a507e8b151a5ef74bd1da5298f03f62c94
+  Platform:    linux/amd64
+  Name:        docker.io/jgraph/drawio:32.6.1@sha256:693feb8978db554291793a8d0bd99f1055ffe3477ff6c0c7c60817e5acb38803
+  Platform:    linux/arm64
+  Name:        docker.io/jgraph/drawio:32.6.1@sha256:deb77c381c6d29af9ece2d0f552569abe690650599cff61c5d954e1049593faf
+  Platform:    unknown/unknown
+  Name:        docker.io/jgraph/drawio:32.6.1@sha256:2e1120a8fb04802238747f4c2070fa5b027f1d7538cf166b8f76d3f2fe798ce1
+  Platform:    unknown/unknown
+## crossbuild manifest list
+ERROR: pull access denied, repository does not exist or may require authorization: server message: insufficient_scope: authorization failed
+## static check
+arm64/fuzz: ELF 64-bit LSB executable, ARM aarch64, version 1 (SYSV), statically linked, stripped
+amd64/fuzz: ELF 64-bit LSB executable, x86-64, version 1 (SYSV), statically linked, stripped
