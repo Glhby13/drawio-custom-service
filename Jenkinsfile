@@ -92,7 +92,7 @@ pipeline {
     stage('Lint & Test') {
       parallel {
         stage('Go lint') {
-          steps { script { runIn(BUILD_MODE, GOLANGCI_IMAGE, 'golangci', 'golangci-lint run ./cmd/... ./internal/...') } }
+          steps { script { runIn(BUILD_MODE, GOLANGCI_IMAGE, 'golangci', 'golangci-lint run --timeout 10m ./cmd/... ./internal/...') } }
         }
         // One container runs these three one after the other: three concurrent Go builds in the same container exceed its
         // memory limit on the small lab nodes (cgroup OOM kills the container and Jenkins aborts the build as "Agent was removed").
