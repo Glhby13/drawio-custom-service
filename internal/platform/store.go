@@ -294,6 +294,15 @@ func (s *Store) LatestSnapshot(ctx context.Context, docID string) (seq int64, ke
 	return
 }
 
+// SnapshotAtOrBefore returns the newest snapshot with seq <= maxSeq.
+func (s *Store) SnapshotAtOrBefore(ctx context.Context, docID string, maxSeq int64) (seq int64, key string, err error) {
+	err = s.pool.QueryRow(ctx, `SELECT seq, s3_key FROM snapshots WHERE document_id=$1 AND seq<=$2 ORDER BY seq DESC LIMIT 1`, docID, maxSeq).Scan(&seq, &key)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return 0, "", errNotFound
+	}
+	return
+}
+
 // AddSnapshot records a stored snapshot and advances documents.snapshot_seq.
 func (s *Store) AddSnapshot(ctx context.Context, docID string, seq int64, key, sum string, size int) error {
 	return pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {

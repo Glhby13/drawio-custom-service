@@ -3,9 +3,35 @@
 (function () {
   'use strict';
   var $ = function (id) { return document.getElementById(id); };
-  var statusEl = $('status'), csrf = '', me = null, adapter = null, doc = null;
+  var statusEl = $('status'), csrf = '', me = null, adapter = null, doc = null, editorUi = null;
   // Features that exist in the code and the API but are switched off in the UI for now (comments: not useful yet; flip to re-enable).
   var FEATURES = { comments: false };
+  var THEME_KEY = 'drawspace_theme';
+
+  function applyHostTheme(mode, save) {
+    var m = mode === 'dark' ? 'dark' : 'light';
+    document.documentElement.setAttribute('data-theme', m);
+    if (save) {
+      try { localStorage.setItem(THEME_KEY, m); } catch (e) { /* storage disabled */ }
+    }
+    var btnDay = $('theme-day'), btnNight = $('theme-night');
+    if (btnDay) {
+      btnDay.classList.toggle('active', m === 'light');
+      btnDay.setAttribute('aria-pressed', String(m === 'light'));
+    }
+    if (btnNight) {
+      btnNight.classList.toggle('active', m === 'dark');
+      btnNight.setAttribute('aria-pressed', String(m === 'dark'));
+    }
+    if (editorUi && typeof editorUi.setDarkMode === 'function') {
+      try { editorUi.setDarkMode(m === 'dark'); } catch (e) { /* ignore */ }
+    }
+  }
+  (function initTheme() {
+    var saved = 'light';
+    try { saved = localStorage.getItem(THEME_KEY) || 'light'; } catch (e) { /* ignore */ }
+    applyHostTheme(saved === 'dark' ? 'dark' : 'light', false);
+  })();
 
   function setStatus(state, text) { statusEl.dataset.state = state; $('status-text').textContent = text; }
   function initials(name) {
@@ -55,7 +81,7 @@
   }
 
   // ---- dialog ----------------------------------------------------------------------------------------------------------
-  function dialog(title, body, actions) {
+  function dialog(title, body, actions, opts) {
     $('dlg-title').textContent = title;
     var b = $('dlg-body'), a = $('dlg-actions');
     b.textContent = ''; a.textContent = '';
@@ -64,8 +90,16 @@
       a.appendChild(el('button', { class: 'btn ' + (x.cls || ''), type: 'button', text: x.label, onclick: function () { if (x.fn) { var r = x.fn(); if (r === false) return; } if (!x.keep) $('dlg').close(); } }));
     });
     var d = $('dlg');
+    d.classList.toggle('dlg-wide', !!(opts && opts.wide));
     if (!d.open) d.showModal();
   }
+  if ($('dlg-close')) {
+    $('dlg-close').addEventListener('click', function () { $('dlg').close(); });
+  }
+  // Close dialog when clicking on the backdrop outside the dialog box
+  $('dlg').addEventListener('mousedown', function (e) {
+    if (e.target === $('dlg')) $('dlg').close();
+  });
   // Enter inside a dialog field = the primary button (the <form method=dialog> would otherwise just close the dialog)
   $('dlg-form').addEventListener('submit', function (e) {
     e.preventDefault();
@@ -185,6 +219,21 @@
 
   // Our functions live INSIDE draw.io's own menu bar (one bar, no second toolbar): "History" and "AI" to the right of "Help", plus copy-as-image entries.
   function installEditorMenus(ui, win, id) {
+    editorUi = ui;
+    // Close host dropdowns when the user clicks inside the draw.io iframe
+    if (win && win.document) {
+      win.document.addEventListener('mousedown', function () {
+        closeMenu();
+      }, true);
+    }
+    // Sync draw.io dark mode with saved DrawSpace theme if supported
+    if (typeof ui.setDarkMode === 'function') {
+      try { ui.setDarkMode(document.documentElement.getAttribute('data-theme') === 'dark'); } catch (e) { /* ignore */ }
+    }
+    // Optional: remove the orange draw.io app icon to the left of File without touching the draw.io image
+    var appIcon = ui.menubar.container.querySelector('.geSmallAppIcon');
+    if (appIcon) appIcon.remove();
+
     var Menu = win.Menu, canEdit = function () { return doc && doc.can && doc.can.edit; };
     Array.prototype.slice.call(ui.menubar.container.querySelectorAll('[data-drawspace-menu]')).forEach(function (n) { n.remove(); });
     ui.menus.put('drawspace', new Menu(function (menu, parent) {
@@ -303,6 +352,309 @@
   function itemRow(title, sub, buttons) {
     return el('div', { class: 'item' }, [el('div', { class: 'row' }, [el('span', { class: 'grow', text: title })].concat(buttons || [])), el('small', { text: sub })]);
   }
+  function opPill(type) {
+    var cls = '';
+    var prefix = '• ';
+    if (type === 'addCell' || type === 'addPage') { cls = 'add'; prefix = '+ '; }
+    else if (type === 'delCell' || type === 'delPage') { cls = 'del'; prefix = '− '; }
+    else if (type === 'setProp' || type === 'setPos' || type === 'renamePage' || type === 'orderPage' || type === 'setTitle') { cls = 'mod'; prefix = '✎ '; }
+    else if (type === 'connect') { cls = 'conn'; prefix = '↗ '; }
+    return el('span', { class: 'op-pill ' + cls, text: prefix + type });
+  }
+  function stripHtml(s) {
+    return String(s || '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+  }
+  function parseStyleMap(styleStr) {
+    var m = {};
+    String(styleStr || '').split(';').forEach(function (part) {
+      var idx = part.indexOf('=');
+      if (idx > 0) m[part.slice(0, idx).trim()] = part.slice(idx + 1).trim();
+      else if (part.trim()) m[part.trim()] = '1';
+    });
+    return m;
+  }
+  function buildCellLookup(pages) {
+    var map = {};
+    (pages || []).forEach(function (pg) {
+      (pg.cells || []).forEach(function (c) {
+        map[c.id] = { page: pg.name || pg.id, cell: c, props: c.props || {} };
+      });
+    });
+    return map;
+  }
+  function renderDiagramPreviewSvg(pages, highlightMap, deletedCells) {
+    var svgNS = 'http://www.w3.org/2000/svg';
+    var svg = document.createElementNS(svgNS, 'svg');
+    var pg = (pages && pages[0]) || { cells: [] };
+    var cells = (pg.cells || []).slice();
+    (deletedCells || []).forEach(function (dc) {
+      if (!cells.some(function (c) { return c.id === dc.id; })) cells.push(dc);
+    });
+    var vertices = {}, edges = [];
+    var minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    cells.forEach(function (c) {
+      var p = c.props || {};
+      if (c.k === 'v') {
+        var x = parseFloat(p.x), y = parseFloat(p.y), w = parseFloat(p.w), h = parseFloat(p.h);
+        if (isNaN(x)) x = 40;
+        if (isNaN(y)) y = 40;
+        if (isNaN(w) || w <= 0) w = 120;
+        if (isNaN(h) || h <= 0) h = 60;
+        vertices[c.id] = { id: c.id, x: x, y: y, w: w, h: h, props: p };
+        if (x < minX) minX = x;
+        if (y < minY) minY = y;
+        if (x + w > maxX) maxX = x + w;
+        if (y + h > maxY) maxY = y + h;
+      } else if (c.k === 'e') {
+        edges.push({ id: c.id, props: p });
+      }
+    });
+    if (!isFinite(minX)) { minX = 0; minY = 0; maxX = 560; maxY = 260; }
+    var pad = 36;
+    var vw = Math.max(420, (maxX - minX) + pad * 2);
+    var vh = Math.max(220, (maxY - minY) + pad * 2);
+    svg.setAttribute('viewBox', (minX - pad) + ' ' + (minY - pad) + ' ' + vw + ' ' + vh);
+
+    var defs = document.createElementNS(svgNS, 'defs');
+    var marker = document.createElementNS(svgNS, 'marker');
+    marker.setAttribute('id', 'pv-arrow');
+    marker.setAttribute('viewBox', '0 0 10 10');
+    marker.setAttribute('refX', '8');
+    marker.setAttribute('refY', '5');
+    marker.setAttribute('markerWidth', '6');
+    marker.setAttribute('markerHeight', '6');
+    marker.setAttribute('orient', 'auto-start-reverse');
+    var mpath = document.createElementNS(svgNS, 'path');
+    mpath.setAttribute('d', 'M 0 1 L 10 5 L 0 9 z');
+    mpath.setAttribute('fill', '#64748b');
+    marker.appendChild(mpath);
+    defs.appendChild(marker);
+    svg.appendChild(defs);
+
+    // Draw edges first
+    edges.forEach(function (e) {
+      var s = vertices[e.props.source], t = vertices[e.props.target];
+      var x1 = s ? s.x + s.w / 2 : minX + 40;
+      var y1 = s ? s.y + s.h / 2 : minY + 40;
+      var x2 = t ? t.x + t.w / 2 : x1 + 100;
+      var y2 = t ? t.y + t.h / 2 : y1;
+      var hl = highlightMap && highlightMap[e.id];
+      var stroke = hl === 'added' ? '#16a34a' : hl === 'deleted' ? '#dc2626' : hl === 'modified' ? '#2563eb' : '#64748b';
+      var line = document.createElementNS(svgNS, 'line');
+      line.setAttribute('x1', String(x1));
+      line.setAttribute('y1', String(y1));
+      line.setAttribute('x2', String(x2));
+      line.setAttribute('y2', String(y2));
+      line.setAttribute('stroke', stroke);
+      line.setAttribute('stroke-width', hl ? '2.5' : '1.75');
+      if (hl === 'deleted') line.setAttribute('stroke-dasharray', '5,4');
+      line.setAttribute('marker-end', 'url(#pv-arrow)');
+      svg.appendChild(line);
+    });
+
+    // Draw vertices
+    Object.keys(vertices).forEach(function (id) {
+      var v = vertices[id];
+      var st = parseStyleMap(v.props.style);
+      var fill = st.fillColor && st.fillColor !== 'none' ? st.fillColor : '#ffffff';
+      var stroke = st.strokeColor && st.strokeColor !== 'none' ? st.strokeColor : '#334155';
+      var hl = highlightMap && highlightMap[id];
+      var g = document.createElementNS(svgNS, 'g');
+      if (hl) {
+        var ring = document.createElementNS(svgNS, 'rect');
+        ring.setAttribute('x', String(v.x - 4));
+        ring.setAttribute('y', String(v.y - 4));
+        ring.setAttribute('width', String(v.w + 8));
+        ring.setAttribute('height', String(v.h + 8));
+        ring.setAttribute('rx', '8');
+        ring.setAttribute('fill', 'none');
+        ring.setAttribute('stroke', hl === 'added' ? '#16a34a' : hl === 'deleted' ? '#dc2626' : '#2563eb');
+        ring.setAttribute('stroke-width', '2.5');
+        if (hl === 'deleted') ring.setAttribute('stroke-dasharray', '5,4');
+        g.appendChild(ring);
+      }
+      var shape;
+      if (st.ellipse) {
+        shape = document.createElementNS(svgNS, 'ellipse');
+        shape.setAttribute('cx', String(v.x + v.w / 2));
+        shape.setAttribute('cy', String(v.y + v.h / 2));
+        shape.setAttribute('rx', String(v.w / 2));
+        shape.setAttribute('ry', String(v.h / 2));
+      } else if (st.rhombus) {
+        shape = document.createElementNS(svgNS, 'polygon');
+        var cx = v.x + v.w / 2, cy = v.y + v.h / 2;
+        shape.setAttribute('points', cx + ',' + v.y + ' ' + (v.x + v.w) + ',' + cy + ' ' + cx + ',' + (v.y + v.h) + ' ' + v.x + ',' + cy);
+      } else {
+        shape = document.createElementNS(svgNS, 'rect');
+        shape.setAttribute('x', String(v.x));
+        shape.setAttribute('y', String(v.y));
+        shape.setAttribute('width', String(v.w));
+        shape.setAttribute('height', String(v.h));
+        if (st.rounded === '1') shape.setAttribute('rx', '8');
+      }
+      shape.setAttribute('fill', hl === 'deleted' ? '#fee2e2' : fill);
+      shape.setAttribute('stroke', hl === 'deleted' ? '#dc2626' : stroke);
+      shape.setAttribute('stroke-width', '1.5');
+      if (hl === 'deleted') shape.setAttribute('opacity', '0.72');
+      g.appendChild(shape);
+
+      var label = stripHtml(v.props.value || '');
+      if (label) {
+        var txt = document.createElementNS(svgNS, 'text');
+        txt.setAttribute('x', String(v.x + v.w / 2));
+        txt.setAttribute('y', String(v.y + v.h / 2 + 4));
+        txt.setAttribute('text-anchor', 'middle');
+        txt.setAttribute('font-size', '12');
+        txt.setAttribute('font-family', 'Inter, system-ui, sans-serif');
+        txt.setAttribute('fill', '#0f172a');
+        txt.textContent = label.length > 26 ? label.slice(0, 25) + '…' : label;
+        g.appendChild(txt);
+      }
+      svg.appendChild(g);
+    });
+    return svg;
+  }
+
+  function describeBatchChanges(ops, stateBefore, stateAfter) {
+    var beforeMap = buildCellLookup(stateBefore);
+    var afterMap = buildCellLookup(stateAfter);
+    var highlightMap = {};
+    var deletedCells = [];
+    var rows = [];
+
+    (ops || []).forEach(function (op) {
+      var t = op.op;
+      var cid = op.id || op.page || '';
+      var bCell = beforeMap[cid] && beforeMap[cid].props || {};
+      var aCell = afterMap[cid] && afterMap[cid].props || {};
+      var label = stripHtml(aCell.value || bCell.value || op.name || '') || cid;
+      var detailKids = [];
+
+      if (t === 'addCell') {
+        highlightMap[cid] = 'added';
+        var kind = op.kind === 'e' ? 'Connector' : 'Shape';
+        detailKids.push(el('strong', { text: kind + ' "' + label + '"' }));
+        if (aCell.x !== undefined && aCell.y !== undefined) {
+          detailKids.push(' at (' + aCell.x + ', ' + aCell.y + '), size ' + (aCell.w || '—') + '×' + (aCell.h || '—'));
+        }
+      } else if (t === 'delCell') {
+        highlightMap[cid] = 'deleted';
+        if (beforeMap[cid] && beforeMap[cid].cell) deletedCells.push(beforeMap[cid].cell);
+        detailKids.push(el('strong', { text: 'Removed "' + label + '"' }));
+      } else if (t === 'setProp') {
+        if (!highlightMap[cid]) highlightMap[cid] = 'modified';
+        var oldVal = bCell[op.key] !== undefined ? stripHtml(bCell[op.key]) : '(empty)';
+        var newVal = op.value !== undefined && op.value !== null ? stripHtml(op.value) : (aCell[op.key] !== undefined ? stripHtml(aCell[op.key]) : '(empty)');
+        detailKids.push(el('strong', { text: '"' + label + '" · ' + (op.key || 'property') + ': ' }));
+        detailKids.push(el('span', { class: 'diff-val-old', text: oldVal || '(empty)' }));
+        detailKids.push(' → ');
+        detailKids.push(el('span', { class: 'diff-val-new', text: newVal || '(empty)' }));
+      } else if (t === 'setPos') {
+        if (!highlightMap[cid]) highlightMap[cid] = 'modified';
+        var oldPos = (bCell.x !== undefined ? '(' + bCell.x + ', ' + bCell.y + ') ' + (bCell.w || '') + '×' + (bCell.h || '') : 'previous');
+        var newPos = '(' + (aCell.x !== undefined ? aCell.x : '') + ', ' + (aCell.y !== undefined ? aCell.y : '') + ') ' + (aCell.w || '') + '×' + (aCell.h || '');
+        detailKids.push(el('strong', { text: 'Moved/resized "' + label + '": ' }));
+        detailKids.push(el('span', { class: 'diff-val-old', text: oldPos }));
+        detailKids.push(' → ');
+        detailKids.push(el('span', { class: 'diff-val-new', text: newPos }));
+      } else if (t === 'connect') {
+        if (!highlightMap[cid]) highlightMap[cid] = 'modified';
+        detailKids.push(el('strong', { text: 'Connected "' + label + '" (' + (op.end || 'end') + ' → ' + (op.target || 'none') + ')' }));
+      } else {
+        detailKids.push(el('strong', { text: t + (label ? ' · ' + label : '') }));
+      }
+      rows.push(el('div', { class: 'diff-row' }, [
+        opPill(t),
+        el('div', { class: 'diff-cell-text' }, detailKids),
+      ]));
+    });
+    return { rows: rows, highlightMap: highlightMap, deletedCells: deletedCells };
+  }
+
+  function openHistoryPreview(id, h, body) {
+    var who = h.actorType === 'ai' ? '🤖 ' + (h.agent || h.actor) + (h.onBehalfOf ? ' for ' + h.onBehalfOf : '') : h.actor;
+    api('GET', '/documents/' + id + '/history/' + encodeURIComponent(h.batch)).then(function (detail) {
+      var diff = describeBatchChanges(detail.ops || [], detail.stateBefore || [], detail.stateAfter || []);
+      var wrap = el('div', { class: 'preview-wrap' }, [
+        el('div', { class: 'preview-meta' }, [
+          el('span', null, ['Actor: ', el('strong', { text: who })]),
+          el('span', null, ['Revision: ', el('strong', { text: '#' + detail.fromSeq + (detail.toSeq !== detail.fromSeq ? '–#' + detail.toSeq : '') })]),
+          el('span', null, ['When: ', el('strong', { text: ago(h.at) })]),
+          el('span', null, ['Operations: ', el('strong', { text: String((detail.ops || []).length) })]),
+        ]),
+        el('div', { class: 'preview-canvas-box' }, [
+          el('div', { class: 'preview-canvas-head' }, [
+            el('span', { text: 'Diagram state at revision #' + detail.toSeq + ' (green = added, blue = modified, red dashed = removed)' }),
+          ]),
+          el('div', { class: 'preview-svg' }, [renderDiagramPreviewSvg(detail.stateAfter || [], diff.highlightMap, diff.deletedCells)]),
+        ]),
+        el('div', { class: 'preview-diff-list' }, diff.rows.length ? diff.rows : [el('small', { text: 'No cell-level details recorded.' })]),
+      ]);
+      var actions = [{ label: 'Close' }];
+      if (doc && doc.can && doc.can.edit) {
+        actions.push({
+          label: 'Revert this change',
+          cls: 'primary',
+          fn: function () {
+            api('POST', '/documents/' + id + '/revert', { batch: h.batch }).then(function (x) {
+              toast('info', 'Reverted ' + x.applied + ' operation(s)' + (x.skipped ? ', skipped ' + x.skipped : ''));
+              if (body) renderHistory(id, body);
+            }).catch(function (e) { toast('error', e.message); });
+          }
+        });
+      }
+      dialog('Preview change #' + h.toSeq + ' — ' + who, wrap, actions, { wide: true });
+    }).catch(function (e) { toast('error', e.message); });
+  }
+
+  function openVersionPreview(id, v) {
+    api('GET', '/documents/' + id + '/versions/' + encodeURIComponent(v.id)).then(function (detail) {
+      var pages = detail.state || [];
+      var summaryRows = [];
+      pages.forEach(function (pg) {
+        (pg.cells || []).forEach(function (c) {
+          var p = c.props || {};
+          var lbl = stripHtml(p.value || '') || c.id;
+          summaryRows.push(el('div', { class: 'diff-row' }, [
+            opPill(c.k === 'e' ? 'connect' : 'addCell'),
+            el('div', { class: 'diff-cell-text' }, [
+              el('strong', { text: (c.k === 'e' ? 'Connector ' : 'Shape ') + '"' + lbl + '"' }),
+              c.k === 'v' && p.x !== undefined ? ' at (' + p.x + ', ' + p.y + '), ' + (p.w || '—') + '×' + (p.h || '—') : '',
+            ]),
+          ]));
+        });
+      });
+      var wrap = el('div', { class: 'preview-wrap' }, [
+        el('div', { class: 'preview-meta' }, [
+          el('span', null, ['Version: ', el('strong', { text: v.name })]),
+          el('span', null, ['Revision: ', el('strong', { text: '#' + v.seq })]),
+          el('span', null, ['Saved by: ', el('strong', { text: v.createdBy })]),
+          el('span', null, ['When: ', el('strong', { text: ago(v.createdAt) })]),
+        ]),
+        el('div', { class: 'preview-canvas-box' }, [
+          el('div', { class: 'preview-canvas-head' }, [
+            el('span', { text: 'Visual snapshot of "' + v.name + '" (revision #' + v.seq + ')' }),
+          ]),
+          el('div', { class: 'preview-svg' }, [renderDiagramPreviewSvg(pages, null, null)]),
+        ]),
+        el('div', { class: 'preview-diff-list' }, summaryRows.length ? summaryRows : [el('small', { text: 'Empty diagram in this version.' })]),
+      ]);
+      var actions = [{ label: 'Close' }];
+      if (doc && doc.can && doc.can.restore) {
+        actions.push({
+          label: 'Restore this version',
+          cls: 'primary',
+          fn: function () {
+            api('POST', '/documents/' + id + '/versions/' + v.id + '/restore', {}).then(function () {
+              toast('info', 'Version restored');
+            }).catch(function (e) { toast('error', e.message); });
+          }
+        });
+      }
+      dialog('Preview version — "' + v.name + '"', wrap, actions, { wide: true });
+    }).catch(function (e) { toast('error', e.message); });
+  }
+
   function renderHistory(id, body) {
     body.textContent = 'Loading…';
     api('GET', '/documents/' + id + '/history?limit=60').then(function (r) {
@@ -310,14 +662,32 @@
       if (!r.history.length) body.appendChild(el('p', { text: 'No changes yet.' }));
       r.history.forEach(function (h) {
         var who = h.actorType === 'ai' ? '🤖 ' + (h.agent || h.actor) + (h.onBehalfOf ? ' for ' + h.onBehalfOf : '') : h.actor;
-        var btns = [];
-        if (doc.can && doc.can.edit) btns.push(el('button', { class: 'btn', type: 'button', text: 'Revert', 'data-batch': h.batch, onclick: function () {
-          ask('Revert change', 'Undo this change by ' + who + '? Other later changes stay.', 'Revert').then(function (ok) {
-            if (!ok) return;
-            api('POST', '/documents/' + id + '/revert', { batch: h.batch }).then(function (x) { toast('info', 'Reverted ' + x.applied + ' operation(s)' + (x.skipped ? ', skipped ' + x.skipped : '')); renderHistory(id, body); }).catch(function (e) { toast('error', e.message); });
-          });
-        } }));
-        body.appendChild(itemRow(who, h.ops + ' op(s): ' + (h.types || []).join(', ') + ' · ' + ago(h.at), btns));
+        var seqLabel = '#' + h.fromSeq + (h.toSeq && h.toSeq !== h.fromSeq ? '–#' + h.toSeq : '');
+        var pills = (h.types || []).map(opPill);
+        var btns = [
+          el('button', { class: 'btn', type: 'button', text: 'Preview', 'data-preview-batch': h.batch, onclick: function (e) { e.stopPropagation(); openHistoryPreview(id, h, body); } }),
+        ];
+        if (doc.can && doc.can.edit) {
+          btns.push(el('button', { class: 'btn', type: 'button', text: 'Revert', 'data-batch': h.batch, onclick: function (e) {
+            e.stopPropagation();
+            ask('Revert change', 'Undo this change by ' + who + '? Other later changes stay.', 'Revert').then(function (ok) {
+              if (!ok) return;
+              api('POST', '/documents/' + id + '/revert', { batch: h.batch }).then(function (x) { toast('info', 'Reverted ' + x.applied + ' operation(s)' + (x.skipped ? ', skipped ' + x.skipped : '')); renderHistory(id, body); }).catch(function (e) { toast('error', e.message); });
+            });
+          } }));
+        }
+        var card = el('div', { class: 'item', onclick: function () { openHistoryPreview(id, h, body); } }, [
+          el('div', { class: 'row' }, [
+            el('span', { class: 'hist-actor grow', text: who }),
+            el('span', { class: 'hist-seq', text: seqLabel }),
+          ]),
+          el('div', { class: 'hist-ops' }, pills),
+          el('div', { class: 'row' }, [
+            el('small', { class: 'grow', text: h.ops + ' op(s) · ' + ago(h.at) }),
+            el('div', { class: 'actions' }, btns),
+          ]),
+        ]);
+        body.appendChild(card);
       });
     }).catch(function (e) { body.textContent = e.message; });
   }
@@ -327,14 +697,29 @@
       body.textContent = '';
       if (doc.can && doc.can.edit) body.appendChild(el('button', { class: 'btn primary', type: 'button', id: 'save-version', text: 'Save current as version', onclick: function () { saveVersionDialog(id); } }));
       (r.versions || []).forEach(function (v) {
-        var btns = [];
-        if (doc.can && doc.can.restore) btns.push(el('button', { class: 'btn', type: 'button', text: 'Restore', onclick: function () {
-          ask('Restore version', 'Restore "' + v.name + '"? The current state stays in history and can be reverted.', 'Restore').then(function (ok) {
-            if (!ok) return;
-            api('POST', '/documents/' + id + '/versions/' + v.id + '/restore', {}).then(function () { toast('info', 'Version restored'); }).catch(function (e) { toast('error', e.message); });
-          });
-        } }));
-        body.appendChild(itemRow(v.name, 'revision ' + v.seq + ' · ' + v.createdBy + ' · ' + ago(v.createdAt), btns));
+        var btns = [
+          el('button', { class: 'btn', type: 'button', text: 'Preview', 'data-preview-version': v.id, onclick: function (e) { e.stopPropagation(); openVersionPreview(id, v); } }),
+        ];
+        if (doc.can && doc.can.restore) {
+          btns.push(el('button', { class: 'btn', type: 'button', text: 'Restore', onclick: function (e) {
+            e.stopPropagation();
+            ask('Restore version', 'Restore "' + v.name + '"? The current state stays in history and can be reverted.', 'Restore').then(function (ok) {
+              if (!ok) return;
+              api('POST', '/documents/' + id + '/versions/' + v.id + '/restore', {}).then(function () { toast('info', 'Version restored'); }).catch(function (e) { toast('error', e.message); });
+            });
+          } }));
+        }
+        var card = el('div', { class: 'item', onclick: function () { openVersionPreview(id, v); } }, [
+          el('div', { class: 'row' }, [
+            el('span', { class: 'hist-actor grow', text: v.name }),
+            el('span', { class: 'hist-seq', text: '#' + v.seq }),
+          ]),
+          el('div', { class: 'row' }, [
+            el('small', { class: 'grow', text: 'by ' + v.createdBy + ' · ' + ago(v.createdAt) }),
+            el('div', { class: 'actions' }, btns),
+          ]),
+        ]);
+        body.appendChild(card);
       });
     }).catch(function (e) { body.textContent = e.message; });
   }
@@ -433,8 +818,25 @@
   });
 
   function helpTip(explanation) {
+    var svgNS = 'http://www.w3.org/2000/svg';
+    var icon = document.createElementNS(svgNS, 'svg');
+    icon.setAttribute('viewBox', '0 0 24 24');
+    icon.setAttribute('width', '13');
+    icon.setAttribute('height', '13');
+    icon.setAttribute('fill', 'none');
+    icon.setAttribute('stroke', 'currentColor');
+    icon.setAttribute('stroke-width', '2.2');
+    icon.setAttribute('stroke-linecap', 'round');
+    icon.setAttribute('stroke-linejoin', 'round');
+    icon.setAttribute('aria-hidden', 'true');
+    var p1 = document.createElementNS(svgNS, 'path');
+    p1.setAttribute('d', 'M12 16v-5');
+    var p2 = document.createElementNS(svgNS, 'path');
+    p2.setAttribute('d', 'M12 7.5h.01');
+    icon.appendChild(p1);
+    icon.appendChild(p2);
     return el('span', { class: 'help-tip', tabindex: '0', role: 'note', 'aria-label': explanation }, [
-      '?',
+      icon,
       el('span', { class: 'help-tip-popup', text: explanation }),
     ]);
   }
@@ -625,8 +1027,11 @@
   var menu = $('menu'), userbtn = $('userbtn');
   function closeMenu() { menu.hidden = true; userbtn.setAttribute('aria-expanded', 'false'); }
   userbtn.addEventListener('click', function (e) { e.stopPropagation(); var open = menu.hidden; menu.hidden = !open; userbtn.setAttribute('aria-expanded', String(open)); if (open) { var f = menu.querySelector('.menu-item:not([hidden])'); if (f) f.focus(); } });
-  document.addEventListener('click', function (e) { if (!menu.hidden && !$('user').contains(e.target)) closeMenu(); });
+  document.addEventListener('mousedown', function (e) { if (!menu.hidden && !$('user').contains(e.target)) closeMenu(); });
+  window.addEventListener('blur', function () { if (!menu.hidden) closeMenu(); });
   document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !menu.hidden) { closeMenu(); userbtn.focus(); } });
+  if ($('theme-day')) $('theme-day').addEventListener('click', function (e) { e.stopPropagation(); applyHostTheme('light', true); });
+  if ($('theme-night')) $('theme-night').addEventListener('click', function (e) { e.stopPropagation(); applyHostTheme('dark', true); });
   $('mi-password').addEventListener('click', function () { closeMenu(); passwordDialog(); });
 
   fetch('/api/me', { credentials: 'same-origin' })

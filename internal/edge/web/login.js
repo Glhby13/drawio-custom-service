@@ -2,6 +2,8 @@
   'use strict';
   var f = document.getElementById('f');
   var err = document.getElementById('err');
+  var errText = document.getElementById('err-text');
+  var errClose = document.getElementById('err-close');
   var btnAD = document.getElementById('submit');
   var btnLocal = document.getElementById('local-btn');
   var totpRow = document.getElementById('totp-row');
@@ -9,16 +11,91 @@
   var uInput = document.getElementById('username');
   var pInput = document.getElementById('password');
   var ssoLink = document.getElementById('sso');
+  var themeToggle = document.getElementById('theme-toggle');
+  var themeIcon = document.getElementById('theme-icon');
+  var themeLabel = document.getElementById('theme-label');
+  var brandLogo = document.getElementById('brand-logo');
 
   var q = new URLSearchParams(location.search);
   var back = q.get('return_to') || '/';
   if (back.charAt(0) !== '/' || back.slice(0, 2) === '//') back = '/';
   if (ssoLink) ssoLink.href = '/login/sso?return_to=' + encodeURIComponent(back);
 
-  function show(msg) {
-    err.textContent = msg;
-    err.hidden = !msg;
+  // Random day/night mode on login page (not persisted to localStorage)
+  var loginTheme = Math.random() < 0.5 ? 'dark' : 'light';
+  function makeThemeSvg(isDark) {
+    var svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('viewBox', '0 0 24 24');
+    svg.setAttribute('width', '15');
+    svg.setAttribute('height', '15');
+    svg.setAttribute('fill', 'none');
+    svg.setAttribute('stroke', 'currentColor');
+    svg.setAttribute('stroke-width', '2.1');
+    svg.setAttribute('stroke-linecap', 'round');
+    svg.setAttribute('stroke-linejoin', 'round');
+    if (isDark) {
+      // Sun icon to switch to Day mode
+      var c = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+      c.setAttribute('cx', '12'); c.setAttribute('cy', '12'); c.setAttribute('r', '4');
+      svg.appendChild(c);
+      ['M12 2v2', 'M12 20v2', 'M4.93 4.93l1.41 1.41', 'M17.66 17.66l1.41 1.41', 'M2 12h2', 'M20 12h2', 'M6.34 17.66l-1.41 1.41', 'M19.07 4.93l-1.41 1.41'].forEach(function (d) {
+        var p = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        p.setAttribute('d', d);
+        svg.appendChild(p);
+      });
+    } else {
+      // Moon icon to switch to Night mode
+      var p = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      p.setAttribute('d', 'M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z');
+      svg.appendChild(p);
+    }
+    return svg;
   }
+  function applyLoginTheme(mode) {
+    loginTheme = mode === 'dark' ? 'dark' : 'light';
+    document.documentElement.setAttribute('data-theme', loginTheme);
+    if (brandLogo) {
+      brandLogo.src = loginTheme === 'dark' ? '/login-assets/drawspace-logo-dark.svg' : '/login-assets/drawspace-logo.svg';
+    }
+    if (themeIcon) {
+      themeIcon.textContent = '';
+      themeIcon.appendChild(makeThemeSvg(loginTheme === 'dark'));
+    }
+    if (themeLabel) {
+      themeLabel.textContent = loginTheme === 'dark' ? 'Day mode' : 'Night mode';
+    }
+  }
+  applyLoginTheme(loginTheme);
+  if (themeToggle) {
+    themeToggle.addEventListener('click', function () {
+      applyLoginTheme(loginTheme === 'dark' ? 'light' : 'dark');
+    });
+  }
+
+  var errTimer = null;
+  function show(msg) {
+    clearTimeout(errTimer);
+    if (errText) errText.textContent = msg;
+    else err.textContent = msg;
+    err.hidden = !msg;
+    if (msg) {
+      errTimer = setTimeout(function () {
+        show('');
+      }, 3000);
+    }
+  }
+
+  if (errClose) {
+    errClose.addEventListener('click', function (e) {
+      e.stopPropagation();
+      show('');
+    });
+  }
+  document.addEventListener('mousedown', function (e) {
+    if (!err.hidden && !err.contains(e.target)) {
+      show('');
+    }
+  });
 
   document.getElementById('toggle').addEventListener('click', function () {
     var on = pInput.type === 'password';

@@ -38,8 +38,10 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/v1/documents/{id}/operations", s.api(s.postOperations))
 	mux.HandleFunc("POST /api/v1/documents/{id}/layout", s.api(s.postLayout))
 	mux.HandleFunc("GET /api/v1/documents/{id}/history", s.api(s.getHistory))
+	mux.HandleFunc("GET /api/v1/documents/{id}/history/{batch}", s.api(s.getHistoryBatch))
 	mux.HandleFunc("POST /api/v1/documents/{id}/revert", s.api(s.postRevert))
 	mux.HandleFunc("GET /api/v1/documents/{id}/versions", s.api(s.getVersions))
+	mux.HandleFunc("GET /api/v1/documents/{id}/versions/{vid}", s.api(s.getVersionDetail))
 	mux.HandleFunc("POST /api/v1/documents/{id}/versions", s.api(s.postVersion))
 	mux.HandleFunc("POST /api/v1/documents/{id}/versions/{vid}/restore", s.api(s.postRestore))
 	mux.HandleFunc("GET /api/v1/documents/{id}/comments", s.api(s.getComments))
@@ -584,6 +586,65 @@ func (s *Server) getHistory(w http.ResponseWriter, r *http.Request, p *Principal
 	writeJSON(w, http.StatusOK, map[string]any{"history": items})
 }
 
+func (s *Server) loadDocAtSeq(ctx context.Context, docID string, targetSeq int64) (*model.Doc, error) {
+	seq, key, err := s.store.SnapshotAtOrBefore(ctx, docID, targetSeq)
+	if err != nil {
+		return nil, err
+	}
+	raw, err := s.blob.Get(ctx, key)
+	if err != nil {
+		return nil, err
+	}
+	doc := model.NewDoc()
+	if err := json.Unmarshal(raw, doc); err != nil {
+		return nil, err
+	}
+	doc.Seq = seq
+	if targetSeq > seq {
+		tail, err := s.store.LoadOps(ctx, docID, seq, targetSeq)
+		if err != nil {
+			return nil, err
+		}
+		for i := range tail {
+			doc.Apply(&tail[i])
+			doc.Seq = tail[i].Seq
+		}
+	}
+	return doc, nil
+}
+
+func (s *Server) getHistoryBatch(w http.ResponseWriter, r *http.Request, p *Principal) {
+	d, _, ok := s.access(w, r, p, ActRead)
+	if !ok {
+		return
+	}
+	batch := r.PathValue("batch")
+	batchOps, err := s.store.LoadBatch(r.Context(), d.ID, batch)
+	if err != nil || len(batchOps) == 0 {
+		writeErr(w, http.StatusNotFound, "not_found", "batch not found")
+		return
+	}
+	fromSeq := batchOps[0].Seq
+	toSeq := batchOps[len(batchOps)-1].Seq
+	docBefore, _ := s.loadDocAtSeq(r.Context(), d.ID, fromSeq-1)
+	docAfter, _ := s.loadDocAtSeq(r.Context(), d.ID, toSeq)
+	var stateBefore, stateAfter []model.StatePage
+	if docBefore != nil {
+		stateBefore = docBefore.State()
+	}
+	if docAfter != nil {
+		stateAfter = docAfter.State()
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"batch":       batch,
+		"fromSeq":     fromSeq,
+		"toSeq":       toSeq,
+		"ops":         batchOps,
+		"stateBefore": stateBefore,
+		"stateAfter":  stateAfter,
+	})
+}
+
 func (s *Server) postRevert(w http.ResponseWriter, r *http.Request, p *Principal) {
 	d, _, ok := s.access(w, r, p, ActRevert)
 	if !ok {
@@ -646,6 +707,29 @@ func (s *Server) getVersions(w http.ResponseWriter, r *http.Request, p *Principa
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"versions": vs})
+}
+
+func (s *Server) getVersionDetail(w http.ResponseWriter, r *http.Request, p *Principal) {
+	d, _, ok := s.access(w, r, p, ActRead)
+	if !ok {
+		return
+	}
+	v, err := s.store.GetVersion(r.Context(), d.ID, r.PathValue("vid"))
+	if err != nil {
+		writeErr(w, http.StatusNotFound, "not_found", "version not found")
+		return
+	}
+	raw, err := s.blob.Get(r.Context(), versionKey(d.ID, v.ID))
+	if err != nil {
+		writeErr(w, http.StatusBadGateway, "storage", "version content unavailable")
+		return
+	}
+	old := model.NewDoc()
+	if err := json.Unmarshal(raw, old); err != nil {
+		writeErr(w, http.StatusInternalServerError, "internal", "")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"version": v, "state": old.State()})
 }
 
 func (s *Server) postVersion(w http.ResponseWriter, r *http.Request, p *Principal) {
