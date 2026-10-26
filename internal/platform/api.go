@@ -639,6 +639,7 @@ func (s *Server) getHistoryBatch(w http.ResponseWriter, r *http.Request, p *Prin
 		"batch":       batch,
 		"fromSeq":     fromSeq,
 		"toSeq":       toSeq,
+		"headSeq":     d.HeadSeq,
 		"ops":         batchOps,
 		"stateBefore": stateBefore,
 		"stateAfter":  stateAfter,
@@ -652,6 +653,7 @@ func (s *Server) postRevert(w http.ResponseWriter, r *http.Request, p *Principal
 	}
 	var in struct {
 		Batch string `json:"batch"`
+		Mode  string `json:"mode,omitempty"` // "" (undo/invert batch), "restore_to" (restore full diagram to toSeq), "restore_before" (restore full diagram to fromSeq-1)
 	}
 	if !readJSON(w, r, &in, 4096) || in.Batch == "" {
 		writeErr(w, http.StatusBadRequest, "bad_request", "batch required")
@@ -662,11 +664,36 @@ func (s *Server) postRevert(w http.ResponseWriter, r *http.Request, p *Principal
 		writeErr(w, http.StatusNotFound, "not_found", "batch not found")
 		return
 	}
+	fromSeq := batchOps[0].Seq
+	toSeq := batchOps[len(batchOps)-1].Seq
+	hasRestore := false
 	for _, o := range batchOps {
 		if o.T == "restore" {
-			writeErr(w, http.StatusUnprocessableEntity, "not_revertable", "a restore cannot be reverted; restore another version instead")
+			hasRestore = true
+			break
+		}
+	}
+	if in.Mode == "restore_to" || in.Mode == "restore_before" || hasRestore {
+		targetSeq := toSeq
+		if in.Mode == "restore_before" || hasRestore {
+			targetSeq = fromSeq - 1
+			if targetSeq < 0 {
+				targetSeq = 0
+			}
+		}
+		targetDoc, err := s.loadDocAtSeq(r.Context(), d.ID, targetSeq)
+		if err != nil || targetDoc == nil {
+			writeErr(w, http.StatusInternalServerError, "internal", "could not reconstruct target revision")
 			return
 		}
+		seq, err := s.restoreTo(r.Context(), d.ID, p, fmt.Sprintf("rev-%d", targetSeq), targetDoc)
+		if err != nil {
+			writeErr(w, http.StatusInternalServerError, "internal", "")
+			return
+		}
+		_ = s.store.Audit(r.Context(), p.Actor, d.ID, "revert", "ok", map[string]any{"batch": in.Batch, "mode": in.Mode, "targetSeq": targetSeq, "seq": seq, "applied": 1, "skipped": 0})
+		writeJSON(w, http.StatusOK, map[string]any{"reverted": in.Batch, "applied": 1, "skipped": 0, "seq": seq, "targetSeq": targetSeq})
+		return
 	}
 	var inv []model.Op
 	var notInv []string
@@ -689,6 +716,15 @@ func (s *Server) postRevert(w http.ResponseWriter, r *http.Request, p *Principal
 	n := 0
 	if res != nil {
 		n = len(res.Applied)
+	}
+	if n == 0 {
+		if targetDoc, err2 := s.loadDocAtSeq(r.Context(), d.ID, toSeq); err2 == nil && targetDoc != nil {
+			if seq, err3 := s.restoreTo(r.Context(), d.ID, p, fmt.Sprintf("rev-%d", toSeq), targetDoc); err3 == nil {
+				_ = s.store.Audit(r.Context(), p.Actor, d.ID, "revert", "ok", map[string]any{"batch": in.Batch, "mode": "fallback_restore_to", "targetSeq": toSeq, "seq": seq, "applied": 1, "skipped": 0})
+				writeJSON(w, http.StatusOK, map[string]any{"reverted": in.Batch, "applied": 1, "skipped": 0, "seq": seq, "targetSeq": toSeq})
+				return
+			}
+		}
 	}
 	_ = s.store.Audit(r.Context(), p.Actor, d.ID, "revert", "ok", map[string]any{"batch": in.Batch, "applied": n, "skipped": len(res.Skipped) + len(notInv)})
 	writeJSON(w, http.StatusOK, map[string]any{"reverted": in.Batch, "applied": n, "skipped": len(res.Skipped) + len(notInv)})

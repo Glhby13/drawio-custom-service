@@ -13,7 +13,6 @@
   var ssoLink = document.getElementById('sso');
   var themeToggle = document.getElementById('theme-toggle');
   var themeIcon = document.getElementById('theme-icon');
-  var themeLabel = document.getElementById('theme-label');
   var brandLogo = document.getElementById('brand-logo');
 
   var q = new URLSearchParams(location.search);
@@ -23,52 +22,77 @@
 
   // Random day/night mode on login page (not persisted to localStorage)
   var loginTheme = Math.random() < 0.5 ? 'dark' : 'light';
+  var themeTransTimer = null;
   function makeThemeSvg(isDark) {
     var svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
     svg.setAttribute('viewBox', '0 0 24 24');
-    svg.setAttribute('width', '15');
-    svg.setAttribute('height', '15');
+    svg.setAttribute('width', '17');
+    svg.setAttribute('height', '17');
     svg.setAttribute('fill', 'none');
     svg.setAttribute('stroke', 'currentColor');
-    svg.setAttribute('stroke-width', '2.1');
+    svg.setAttribute('stroke-width', '2');
     svg.setAttribute('stroke-linecap', 'round');
     svg.setAttribute('stroke-linejoin', 'round');
     if (isDark) {
-      // Sun icon to switch to Day mode
+      // Lucide sun icon (shown in night mode to switch to day mode)
       var c = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
       c.setAttribute('cx', '12'); c.setAttribute('cy', '12'); c.setAttribute('r', '4');
       svg.appendChild(c);
-      ['M12 2v2', 'M12 20v2', 'M4.93 4.93l1.41 1.41', 'M17.66 17.66l1.41 1.41', 'M2 12h2', 'M20 12h2', 'M6.34 17.66l-1.41 1.41', 'M19.07 4.93l-1.41 1.41'].forEach(function (d) {
+      ['M12 2v2', 'M12 20v2', 'm4.93 4.93 1.41 1.41', 'm17.66 17.66 1.41 1.41', 'M2 12h2', 'M20 12h2', 'm6.34 17.66-1.41 1.41', 'm19.07 4.93-1.41 1.41'].forEach(function (d) {
         var p = document.createElementNS('http://www.w3.org/2000/svg', 'path');
         p.setAttribute('d', d);
         svg.appendChild(p);
       });
     } else {
-      // Moon icon to switch to Night mode
+      // Lucide moon icon (shown in day mode to switch to night mode)
       var p = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-      p.setAttribute('d', 'M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z');
+      p.setAttribute('d', 'M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z');
       svg.appendChild(p);
     }
     return svg;
   }
-  function applyLoginTheme(mode) {
+  function applyLoginTheme(mode, animate) {
     loginTheme = mode === 'dark' ? 'dark' : 'light';
-    document.documentElement.setAttribute('data-theme', loginTheme);
+    var root = document.documentElement;
+    if (animate) {
+      clearTimeout(themeTransTimer);
+      root.classList.add('theme-transition');
+      themeTransTimer = setTimeout(function () {
+        root.classList.remove('theme-transition');
+      }, 400);
+    }
+    root.setAttribute('data-theme', loginTheme);
     if (brandLogo) {
-      brandLogo.src = loginTheme === 'dark' ? '/login-assets/drawspace-logo-dark.svg' : '/login-assets/drawspace-logo.svg';
+      var nextSrc = loginTheme === 'dark' ? '/login-assets/drawspace-logo-dark.svg' : '/login-assets/drawspace-logo.svg';
+      if (animate && brandLogo.getAttribute('src') !== nextSrc) {
+        brandLogo.style.opacity = '0.35';
+        setTimeout(function () {
+          brandLogo.src = nextSrc;
+          brandLogo.style.opacity = '1';
+        }, 120);
+      } else {
+        brandLogo.src = nextSrc;
+      }
     }
     if (themeIcon) {
       themeIcon.textContent = '';
+      if (animate) {
+        themeIcon.classList.remove('pop');
+        void themeIcon.offsetWidth;
+        themeIcon.classList.add('pop');
+      }
       themeIcon.appendChild(makeThemeSvg(loginTheme === 'dark'));
     }
-    if (themeLabel) {
-      themeLabel.textContent = loginTheme === 'dark' ? 'Day mode' : 'Night mode';
+    if (themeToggle) {
+      var tip = loginTheme === 'dark' ? 'Switch to day mode' : 'Switch to night mode';
+      themeToggle.setAttribute('title', tip);
+      themeToggle.setAttribute('aria-label', tip);
     }
   }
-  applyLoginTheme(loginTheme);
+  applyLoginTheme(loginTheme, false);
   if (themeToggle) {
     themeToggle.addEventListener('click', function () {
-      applyLoginTheme(loginTheme === 'dark' ? 'light' : 'dark');
+      applyLoginTheme(loginTheme === 'dark' ? 'light' : 'dark', true);
     });
   }
 

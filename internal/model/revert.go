@@ -25,18 +25,72 @@ func InverseOps(cur *Doc, batch []Op, idPrefix string) (inv []Op, skipped []stri
 			if addedPages[o.Page] {
 				continue // the whole page goes away with its addPage inverse
 			}
+			pg := cur.Pages[o.Page]
+			if pg != nil {
+				if c := pg.Cells[o.Cell]; c != nil && !c.Alive() {
+					// Cell added in this batch was later deleted; re-create/restore it at its batch state.
+					props := o.Props
+					if len(props) == 0 {
+						props = snap(c).Props
+					}
+					parent, order := o.Parent, o.Order
+					if parent == "" {
+						parent = c.Parent.V
+					}
+					if order == "" {
+						order = c.Order.V
+					}
+					inv = append(inv, Op{ID: id(), T: OpRestore, Page: o.Page, Cells: []CellSnap{{
+						ID: o.Cell, Kind: o.Kind, Parent: parent, Order: order, Props: props,
+					}}})
+					continue
+				}
+			}
 			inv = append(inv, Op{ID: id(), T: OpDeleteCell, Page: o.Page, Cell: o.Cell})
 		case OpDeleteCell:
+			pg := cur.Pages[o.Page]
+			if pg != nil {
+				if c := pg.Cells[o.Cell]; c != nil && c.Alive() {
+					inv = append(inv, Op{ID: id(), T: OpDeleteCell, Page: o.Page, Cell: o.Cell})
+					continue
+				}
+			}
 			if len(r.Prev.Cells) > 0 {
 				inv = append(inv, Op{ID: id(), T: OpRestore, Page: o.Page, Cells: r.Prev.Cells})
 			}
 			for _, e := range r.Clr {
 				inv = append(inv, Op{ID: id(), T: OpConnect, Page: o.Page, Cell: e.Cell, End: e.End, Term: e.Term})
 			}
+		case OpRestore:
+			pg := cur.Pages[o.Page]
+			var toRestore []CellSnap
+			for _, sc := range o.Cells {
+				if pg != nil {
+					if c := pg.Cells[sc.ID]; c != nil && !c.Alive() {
+						toRestore = append(toRestore, sc)
+						continue
+					}
+				}
+				inv = append(inv, Op{ID: id(), T: OpDeleteCell, Page: o.Page, Cell: sc.ID})
+			}
+			if len(toRestore) > 0 {
+				inv = append(inv, Op{ID: id(), T: OpRestore, Page: o.Page, Cells: toRestore})
+			}
 		case OpSetProp:
+			pg := cur.Pages[o.Page]
+			if pg != nil {
+				if c := pg.Cells[o.Cell]; c != nil && !c.Alive() {
+					inv = append(inv, Op{ID: id(), T: OpRestore, Page: o.Page, Cells: []CellSnap{snap(c)}})
+				}
+			}
 			op := Op{ID: id(), T: OpSetProp, Page: o.Page, Cell: o.Cell, Key: o.Key}
 			if r.Prev.Had {
 				v := r.Prev.Val
+				if pg != nil && pg.Cells[o.Cell] != nil {
+					if curV, ok := pg.Cells[o.Cell].Prop(o.Key); ok && curV == v && o.Val != nil {
+						v = *o.Val
+					}
+				}
 				op.Val = &v
 			}
 			inv = append(inv, op)
@@ -47,11 +101,18 @@ func InverseOps(cur *Doc, batch []Op, idPrefix string) (inv []Op, skipped []stri
 				continue
 			}
 			c := pg.Cells[o.Cell]
+			if !c.Alive() {
+				inv = append(inv, Op{ID: id(), T: OpRestore, Page: o.Page, Cells: []CellSnap{snap(c)}})
+			}
 			px, py := 0.0, 0.0
 			if p := pg.Cells[c.Parent.V]; p != nil {
 				px, py = pg.Abs(p)
 			}
-			x, y := Round4(px+parseNum(r.Prev.RX)), Round4(py+parseNum(r.Prev.RY))
+			targetRX, targetRY := r.Prev.RX, r.Prev.RY
+			if c.Alive() && Num(c.num("gx")) == r.Prev.RX && Num(c.num("gy")) == r.Prev.RY && r.RX != "" {
+				targetRX, targetRY = r.RX, r.RY
+			}
+			x, y := Round4(px+parseNum(targetRX)), Round4(py+parseNum(targetRY))
 			inv = append(inv, Op{ID: id(), T: OpSetPos, Page: o.Page, Cell: o.Cell, X: &x, Y: &y})
 		case OpReparent:
 			inv = append(inv, Op{ID: id(), T: OpReparent, Page: o.Page, Cell: o.Cell, Parent: r.Prev.Parent, Order: r.Prev.Order})

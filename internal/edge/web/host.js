@@ -7,10 +7,19 @@
   // Features that exist in the code and the API but are switched off in the UI for now (comments: not useful yet; flip to re-enable).
   var FEATURES = { comments: false };
   var THEME_KEY = 'drawspace_theme';
+  var hostThemeTimer = null;
 
   function applyHostTheme(mode, save) {
     var m = mode === 'dark' ? 'dark' : 'light';
-    document.documentElement.setAttribute('data-theme', m);
+    var root = document.documentElement;
+    if (save) {
+      clearTimeout(hostThemeTimer);
+      root.classList.add('theme-transition');
+      hostThemeTimer = setTimeout(function () {
+        root.classList.remove('theme-transition');
+      }, 400);
+    }
+    root.setAttribute('data-theme', m);
     if (save) {
       try { localStorage.setItem(THEME_KEY, m); } catch (e) { /* storage disabled */ }
     }
@@ -356,10 +365,12 @@
     var cls = '';
     var prefix = '• ';
     if (type === 'addCell' || type === 'addPage') { cls = 'add'; prefix = '+ '; }
-    else if (type === 'delCell' || type === 'delPage') { cls = 'del'; prefix = '− '; }
-    else if (type === 'setProp' || type === 'setPos' || type === 'renamePage' || type === 'orderPage' || type === 'setTitle') { cls = 'mod'; prefix = '✎ '; }
+    else if (type === 'deleteCell' || type === 'delCell' || type === 'deletePage' || type === 'delPage') { cls = 'del'; prefix = '− '; }
+    else if (type === 'setPos' || type === 'reparent' || type === 'reorder') { cls = 'move'; prefix = '↔ '; }
+    else if (type === 'setProp' || type === 'renamePage' || type === 'orderPage' || type === 'setTitle') { cls = 'mod'; prefix = '✎ '; }
     else if (type === 'connect') { cls = 'conn'; prefix = '↗ '; }
-    return el('span', { class: 'op-pill ' + cls, text: prefix + type });
+    else if (type === 'restoreCells' || type === 'restore') { cls = 'restore'; prefix = '↺ '; }
+    return el('span', { class: 'op-pill ' + cls, text: prefix + (type || 'op') });
   }
   function stripHtml(s) {
     return String(s || '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
@@ -373,145 +384,478 @@
     });
     return m;
   }
+  function cellProp(p, k, fallback) {
+    if (!p) return fallback;
+    if (p[k] !== undefined && p[k] !== '') return p[k];
+    if (p['st:' + k] !== undefined && p['st:' + k] !== '') return p['st:' + k];
+    return fallback;
+  }
+  function cellNum(p, k1, k2, defVal) {
+    if (!p) return defVal;
+    var v = parseFloat(p[k1]);
+    if (!isNaN(v)) return v;
+    if (k2) {
+      v = parseFloat(p[k2]);
+      if (!isNaN(v)) return v;
+    }
+    return defVal;
+  }
+  function cellShapeType(c) {
+    var p = (c && c.props) || {};
+    var st = parseStyleMap(p.style);
+    var sn = (p.sn || p['st:shape'] || st.shape || '').toLowerCase();
+    if (c && c.k === 'e') return 'edge';
+    if (sn === 'umlactor' || st.umlActor === '1') return 'umlActor';
+    if (sn === 'ellipse' || st.ellipse === '1') return 'ellipse';
+    if (sn === 'rhombus' || st.rhombus === '1') return 'rhombus';
+    if (sn === 'swimlane' || st.swimlane === '1') return 'swimlane';
+    if (sn === 'flexarrow') return 'flexArrow';
+    if (sn === 'text' || st.text === '1' || (p['st:strokeColor'] === 'none' && p['st:fillColor'] === 'none')) return 'text';
+    return 'rect';
+  }
+  function cellDisplayLabel(c) {
+    if (!c) return '';
+    var p = c.props || {};
+    var raw = p.v !== undefined ? p.v : (p['va:label'] !== undefined ? p['va:label'] : (p.value || ''));
+    return stripHtml(raw);
+  }
+  function cellFriendlyName(c, fallbackId) {
+    if (!c) return fallbackId || 'Element';
+    var st = cellShapeType(c);
+    var kindMap = {
+      ellipse: 'Ellipse',
+      rhombus: 'Rhombus',
+      umlActor: 'Actor',
+      swimlane: 'Container',
+      flexArrow: 'Arrow',
+      text: 'Text',
+      edge: 'Connector',
+      rect: 'Rectangle'
+    };
+    var kind = kindMap[st] || 'Shape';
+    var lbl = cellDisplayLabel(c);
+    if (lbl) return kind + ' "' + (lbl.length > 28 ? lbl.slice(0, 27) + '…' : lbl) + '"';
+    return kind;
+  }
   function buildCellLookup(pages) {
     var map = {};
     (pages || []).forEach(function (pg) {
+      var byId = {};
+      (pg.cells || []).forEach(function (c) { byId[c.id] = c; });
+      function absPos(c, depth) {
+        var p = (c && c.props) || {};
+        var x = cellNum(p, 'gx', 'x', 0);
+        var y = cellNum(p, 'gy', 'y', 0);
+        if ((depth || 0) < 6 && c && c.p && c.p !== '0' && c.p !== '1' && byId[c.p]) {
+          var par = absPos(byId[c.p], (depth || 0) + 1);
+          x += par.x;
+          y += par.y;
+        }
+        return { x: x, y: y };
+      }
       (pg.cells || []).forEach(function (c) {
-        map[c.id] = { page: pg.name || pg.id, cell: c, props: c.props || {} };
+        var p = c.props || {};
+        var pos = absPos(c, 0);
+        var w = cellNum(p, 'gw', 'w', 120);
+        var h = cellNum(p, 'gh', 'h', 60);
+        map[c.id] = {
+          page: pg.name || pg.id,
+          cell: c,
+          props: p,
+          absX: pos.x,
+          absY: pos.y,
+          w: w,
+          h: h
+        };
       });
     });
     return map;
   }
-  function renderDiagramPreviewSvg(pages, highlightMap, deletedCells) {
+  function drawShapeSvgElement(svgNS, v, fill, stroke, strokeW, dashed, isGhost) {
+    var g = document.createElementNS(svgNS, 'g');
+    if (isGhost) g.setAttribute('opacity', '0.55');
+    var st = v.shapeType;
+    var dashAttr = dashed ? '5,4' : '';
+
+    if (st === 'ellipse') {
+      var elp = document.createElementNS(svgNS, 'ellipse');
+      elp.setAttribute('cx', String(v.x + v.w / 2));
+      elp.setAttribute('cy', String(v.y + v.h / 2));
+      elp.setAttribute('rx', String(Math.max(2, v.w / 2)));
+      elp.setAttribute('ry', String(Math.max(2, v.h / 2)));
+      elp.setAttribute('fill', fill);
+      elp.setAttribute('stroke', stroke);
+      elp.setAttribute('stroke-width', String(strokeW));
+      if (dashAttr) elp.setAttribute('stroke-dasharray', dashAttr);
+      g.appendChild(elp);
+    } else if (st === 'rhombus') {
+      var poly = document.createElementNS(svgNS, 'polygon');
+      var cx = v.x + v.w / 2, cy = v.y + v.h / 2;
+      poly.setAttribute('points', cx + ',' + v.y + ' ' + (v.x + v.w) + ',' + cy + ' ' + cx + ',' + (v.y + v.h) + ' ' + v.x + ',' + cy);
+      poly.setAttribute('fill', fill);
+      poly.setAttribute('stroke', stroke);
+      poly.setAttribute('stroke-width', String(strokeW));
+      if (dashAttr) poly.setAttribute('stroke-dasharray', dashAttr);
+      g.appendChild(poly);
+    } else if (st === 'umlActor') {
+      var acx = v.x + v.w / 2;
+      var headR = Math.max(4, Math.min(v.w * 0.28, v.h * 0.14));
+      var headY = v.y + headR + 2;
+      var neckY = headY + headR;
+      var armY = v.y + v.h * 0.44;
+      var hipY = v.y + v.h * 0.68;
+      var footY = v.y + v.h - 2;
+      var head = document.createElementNS(svgNS, 'circle');
+      head.setAttribute('cx', String(acx));
+      head.setAttribute('cy', String(headY));
+      head.setAttribute('r', String(headR));
+      head.setAttribute('fill', fill);
+      head.setAttribute('stroke', stroke);
+      head.setAttribute('stroke-width', String(strokeW));
+      if (dashAttr) head.setAttribute('stroke-dasharray', dashAttr);
+      g.appendChild(head);
+      var limbs = document.createElementNS(svgNS, 'path');
+      limbs.setAttribute('d',
+        'M ' + acx + ' ' + neckY + ' L ' + acx + ' ' + hipY +
+        ' M ' + (v.x + 2) + ' ' + armY + ' L ' + (v.x + v.w - 2) + ' ' + armY +
+        ' M ' + acx + ' ' + hipY + ' L ' + (v.x + 2) + ' ' + footY +
+        ' M ' + acx + ' ' + hipY + ' L ' + (v.x + v.w - 2) + ' ' + footY
+      );
+      limbs.setAttribute('fill', 'none');
+      limbs.setAttribute('stroke', stroke);
+      limbs.setAttribute('stroke-width', String(strokeW));
+      limbs.setAttribute('stroke-linecap', 'round');
+      if (dashAttr) limbs.setAttribute('stroke-dasharray', dashAttr);
+      g.appendChild(limbs);
+    } else if (st === 'swimlane') {
+      var startSize = parseFloat(cellProp(v.props, 'startSize', '26')) || 26;
+      var box = document.createElementNS(svgNS, 'rect');
+      box.setAttribute('x', String(v.x));
+      box.setAttribute('y', String(v.y));
+      box.setAttribute('width', String(v.w));
+      box.setAttribute('height', String(v.h));
+      box.setAttribute('rx', '4');
+      box.setAttribute('fill', fill);
+      box.setAttribute('stroke', stroke);
+      box.setAttribute('stroke-width', String(strokeW));
+      if (dashAttr) box.setAttribute('stroke-dasharray', dashAttr);
+      g.appendChild(box);
+      if (v.h > startSize + 4) {
+        var hdr = document.createElementNS(svgNS, 'line');
+        hdr.setAttribute('x1', String(v.x));
+        hdr.setAttribute('y1', String(v.y + startSize));
+        hdr.setAttribute('x2', String(v.x + v.w));
+        hdr.setAttribute('y2', String(v.y + startSize));
+        hdr.setAttribute('stroke', stroke);
+        hdr.setAttribute('stroke-width', String(strokeW));
+        g.appendChild(hdr);
+      }
+    } else if (st === 'text') {
+      if (dashed) {
+        var tbox = document.createElementNS(svgNS, 'rect');
+        tbox.setAttribute('x', String(v.x));
+        tbox.setAttribute('y', String(v.y));
+        tbox.setAttribute('width', String(v.w));
+        tbox.setAttribute('height', String(v.h));
+        tbox.setAttribute('fill', 'none');
+        tbox.setAttribute('stroke', stroke);
+        tbox.setAttribute('stroke-width', '1');
+        tbox.setAttribute('stroke-dasharray', '4,3');
+        g.appendChild(tbox);
+      }
+    } else {
+      var rect = document.createElementNS(svgNS, 'rect');
+      rect.setAttribute('x', String(v.x));
+      rect.setAttribute('y', String(v.y));
+      rect.setAttribute('width', String(v.w));
+      rect.setAttribute('height', String(v.h));
+      if (cellProp(v.props, 'rounded', '0') === '1') rect.setAttribute('rx', '8');
+      rect.setAttribute('fill', fill);
+      rect.setAttribute('stroke', stroke);
+      rect.setAttribute('stroke-width', String(strokeW));
+      if (dashAttr) rect.setAttribute('stroke-dasharray', dashAttr);
+      g.appendChild(rect);
+    }
+
+    var label = v.label;
+    if (label && !isGhost) {
+      var txt = document.createElementNS(svgNS, 'text');
+      var tx = v.x + v.w / 2;
+      var ty = v.y + v.h / 2 + 4;
+      var anchor = 'middle';
+      if (st === 'umlActor') {
+        ty = v.y + v.h + 13;
+      } else if (st === 'swimlane') {
+        var hdrH = parseFloat(cellProp(v.props, 'startSize', '26')) || 26;
+        ty = v.y + Math.min(hdrH / 2 + 4, v.h / 2 + 4);
+      } else if (st === 'text') {
+        tx = v.x + 6;
+        anchor = 'start';
+      }
+      txt.setAttribute('x', String(tx));
+      txt.setAttribute('y', String(ty));
+      txt.setAttribute('text-anchor', anchor);
+      txt.setAttribute('font-size', '11.5');
+      txt.setAttribute('font-weight', st === 'swimlane' ? '600' : '500');
+      txt.setAttribute('font-family', 'Inter, system-ui, sans-serif');
+      txt.setAttribute('fill', v.hl === 'deleted' ? '#991b1b' : '#0f172a');
+      txt.textContent = label.length > 26 ? label.slice(0, 25) + '…' : label;
+      g.appendChild(txt);
+    }
+    return g;
+  }
+
+  function renderDiagramPreviewSvg(pages, highlightMap, deletedCells, moveArrows) {
     var svgNS = 'http://www.w3.org/2000/svg';
     var svg = document.createElementNS(svgNS, 'svg');
     var pg = (pages && pages[0]) || { cells: [] };
-    var cells = (pg.cells || []).slice();
+    var rawCells = (pg.cells || []).slice();
     (deletedCells || []).forEach(function (dc) {
-      if (!cells.some(function (c) { return c.id === dc.id; })) cells.push(dc);
+      if (dc && !rawCells.some(function (c) { return c.id === dc.id; })) rawCells.push(dc);
     });
-    var vertices = {}, edges = [];
+
+    var byId = {};
+    rawCells.forEach(function (c) { if (c && c.id) byId[c.id] = c; });
+    function resolveXY(c, depth) {
+      var p = (c && c.props) || {};
+      var x = cellNum(p, 'gx', 'x', NaN);
+      var y = cellNum(p, 'gy', 'y', NaN);
+      if (isNaN(x)) x = 0;
+      if (isNaN(y)) y = 0;
+      if ((depth || 0) < 6 && c && c.p && c.p !== '0' && c.p !== '1' && byId[c.p]) {
+        var par = resolveXY(byId[c.p], (depth || 0) + 1);
+        x += par.x;
+        y += par.y;
+      }
+      return { x: x, y: y };
+    }
+
+    var vertices = {}, vertexList = [], edges = [];
     var minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-    cells.forEach(function (c) {
+    function expandBounds(x, y, w, h) {
+      if (!isFinite(x) || !isFinite(y)) return;
+      if (x < minX) minX = x;
+      if (y < minY) minY = y;
+      if (x + w > maxX) maxX = x + w;
+      if (y + h > maxY) maxY = y + h;
+    }
+
+    rawCells.forEach(function (c) {
+      if (!c || c.id === '0' || c.id === '1' || c.k === '-') return;
       var p = c.props || {};
       if (c.k === 'v') {
-        var x = parseFloat(p.x), y = parseFloat(p.y), w = parseFloat(p.w), h = parseFloat(p.h);
-        if (isNaN(x)) x = 40;
-        if (isNaN(y)) y = 40;
-        if (isNaN(w) || w <= 0) w = 120;
-        if (isNaN(h) || h <= 0) h = 60;
-        vertices[c.id] = { id: c.id, x: x, y: y, w: w, h: h, props: p };
-        if (x < minX) minX = x;
-        if (y < minY) minY = y;
-        if (x + w > maxX) maxX = x + w;
-        if (y + h > maxY) maxY = y + h;
+        var pos = resolveXY(c, 0);
+        var w = cellNum(p, 'gw', 'w', 120);
+        var h = cellNum(p, 'gh', 'h', 60);
+        if (w <= 0) w = 100;
+        if (h <= 0) h = 40;
+        var st = cellShapeType(c);
+        var vObj = {
+          id: c.id,
+          parent: c.p || '1',
+          x: pos.x,
+          y: pos.y,
+          w: w,
+          h: h,
+          props: p,
+          shapeType: st,
+          label: cellDisplayLabel(c),
+          hl: highlightMap && highlightMap[c.id]
+        };
+        vertices[c.id] = vObj;
+        vertexList.push(vObj);
+        expandBounds(pos.x, pos.y, w, h + (st === 'umlActor' ? 16 : 0));
       } else if (c.k === 'e') {
-        edges.push({ id: c.id, props: p });
+        edges.push({ id: c.id, cell: c, props: p, parent: c.p || '1' });
       }
     });
-    if (!isFinite(minX)) { minX = 0; minY = 0; maxX = 560; maxY = 260; }
-    var pad = 36;
-    var vw = Math.max(420, (maxX - minX) + pad * 2);
-    var vh = Math.max(220, (maxY - minY) + pad * 2);
-    svg.setAttribute('viewBox', (minX - pad) + ' ' + (minY - pad) + ' ' + vw + ' ' + vh);
+
+    (moveArrows || []).forEach(function (mv) {
+      expandBounds(mv.fromX, mv.fromY, mv.fromW, mv.fromH);
+      expandBounds(mv.toX, mv.toY, mv.toW, mv.toH);
+    });
+
+    // Also include edge floating coordinates in bounds
+    edges.forEach(function (e) {
+      var p = e.props || {};
+      if (p.gex) {
+        try {
+          var gex = JSON.parse(p.gex);
+          if (Array.isArray(gex.sp)) expandBounds(gex.sp[0], gex.sp[1], 4, 4);
+          if (Array.isArray(gex.tp)) expandBounds(gex.tp[0], gex.tp[1], 4, 4);
+          if (Array.isArray(gex.p)) gex.p.forEach(function (pt) { if (Array.isArray(pt)) expandBounds(pt[0], pt[1], 4, 4); });
+        } catch (err) { /* ignore malformed gex */ }
+      }
+    });
+
+    if (!isFinite(minX)) { minX = 0; minY = 0; maxX = 520; maxY = 240; }
+    var pad = 44;
+    var vw = Math.max(360, (maxX - minX) + pad * 2);
+    var vh = Math.max(200, (maxY - minY) + pad * 2);
+    var vx = minX - pad;
+    var vy = minY - pad;
+    svg.setAttribute('viewBox', vx + ' ' + vy + ' ' + vw + ' ' + vh);
+    svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
 
     var defs = document.createElementNS(svgNS, 'defs');
-    var marker = document.createElementNS(svgNS, 'marker');
-    marker.setAttribute('id', 'pv-arrow');
-    marker.setAttribute('viewBox', '0 0 10 10');
-    marker.setAttribute('refX', '8');
-    marker.setAttribute('refY', '5');
-    marker.setAttribute('markerWidth', '6');
-    marker.setAttribute('markerHeight', '6');
-    marker.setAttribute('orient', 'auto-start-reverse');
-    var mpath = document.createElementNS(svgNS, 'path');
-    mpath.setAttribute('d', 'M 0 1 L 10 5 L 0 9 z');
-    mpath.setAttribute('fill', '#64748b');
-    marker.appendChild(mpath);
-    defs.appendChild(marker);
+    function addMarker(id, color) {
+      var m = document.createElementNS(svgNS, 'marker');
+      m.setAttribute('id', id);
+      m.setAttribute('viewBox', '0 0 10 10');
+      m.setAttribute('refX', '8');
+      m.setAttribute('refY', '5');
+      m.setAttribute('markerWidth', '6');
+      m.setAttribute('markerHeight', '6');
+      m.setAttribute('orient', 'auto-start-reverse');
+      var mp = document.createElementNS(svgNS, 'path');
+      mp.setAttribute('d', 'M 0 1 L 10 5 L 0 9 z');
+      mp.setAttribute('fill', color);
+      m.appendChild(mp);
+      defs.appendChild(m);
+    }
+    addMarker('pv-arrow', '#475569');
+    addMarker('pv-arrow-add', '#16a34a');
+    addMarker('pv-arrow-mod', '#2563eb');
+    addMarker('pv-arrow-del', '#dc2626');
+    addMarker('pv-arrow-move', '#7c3aed');
+
+    var gridPat = document.createElementNS(svgNS, 'pattern');
+    gridPat.setAttribute('id', 'pv-grid');
+    gridPat.setAttribute('width', '20');
+    gridPat.setAttribute('height', '20');
+    gridPat.setAttribute('patternUnits', 'userSpaceOnUse');
+    var gridPath = document.createElementNS(svgNS, 'path');
+    gridPath.setAttribute('d', 'M 20 0 L 0 0 0 20');
+    gridPath.setAttribute('fill', 'none');
+    gridPath.setAttribute('stroke', '#f1f5f9');
+    gridPath.setAttribute('stroke-width', '1');
+    gridPat.appendChild(gridPath);
+    defs.appendChild(gridPat);
     svg.appendChild(defs);
 
-    // Draw edges first
-    edges.forEach(function (e) {
-      var s = vertices[e.props.source], t = vertices[e.props.target];
-      var x1 = s ? s.x + s.w / 2 : minX + 40;
-      var y1 = s ? s.y + s.h / 2 : minY + 40;
-      var x2 = t ? t.x + t.w / 2 : x1 + 100;
-      var y2 = t ? t.y + t.h / 2 : y1;
-      var hl = highlightMap && highlightMap[e.id];
-      var stroke = hl === 'added' ? '#16a34a' : hl === 'deleted' ? '#dc2626' : hl === 'modified' ? '#2563eb' : '#64748b';
-      var line = document.createElementNS(svgNS, 'line');
-      line.setAttribute('x1', String(x1));
-      line.setAttribute('y1', String(y1));
-      line.setAttribute('x2', String(x2));
-      line.setAttribute('y2', String(y2));
-      line.setAttribute('stroke', stroke);
-      line.setAttribute('stroke-width', hl ? '2.5' : '1.75');
-      if (hl === 'deleted') line.setAttribute('stroke-dasharray', '5,4');
-      line.setAttribute('marker-end', 'url(#pv-arrow)');
-      svg.appendChild(line);
+    var bgRect = document.createElementNS(svgNS, 'rect');
+    bgRect.setAttribute('x', String(vx));
+    bgRect.setAttribute('y', String(vy));
+    bgRect.setAttribute('width', String(vw));
+    bgRect.setAttribute('height', String(vh));
+    bgRect.setAttribute('fill', 'url(#pv-grid)');
+    svg.appendChild(bgRect);
+
+    // 1. Draw ghost shapes at previous positions for moved/resized items
+    (moveArrows || []).forEach(function (mv) {
+      var ghostV = {
+        x: mv.fromX,
+        y: mv.fromY,
+        w: mv.fromW,
+        h: mv.fromH,
+        props: mv.props || {},
+        shapeType: mv.shapeType || 'rect',
+        label: ''
+      };
+      svg.appendChild(drawShapeSvgElement(svgNS, ghostV, 'rgba(124, 58, 237, 0.06)', '#7c3aed', 1.5, true, true));
     });
 
-    // Draw vertices
-    Object.keys(vertices).forEach(function (id) {
-      var v = vertices[id];
+    // 2. Sort vertices so parent containers draw before child items
+    vertexList.sort(function (a, b) {
+      var aChild = a.parent && a.parent !== '0' && a.parent !== '1' ? 1 : 0;
+      var bChild = b.parent && b.parent !== '0' && b.parent !== '1' ? 1 : 0;
+      return aChild - bChild;
+    });
+
+    vertexList.forEach(function (v) {
       var st = parseStyleMap(v.props.style);
-      var fill = st.fillColor && st.fillColor !== 'none' ? st.fillColor : '#ffffff';
-      var stroke = st.strokeColor && st.strokeColor !== 'none' ? st.strokeColor : '#334155';
-      var hl = highlightMap && highlightMap[id];
-      var g = document.createElementNS(svgNS, 'g');
+      var rawFill = cellProp(v.props, 'fillColor', st.fillColor || '#ffffff');
+      var rawStroke = cellProp(v.props, 'strokeColor', st.strokeColor || '#334155');
+      var fill = rawFill === 'none' ? 'none' : rawFill;
+      var stroke = rawStroke === 'none' ? 'none' : rawStroke;
+      var hl = v.hl;
+      if (hl === 'deleted') {
+        fill = '#fee2e2';
+        stroke = '#dc2626';
+      } else if (hl === 'added') {
+        stroke = '#16a34a';
+      } else if (hl === 'modified' || hl === 'moved') {
+        stroke = '#2563eb';
+      }
+
+      var outerG = document.createElementNS(svgNS, 'g');
       if (hl) {
         var ring = document.createElementNS(svgNS, 'rect');
-        ring.setAttribute('x', String(v.x - 4));
-        ring.setAttribute('y', String(v.y - 4));
-        ring.setAttribute('width', String(v.w + 8));
-        ring.setAttribute('height', String(v.h + 8));
+        ring.setAttribute('x', String(v.x - 5));
+        ring.setAttribute('y', String(v.y - 5));
+        ring.setAttribute('width', String(v.w + 10));
+        ring.setAttribute('height', String(v.h + 10));
         ring.setAttribute('rx', '8');
-        ring.setAttribute('fill', 'none');
+        ring.setAttribute('fill', hl === 'added' ? 'rgba(22, 163, 74, 0.07)' : hl === 'deleted' ? 'rgba(220, 38, 38, 0.08)' : 'rgba(37, 99, 235, 0.07)');
         ring.setAttribute('stroke', hl === 'added' ? '#16a34a' : hl === 'deleted' ? '#dc2626' : '#2563eb');
-        ring.setAttribute('stroke-width', '2.5');
+        ring.setAttribute('stroke-width', '2');
         if (hl === 'deleted') ring.setAttribute('stroke-dasharray', '5,4');
-        g.appendChild(ring);
+        outerG.appendChild(ring);
       }
-      var shape;
-      if (st.ellipse) {
-        shape = document.createElementNS(svgNS, 'ellipse');
-        shape.setAttribute('cx', String(v.x + v.w / 2));
-        shape.setAttribute('cy', String(v.y + v.h / 2));
-        shape.setAttribute('rx', String(v.w / 2));
-        shape.setAttribute('ry', String(v.h / 2));
-      } else if (st.rhombus) {
-        shape = document.createElementNS(svgNS, 'polygon');
-        var cx = v.x + v.w / 2, cy = v.y + v.h / 2;
-        shape.setAttribute('points', cx + ',' + v.y + ' ' + (v.x + v.w) + ',' + cy + ' ' + cx + ',' + (v.y + v.h) + ' ' + v.x + ',' + cy);
-      } else {
-        shape = document.createElementNS(svgNS, 'rect');
-        shape.setAttribute('x', String(v.x));
-        shape.setAttribute('y', String(v.y));
-        shape.setAttribute('width', String(v.w));
-        shape.setAttribute('height', String(v.h));
-        if (st.rounded === '1') shape.setAttribute('rx', '8');
-      }
-      shape.setAttribute('fill', hl === 'deleted' ? '#fee2e2' : fill);
-      shape.setAttribute('stroke', hl === 'deleted' ? '#dc2626' : stroke);
-      shape.setAttribute('stroke-width', '1.5');
-      if (hl === 'deleted') shape.setAttribute('opacity', '0.72');
-      g.appendChild(shape);
-
-      var label = stripHtml(v.props.value || '');
-      if (label) {
-        var txt = document.createElementNS(svgNS, 'text');
-        txt.setAttribute('x', String(v.x + v.w / 2));
-        txt.setAttribute('y', String(v.y + v.h / 2 + 4));
-        txt.setAttribute('text-anchor', 'middle');
-        txt.setAttribute('font-size', '12');
-        txt.setAttribute('font-family', 'Inter, system-ui, sans-serif');
-        txt.setAttribute('fill', '#0f172a');
-        txt.textContent = label.length > 26 ? label.slice(0, 25) + '…' : label;
-        g.appendChild(txt);
-      }
-      svg.appendChild(g);
+      var dashed = hl === 'deleted' || cellProp(v.props, 'dashed', st.dashed || '0') === '1';
+      outerG.appendChild(drawShapeSvgElement(svgNS, v, fill, stroke, hl ? 2 : 1.6, dashed, false));
+      svg.appendChild(outerG);
     });
+
+    // 3. Draw edges (both connected src/tgt and floating gex endpoints/waypoints)
+    edges.forEach(function (e) {
+      var p = e.props || {};
+      var sId = p.src || p.source;
+      var tId = p.tgt || p.target;
+      var s = sId ? vertices[sId] : null;
+      var t = tId ? vertices[tId] : null;
+      var gex = null;
+      if (p.gex) {
+        try { gex = JSON.parse(p.gex); } catch (err) { gex = null; }
+      }
+      var x1 = s ? s.x + s.w / 2 : (gex && Array.isArray(gex.sp) ? gex.sp[0] : minX + 40);
+      var y1 = s ? s.y + s.h / 2 : (gex && Array.isArray(gex.sp) ? gex.sp[1] : minY + 40);
+      var x2 = t ? t.x + t.w / 2 : (gex && Array.isArray(gex.tp) ? gex.tp[0] : x1 + 90);
+      var y2 = t ? t.y + t.h / 2 : (gex && Array.isArray(gex.tp) ? gex.tp[1] : y1);
+
+      var pts = [[x1, y1]];
+      if (gex && Array.isArray(gex.p)) {
+        gex.p.forEach(function (wp) {
+          if (Array.isArray(wp) && wp.length >= 2) pts.push([wp[0], wp[1]]);
+        });
+      }
+      pts.push([x2, y2]);
+
+      var hl = highlightMap && highlightMap[e.id];
+      var stroke = hl === 'added' ? '#16a34a' : hl === 'deleted' ? '#dc2626' : hl ? '#2563eb' : '#475569';
+      var markerId = hl === 'added' ? 'pv-arrow-add' : hl === 'deleted' ? 'pv-arrow-del' : hl ? 'pv-arrow-mod' : 'pv-arrow';
+      var poly = document.createElementNS(svgNS, 'polyline');
+      poly.setAttribute('points', pts.map(function (pt) { return pt[0] + ',' + pt[1]; }).join(' '));
+      poly.setAttribute('fill', 'none');
+      poly.setAttribute('stroke', stroke);
+      poly.setAttribute('stroke-width', hl ? '2.5' : '1.8');
+      if (hl === 'deleted' || cellProp(p, 'dashed', '0') === '1') poly.setAttribute('stroke-dasharray', '5,4');
+      if (cellProp(p, 'endArrow', 'classic') !== 'none') {
+        poly.setAttribute('marker-end', 'url(#' + markerId + ')');
+      }
+      svg.appendChild(poly);
+    });
+
+    // 4. Draw movement trajectory arrows on top so user clearly sees before -> after motion
+    (moveArrows || []).forEach(function (mv) {
+      var x1 = mv.fromX + mv.fromW / 2;
+      var y1 = mv.fromY + mv.fromH / 2;
+      var x2 = mv.toX + mv.toW / 2;
+      var y2 = mv.toY + mv.toH / 2;
+      if (Math.hypot(x2 - x1, y2 - y1) > 4) {
+        var mline = document.createElementNS(svgNS, 'line');
+        mline.setAttribute('x1', String(x1));
+        mline.setAttribute('y1', String(y1));
+        mline.setAttribute('x2', String(x2));
+        mline.setAttribute('y2', String(y2));
+        mline.setAttribute('stroke', '#7c3aed');
+        mline.setAttribute('stroke-width', '2');
+        mline.setAttribute('stroke-dasharray', '4,3');
+        mline.setAttribute('marker-end', 'url(#pv-arrow-move)');
+        svg.appendChild(mline);
+      }
+    });
+
     return svg;
   }
 
@@ -520,61 +864,133 @@
     var afterMap = buildCellLookup(stateAfter);
     var highlightMap = {};
     var deletedCells = [];
+    var moveArrows = [];
     var rows = [];
 
     (ops || []).forEach(function (op) {
-      var t = op.op;
-      var cid = op.id || op.page || '';
-      var bCell = beforeMap[cid] && beforeMap[cid].props || {};
-      var aCell = afterMap[cid] && afterMap[cid].props || {};
-      var label = stripHtml(aCell.value || bCell.value || op.name || '') || cid;
+      var t = op.t || op.op || 'op';
+      var cid = op.cell || op.id || op.page || '';
+      var bEntry = beforeMap[cid];
+      var aEntry = afterMap[cid];
+      var bCell = bEntry && bEntry.cell;
+      var aCell = aEntry && aEntry.cell;
+      var refCell = aCell || bCell || (op.r && op.r.prev && op.r.prev.cells && op.r.prev.cells[0]);
+      var friendly = cellFriendlyName(refCell, cid);
       var detailKids = [];
 
       if (t === 'addCell') {
         highlightMap[cid] = 'added';
-        var kind = op.kind === 'e' ? 'Connector' : 'Shape';
-        detailKids.push(el('strong', { text: kind + ' "' + label + '"' }));
-        if (aCell.x !== undefined && aCell.y !== undefined) {
-          detailKids.push(' at (' + aCell.x + ', ' + aCell.y + '), size ' + (aCell.w || '—') + '×' + (aCell.h || '—'));
+        detailKids.push(el('strong', { text: 'Added ' + friendly }));
+        if (aEntry && aCell && aCell.k === 'v') {
+          detailKids.push(' at ');
+          detailKids.push(el('span', { class: 'diff-val-new', text: '(' + Math.round(aEntry.absX) + ', ' + Math.round(aEntry.absY) + ') · ' + Math.round(aEntry.w) + '×' + Math.round(aEntry.h) }));
         }
-      } else if (t === 'delCell') {
+      } else if (t === 'deleteCell' || t === 'delCell') {
         highlightMap[cid] = 'deleted';
-        if (beforeMap[cid] && beforeMap[cid].cell) deletedCells.push(beforeMap[cid].cell);
-        detailKids.push(el('strong', { text: 'Removed "' + label + '"' }));
+        if (bCell) deletedCells.push(bCell);
+        if (op.r && Array.isArray(op.r.del)) {
+          op.r.del.forEach(function (delId) {
+            highlightMap[delId] = 'deleted';
+            if (beforeMap[delId] && beforeMap[delId].cell) deletedCells.push(beforeMap[delId].cell);
+          });
+        }
+        detailKids.push(el('strong', { text: 'Deleted ' + friendly }));
+        if (bEntry && bCell && bCell.k === 'v') {
+          detailKids.push(' from ');
+          detailKids.push(el('span', { class: 'diff-val-old', text: '(' + Math.round(bEntry.absX) + ', ' + Math.round(bEntry.absY) + ')' }));
+        }
+      } else if (t === 'setPos') {
+        if (!highlightMap[cid]) highlightMap[cid] = 'moved';
+        var prevX = bEntry ? bEntry.absX : (op.r && op.r.prev && op.r.prev.rx !== undefined ? op.r.prev.rx : 0);
+        var prevY = bEntry ? bEntry.absY : (op.r && op.r.prev && op.r.prev.ry !== undefined ? op.r.prev.ry : 0);
+        var prevW = bEntry ? bEntry.w : ((op.r && op.r.prev && parseFloat(op.r.prev.gw)) || (aEntry && aEntry.w) || 120);
+        var prevH = bEntry ? bEntry.h : ((op.r && op.r.prev && parseFloat(op.r.prev.gh)) || (aEntry && aEntry.h) || 60);
+        var newX = aEntry ? aEntry.absX : (op.r && op.r.rx !== undefined ? op.r.rx : prevX);
+        var newY = aEntry ? aEntry.absY : (op.r && op.r.ry !== undefined ? op.r.ry : prevY);
+        var newW = aEntry ? aEntry.w : (parseFloat(op.gw) || prevW);
+        var newH = aEntry ? aEntry.h : (parseFloat(op.gh) || prevH);
+        if (refCell && refCell.k === 'v') {
+          moveArrows.push({
+            id: cid,
+            fromX: prevX, fromY: prevY, fromW: prevW, fromH: prevH,
+            toX: newX, toY: newY, toW: newW, toH: newH,
+            props: refCell.props || {},
+            shapeType: cellShapeType(refCell)
+          });
+        }
+        var oldStr = '(' + Math.round(prevX) + ', ' + Math.round(prevY) + ') ' + Math.round(prevW) + '×' + Math.round(prevH);
+        var newStr = '(' + Math.round(newX) + ', ' + Math.round(newY) + ') ' + Math.round(newW) + '×' + Math.round(newH);
+        detailKids.push(el('strong', { text: 'Moved / resized ' + friendly + ': ' }));
+        detailKids.push(el('span', { class: 'diff-val-old', text: oldStr }));
+        detailKids.push(' → ');
+        detailKids.push(el('span', { class: 'diff-val-new', text: newStr }));
       } else if (t === 'setProp') {
         if (!highlightMap[cid]) highlightMap[cid] = 'modified';
-        var oldVal = bCell[op.key] !== undefined ? stripHtml(bCell[op.key]) : '(empty)';
-        var newVal = op.value !== undefined && op.value !== null ? stripHtml(op.value) : (aCell[op.key] !== undefined ? stripHtml(aCell[op.key]) : '(empty)');
-        detailKids.push(el('strong', { text: '"' + label + '" · ' + (op.key || 'property') + ': ' }));
-        detailKids.push(el('span', { class: 'diff-val-old', text: oldVal || '(empty)' }));
+        var rawKey = op.key || 'property';
+        var cleanKey = rawKey === 'v' || rawKey === 'va:label' ? 'label' : rawKey.replace(/^st:/, '');
+        var oldV = op.r && op.r.prev && op.r.prev.val !== undefined ? stripHtml(op.r.prev.val) : (bEntry && bEntry.props[rawKey] !== undefined ? stripHtml(bEntry.props[rawKey]) : '(empty)');
+        var newV = op.val !== undefined && op.val !== null ? stripHtml(op.val) : (aEntry && aEntry.props[rawKey] !== undefined ? stripHtml(aEntry.props[rawKey]) : '(empty)');
+        detailKids.push(el('strong', { text: 'Updated ' + friendly + ' · ' + cleanKey + ': ' }));
+        detailKids.push(el('span', { class: 'diff-val-old', text: oldV || '(empty)' }));
         detailKids.push(' → ');
-        detailKids.push(el('span', { class: 'diff-val-new', text: newVal || '(empty)' }));
-      } else if (t === 'setPos') {
-        if (!highlightMap[cid]) highlightMap[cid] = 'modified';
-        var oldPos = (bCell.x !== undefined ? '(' + bCell.x + ', ' + bCell.y + ') ' + (bCell.w || '') + '×' + (bCell.h || '') : 'previous');
-        var newPos = '(' + (aCell.x !== undefined ? aCell.x : '') + ', ' + (aCell.y !== undefined ? aCell.y : '') + ') ' + (aCell.w || '') + '×' + (aCell.h || '');
-        detailKids.push(el('strong', { text: 'Moved/resized "' + label + '": ' }));
-        detailKids.push(el('span', { class: 'diff-val-old', text: oldPos }));
-        detailKids.push(' → ');
-        detailKids.push(el('span', { class: 'diff-val-new', text: newPos }));
+        detailKids.push(el('span', { class: 'diff-val-new', text: newV || '(empty)' }));
       } else if (t === 'connect') {
         if (!highlightMap[cid]) highlightMap[cid] = 'modified';
-        detailKids.push(el('strong', { text: 'Connected "' + label + '" (' + (op.end || 'end') + ' → ' + (op.target || 'none') + ')' }));
+        var term = (op.term || op.end) === 'src' ? 'source' : 'target';
+        var tgtCell = op.target ? (afterMap[op.target] || beforeMap[op.target]) : null;
+        var tgtName = tgtCell ? cellFriendlyName(tgtCell.cell, op.target) : (op.target || 'floating point');
+        detailKids.push(el('strong', { text: 'Connected ' + friendly + ' (' + term + ' → ' + tgtName + ')' }));
+      } else if (t === 'restoreCells') {
+        var rCells = (op.r && op.r.prev && op.r.prev.cells) || [];
+        rCells.forEach(function (rc) { if (rc && rc.id) highlightMap[rc.id] = 'added'; });
+        var firstRestored = rCells[0] ? cellFriendlyName(rCells[0], rCells[0].id) : 'elements';
+        detailKids.push(el('strong', { text: 'Restored ' + (rCells.length > 1 ? rCells.length + ' elements (' + firstRestored + '…)' : firstRestored) }));
+      } else if (t === 'restore') {
+        detailKids.push(el('strong', { text: 'Restored full diagram snapshot' }));
       } else {
-        detailKids.push(el('strong', { text: t + (label ? ' · ' + label : '') }));
+        detailKids.push(el('strong', { text: t + ' · ' + friendly }));
       }
+
       rows.push(el('div', { class: 'diff-row' }, [
         opPill(t),
         el('div', { class: 'diff-cell-text' }, detailKids),
       ]));
     });
-    return { rows: rows, highlightMap: highlightMap, deletedCells: deletedCells };
+    return { rows: rows, highlightMap: highlightMap, deletedCells: deletedCells, moveArrows: moveArrows };
   }
 
   function openHistoryPreview(id, h, body) {
     var who = h.actorType === 'ai' ? '🤖 ' + (h.agent || h.actor) + (h.onBehalfOf ? ' for ' + h.onBehalfOf : '') : h.actor;
     api('GET', '/documents/' + id + '/history/' + encodeURIComponent(h.batch)).then(function (detail) {
       var diff = describeBatchChanges(detail.ops || [], detail.stateBefore || [], detail.stateAfter || []);
+      var svgHolder = el('div', { class: 'preview-svg' }, []);
+      var captionSpan = el('span', { text: 'Visual diff at revision #' + detail.toSeq + ' (green = added, blue/purple = moved/edited, red dashed = deleted)' });
+      var tabDiff = el('button', { class: 'preview-tab active', type: 'button', text: 'Diff (Before → After)' });
+      var tabAfter = el('button', { class: 'preview-tab', type: 'button', text: 'After (#' + detail.toSeq + ')' });
+      var tabBefore = el('button', { class: 'preview-tab', type: 'button', text: 'Before (#' + Math.max(0, (detail.fromSeq || 1) - 1) + ')' });
+
+      function setPreviewMode(mode) {
+        [tabDiff, tabAfter, tabBefore].forEach(function (b) { b.classList.remove('active'); });
+        svgHolder.textContent = '';
+        if (mode === 'after') {
+          tabAfter.classList.add('active');
+          captionSpan.textContent = 'Exact diagram state after revision #' + detail.toSeq;
+          svgHolder.appendChild(renderDiagramPreviewSvg(detail.stateAfter || [], null, null, null));
+        } else if (mode === 'before') {
+          tabBefore.classList.add('active');
+          captionSpan.textContent = 'Exact diagram state before revision #' + detail.fromSeq;
+          svgHolder.appendChild(renderDiagramPreviewSvg(detail.stateBefore || [], null, null, null));
+        } else {
+          tabDiff.classList.add('active');
+          captionSpan.textContent = 'Visual diff at revision #' + detail.toSeq + ' (green = added, blue/purple = moved/edited, red dashed = deleted)';
+          svgHolder.appendChild(renderDiagramPreviewSvg(detail.stateAfter || [], diff.highlightMap, diff.deletedCells, diff.moveArrows));
+        }
+      }
+      tabDiff.onclick = function () { setPreviewMode('diff'); };
+      tabAfter.onclick = function () { setPreviewMode('after'); };
+      tabBefore.onclick = function () { setPreviewMode('before'); };
+      setPreviewMode('diff');
+
       var wrap = el('div', { class: 'preview-wrap' }, [
         el('div', { class: 'preview-meta' }, [
           el('span', null, ['Actor: ', el('strong', { text: who })]),
@@ -584,20 +1000,32 @@
         ]),
         el('div', { class: 'preview-canvas-box' }, [
           el('div', { class: 'preview-canvas-head' }, [
-            el('span', { text: 'Diagram state at revision #' + detail.toSeq + ' (green = added, blue = modified, red dashed = removed)' }),
+            captionSpan,
+            el('div', { class: 'preview-tabs' }, [tabDiff, tabAfter, tabBefore]),
           ]),
-          el('div', { class: 'preview-svg' }, [renderDiagramPreviewSvg(detail.stateAfter || [], diff.highlightMap, diff.deletedCells)]),
+          svgHolder,
         ]),
         el('div', { class: 'preview-diff-list' }, diff.rows.length ? diff.rows : [el('small', { text: 'No cell-level details recorded.' })]),
       ]);
       var actions = [{ label: 'Close' }];
       if (doc && doc.can && doc.can.edit) {
+        if (detail.headSeq && detail.toSeq < detail.headSeq) {
+          actions.push({
+            label: 'Restore to #' + detail.toSeq,
+            fn: function () {
+              api('POST', '/documents/' + id + '/revert', { batch: h.batch, mode: 'restore_to' }).then(function (x) {
+                toast('info', 'Restored diagram to revision #' + detail.toSeq + ' (' + x.applied + ' op' + (x.applied === 1 ? '' : 's') + ')');
+                if (body) renderHistory(id, body);
+              }).catch(function (e) { toast('error', e.message); });
+            }
+          });
+        }
         actions.push({
           label: 'Revert this change',
           cls: 'primary',
           fn: function () {
             api('POST', '/documents/' + id + '/revert', { batch: h.batch }).then(function (x) {
-              toast('info', 'Reverted ' + x.applied + ' operation(s)' + (x.skipped ? ', skipped ' + x.skipped : ''));
+              toast('info', 'Reverted change #' + detail.toSeq + ' (' + x.applied + ' operation' + (x.applied === 1 ? '' : 's') + ')');
               if (body) renderHistory(id, body);
             }).catch(function (e) { toast('error', e.message); });
           }
@@ -610,16 +1038,18 @@
   function openVersionPreview(id, v) {
     api('GET', '/documents/' + id + '/versions/' + encodeURIComponent(v.id)).then(function (detail) {
       var pages = detail.state || [];
+      var lookup = buildCellLookup(pages);
       var summaryRows = [];
       pages.forEach(function (pg) {
         (pg.cells || []).forEach(function (c) {
-          var p = c.props || {};
-          var lbl = stripHtml(p.value || '') || c.id;
+          if (!c || c.id === '0' || c.id === '1' || c.k === '-') return;
+          var entry = lookup[c.id];
+          var friendly = cellFriendlyName(c, c.id);
           summaryRows.push(el('div', { class: 'diff-row' }, [
             opPill(c.k === 'e' ? 'connect' : 'addCell'),
             el('div', { class: 'diff-cell-text' }, [
-              el('strong', { text: (c.k === 'e' ? 'Connector ' : 'Shape ') + '"' + lbl + '"' }),
-              c.k === 'v' && p.x !== undefined ? ' at (' + p.x + ', ' + p.y + '), ' + (p.w || '—') + '×' + (p.h || '—') : '',
+              el('strong', { text: friendly }),
+              c.k === 'v' && entry ? ' at (' + Math.round(entry.absX) + ', ' + Math.round(entry.absY) + '), ' + Math.round(entry.w) + '×' + Math.round(entry.h) : '',
             ]),
           ]));
         });
@@ -635,7 +1065,7 @@
           el('div', { class: 'preview-canvas-head' }, [
             el('span', { text: 'Visual snapshot of "' + v.name + '" (revision #' + v.seq + ')' }),
           ]),
-          el('div', { class: 'preview-svg' }, [renderDiagramPreviewSvg(pages, null, null)]),
+          el('div', { class: 'preview-svg' }, [renderDiagramPreviewSvg(pages, null, null, null)]),
         ]),
         el('div', { class: 'preview-diff-list' }, summaryRows.length ? summaryRows : [el('small', { text: 'Empty diagram in this version.' })]),
       ]);
@@ -665,14 +1095,17 @@
         var seqLabel = '#' + h.fromSeq + (h.toSeq && h.toSeq !== h.fromSeq ? '–#' + h.toSeq : '');
         var pills = (h.types || []).map(opPill);
         var btns = [
-          el('button', { class: 'btn', type: 'button', text: 'Preview', 'data-preview-batch': h.batch, onclick: function (e) { e.stopPropagation(); openHistoryPreview(id, h, body); } }),
+          el('button', { class: 'btn sm', type: 'button', text: 'Preview', 'data-preview-batch': h.batch, onclick: function (e) { e.stopPropagation(); openHistoryPreview(id, h, body); } }),
         ];
         if (doc.can && doc.can.edit) {
-          btns.push(el('button', { class: 'btn', type: 'button', text: 'Revert', 'data-batch': h.batch, onclick: function (e) {
+          btns.push(el('button', { class: 'btn sm', type: 'button', text: 'Revert', 'data-batch': h.batch, onclick: function (e) {
             e.stopPropagation();
-            ask('Revert change', 'Undo this change by ' + who + '? Other later changes stay.', 'Revert').then(function (ok) {
+            ask('Revert change ' + seqLabel, 'Undo change ' + seqLabel + ' by ' + who + '?', 'Revert').then(function (ok) {
               if (!ok) return;
-              api('POST', '/documents/' + id + '/revert', { batch: h.batch }).then(function (x) { toast('info', 'Reverted ' + x.applied + ' operation(s)' + (x.skipped ? ', skipped ' + x.skipped : '')); renderHistory(id, body); }).catch(function (e) { toast('error', e.message); });
+              api('POST', '/documents/' + id + '/revert', { batch: h.batch }).then(function (x) {
+                toast('info', 'Reverted change ' + seqLabel + ' (' + x.applied + ' operation' + (x.applied === 1 ? '' : 's') + ')');
+                renderHistory(id, body);
+              }).catch(function (e) { toast('error', e.message); });
             });
           } }));
         }
@@ -821,18 +1254,23 @@
     var svgNS = 'http://www.w3.org/2000/svg';
     var icon = document.createElementNS(svgNS, 'svg');
     icon.setAttribute('viewBox', '0 0 24 24');
-    icon.setAttribute('width', '13');
-    icon.setAttribute('height', '13');
+    icon.setAttribute('width', '15');
+    icon.setAttribute('height', '15');
     icon.setAttribute('fill', 'none');
     icon.setAttribute('stroke', 'currentColor');
-    icon.setAttribute('stroke-width', '2.2');
+    icon.setAttribute('stroke-width', '2');
     icon.setAttribute('stroke-linecap', 'round');
     icon.setAttribute('stroke-linejoin', 'round');
     icon.setAttribute('aria-hidden', 'true');
+    var c = document.createElementNS(svgNS, 'circle');
+    c.setAttribute('cx', '12');
+    c.setAttribute('cy', '12');
+    c.setAttribute('r', '10');
     var p1 = document.createElementNS(svgNS, 'path');
-    p1.setAttribute('d', 'M12 16v-5');
+    p1.setAttribute('d', 'M12 16v-4');
     var p2 = document.createElementNS(svgNS, 'path');
-    p2.setAttribute('d', 'M12 7.5h.01');
+    p2.setAttribute('d', 'M12 8h.01');
+    icon.appendChild(c);
     icon.appendChild(p1);
     icon.appendChild(p2);
     return el('span', { class: 'help-tip', tabindex: '0', role: 'note', 'aria-label': explanation }, [

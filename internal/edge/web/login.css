@@ -1,35 +1,62 @@
+@property --bg-a { syntax: "<color>"; inherits: true; initial-value: #e8effd; }
+@property --bg-b { syntax: "<color>"; inherits: true; initial-value: #f7f9fc; }
+@property --card { syntax: "<color>"; inherits: true; initial-value: #ffffff; }
+@property --text { syntax: "<color>"; inherits: true; initial-value: #0d1b3d; }
+@property --muted { syntax: "<color>"; inherits: true; initial-value: #5b6472; }
+@property --line { syntax: "<color>"; inherits: true; initial-value: #d5dce8; }
+@property --field { syntax: "<color>"; inherits: true; initial-value: #ffffff; }
+@property --toggle-bg { syntax: "<color>"; inherits: true; initial-value: #ffffff; }
+@property --toggle-hover { syntax: "<color>"; inherits: true; initial-value: #eef3fb; }
+@property --toggle-border { syntax: "<color>"; inherits: true; initial-value: #cbd5e1; }
+@property --err-bg { syntax: "<color>"; inherits: true; initial-value: #fdecec; }
+@property --err-fg { syntax: "<color>"; inherits: true; initial-value: #b42318; }
+@property --err-border { syntax: "<color>"; inherits: true; initial-value: #f8b4b4; }
+
 :root, html[data-theme="light"] {
-  --blue: #0b57f0; --blue-hover: #0a4bd0; --bg-a: #e8effd; --bg-b: #f7f9fc; --card: #fff; --text: #0d1b3d; --muted: #5b6472; --line: #d5dce8;
-  --field: #fff; --err-bg: #fdecec; --err-fg: #b42318; --err-border: #f8b4b4; --shadow: 0 1px 2px rgba(16, 24, 40, .06), 0 18px 44px rgba(16, 24, 40, .12);
-  --toggle-bg: rgba(255, 255, 255, .82); --toggle-border: #d5dce8;
+  --blue: #0b57f0; --blue-hover: #0a4bd0; --bg-a: #e8effd; --bg-b: #f7f9fc; --card: #ffffff; --text: #0d1b3d; --muted: #5b6472; --line: #d5dce8;
+  --field: #ffffff; --err-bg: #fdecec; --err-fg: #b42318; --err-border: #f8b4b4; --shadow: 0 1px 2px rgba(16, 24, 40, .06), 0 18px 44px rgba(16, 24, 40, .12);
+  --toggle-bg: #ffffff; --toggle-hover: #eef3fb; --toggle-border: #cbd5e1;
   --font: -apple-system, "system-ui", "Segoe UI Variable", "Segoe UI", system-ui, ui-sans-serif, Roboto, "Helvetica Neue", Arial, sans-serif;
   color-scheme: light;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     --bg-a: #0c1424; --bg-b: #0a0f1a; --card: #151e30; --text: #e8edf6; --muted: #9aa6ba; --line: #2a3650; --field: #0f1727; --err-bg: #3a1618; --err-fg: #ffb4ab; --err-border: #692326;
-    --toggle-bg: rgba(21, 30, 48, .85); --toggle-border: #2a3650;
+    --toggle-bg: #0b1422; --toggle-hover: #162238; --toggle-border: #2a3650;
     --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 18px 44px rgba(0, 0, 0, .5);
     color-scheme: dark;
   }
 }
 html[data-theme="dark"] {
   --bg-a: #0c1424; --bg-b: #0a0f1a; --card: #151e30; --text: #e8edf6; --muted: #9aa6ba; --line: #2a3650; --field: #0f1727; --err-bg: #3a1618; --err-fg: #ffb4ab; --err-border: #692326;
-  --toggle-bg: rgba(21, 30, 48, .85); --toggle-border: #2a3650;
+  --toggle-bg: #0b1422; --toggle-hover: #162238; --toggle-border: #2a3650;
   --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 18px 44px rgba(0, 0, 0, .5);
   color-scheme: dark;
 }
+html.theme-transition {
+  transition-property: --bg-a, --bg-b, --card, --text, --muted, --line, --field, --toggle-bg, --toggle-hover, --toggle-border, --err-bg, --err-fg, --err-border;
+  transition-duration: 340ms;
+  transition-timing-function: ease-in-out;
+}
+html.theme-transition *, html.theme-transition *::before, html.theme-transition *::after {
+  transition: box-shadow 340ms ease-in-out, opacity 220ms ease-in-out, transform 180ms ease-out !important;
+}
+@keyframes pop-in {
+  from { opacity: 0; transform: scale(.72) rotate(-22deg); }
+  to { opacity: 1; transform: scale(1) rotate(0); }
+}
 * { box-sizing: border-box; }
 html, body { height: 100%; margin: 0; }
-body { font: 14px/1.5 var(--font); color: var(--text); background: linear-gradient(160deg, var(--bg-a), var(--bg-b) 60%); -webkit-font-smoothing: antialiased; transition: background .2s, color .2s; }
-.theme-toggle { position: fixed; top: 18px; right: 20px; z-index: 10; display: inline-flex; align-items: center; gap: 8px; height: 36px; padding: 0 14px; border: 1px solid var(--toggle-border); border-radius: 999px; background: var(--toggle-bg); color: var(--text); font: 600 12.5px/1 var(--font); cursor: pointer; backdrop-filter: blur(8px); box-shadow: 0 4px 14px rgba(0, 0, 0, .12); transition: transform .1s, border-color .15s, background-color .15s; }
-.theme-toggle:hover { border-color: var(--blue); }
-.theme-toggle:active { transform: translateY(1px); }
-.theme-icon { display: inline-flex; width: 15px; height: 15px; }
+body { font: 14px/1.5 var(--font); color: var(--text); background: linear-gradient(160deg, var(--bg-a), var(--bg-b) 60%); -webkit-font-smoothing: antialiased; }
+.theme-toggle { position: fixed; top: 18px; right: 20px; z-index: 10; display: grid; place-items: center; width: 36px; height: 36px; padding: 0; border: 1px solid var(--toggle-border); border-radius: 8px; background: var(--toggle-bg); color: var(--text); cursor: pointer; box-shadow: 0 2px 8px rgba(0, 0, 0, .12); transition: transform .15s, border-color .15s, background-color .15s, color .15s; }
+.theme-toggle:hover { background: var(--toggle-hover); border-color: var(--blue); color: var(--blue); }
+.theme-toggle:active { transform: scale(.95); }
+.theme-icon { display: inline-flex; width: 16px; height: 16px; }
+.theme-icon.pop { animation: pop-in 220ms cubic-bezier(.22, 1, .36, 1) both; }
 .shell { min-height: 100%; display: grid; place-items: center; padding: 24px; }
-.card { width: min(100%, 420px); padding: 34px 34px 28px; border-radius: 18px; background: var(--card); box-shadow: var(--shadow); transition: background-color .2s, box-shadow .2s; }
+.card { width: min(100%, 420px); padding: 34px 34px 28px; border-radius: 18px; background: var(--card); box-shadow: var(--shadow); }
 .brand { display: flex; align-items: center; justify-content: center; margin-bottom: 22px; }
-.brand-logo { max-width: 100%; height: auto; display: block; margin: 0 auto; }
+.brand-logo { max-width: 100%; height: auto; display: block; margin: 0 auto; transition: opacity 180ms ease-in-out; }
 .totp-row { margin-top: 4px; }
 .totp-row[hidden] { display: none; }
 h1 { margin: 0 0 14px; font-size: 20px; font-weight: 650; letter-spacing: -.01em; }
