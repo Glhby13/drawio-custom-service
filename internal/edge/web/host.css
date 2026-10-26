@@ -33,10 +33,10 @@ body { display: flex; flex-direction: column; font: 14px/1.4 var(--font); backgr
 
 .docinfo { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .sep { width: 1px; height: 22px; background: rgba(255, 255, 255, .3); flex: none; }
-.title { flex: 0 1 340px; min-width: 100px; height: 30px; padding: 0 9px; border: 1px solid transparent; border-radius: 7px; background: transparent; color: #fff; font: 600 14.5px var(--font); text-overflow: ellipsis; }
-.title:hover:not([readonly]) { background: rgba(255, 255, 255, .12); }
-.title:focus { outline: none; background: #fff; color: #111827; border-color: #fff; }
-.title[readonly] { cursor: default; }
+.title { flex: 0 1 300px; min-width: 110px; height: 30px; padding: 0 30px 0 10px; border: 1px solid rgba(255, 255, 255, .42); border-radius: 7px; background: rgba(11, 36, 84, .28) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='rgba(255,255,255,0.75)' stroke-width='2.1' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 20h9'/%3E%3Cpath d='M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z'/%3E%3C/svg%3E") no-repeat right 8px center / 13px; color: #fff; font: 600 14px var(--font); text-overflow: ellipsis; transition: background-color .15s, border-color .15s, box-shadow .15s; }
+.title:hover:not([readonly]) { background-color: rgba(11, 36, 84, .42); border-color: rgba(255, 255, 255, .75); }
+.title:focus { outline: none; background: #fff; color: #111827; border-color: #fff; padding-right: 10px; box-shadow: 0 0 0 3px rgba(255, 255, 255, .28); }
+.title[readonly] { cursor: default; background: rgba(255, 255, 255, .08); border-color: rgba(255, 255, 255, .2); padding-right: 10px; }
 .rolebadge { flex: none; padding: 3px 8px; border-radius: 5px; background: rgba(255, 255, 255, .2); color: #fff; font-size: 10.5px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; }
 
 .presence { display: flex; align-items: center; flex: none; }
@@ -112,25 +112,54 @@ select.field, .select { appearance: none; -webkit-appearance: none; padding: 0 3
 .banner { flex: none; padding: 8px 16px; background: #fee2e2; color: #991b1b; font-weight: 500; }
 
 /* ---- dialogs ---- */
-.dlg { border: 0; border-radius: 14px; padding: 0; width: min(520px, calc(100vw - 32px)); box-shadow: 0 20px 60px rgba(15, 23, 42, .35); color: #1f2937; }
+.dlg { border: 0; border-radius: 14px; padding: 0; width: min(520px, calc(100vw - 32px)); box-shadow: 0 20px 60px rgba(15, 23, 42, .35); color: #1f2937; overflow: visible; }
 .dlg::backdrop { background: rgba(15, 23, 42, .45); }
 .dlg form { padding: 20px; }
 .dlg h2 { margin: 0 0 12px; font-size: 18px; }
-.dlg-body { display: grid; gap: 10px; max-height: 60vh; overflow: auto; }
+.dlg-body { display: grid; gap: 10px; max-height: 70vh; overflow: visible; }
 .dlg-body p { margin: 0; }
 .dlg-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
 .dlg label { font-size: 12px; font-weight: 600; color: #475569; display: grid; gap: 4px; }
 .dlg .field { width: 100%; box-sizing: border-box; }
 .dlg .msg { padding: 8px 10px; border-radius: 8px; background: #fee2e2; color: #991b1b; font-size: 13px; }
-.share-row { display: flex; align-items: center; gap: 8px; padding: 4px 0; }
+.share-list { display: grid; gap: 6px; margin-top: 2px; }
+.share-row { display: flex; align-items: center; gap: 8px; padding: 6px 10px; border: 1px solid #e2e8f0; border-radius: 9px; background: #f8fafc; }
 .share-row .field { width: auto; flex: none; }
-.share-row .grow { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-.hits { display: grid; gap: 2px; }
-.hit { text-align: left; padding: 6px 8px; border: 0; border-radius: 6px; background: #f8fafc; cursor: pointer; font: inherit; }
-.hit:hover { background: #e0ecff; }
-.ai-box { display: grid; gap: 8px; margin-top: 8px; padding: 12px; border: 1px solid #e2e8f0; border-radius: 10px; background: #f8fafc; }
-.ai-box .btn { justify-self: start; }
-.check { display: flex !important; align-items: center; gap: 8px; font-weight: 500 !important; }
+.share-row .grow { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; font-weight: 500; color: #0f172a; }
+.share-add-trigger { margin-top: 8px; display: flex; align-items: center; }
+.add-user-btn { height: 34px; padding: 0 12px; border: 1px dashed #94a3b8; border-radius: 8px; background: #f8fafc; color: var(--blue); font: 600 13px/1 var(--font); cursor: pointer; display: inline-flex; align-items: center; gap: 6px; transition: background-color .15s, border-color .15s; }
+.add-user-btn:hover { background: #eff6ff; border-color: var(--blue); border-style: solid; }
+.add-user-plus { display: inline-grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; background: var(--blue); color: #fff; font-size: 15px; font-weight: 700; line-height: 1; }
+.share-add-box { display: grid; gap: 8px; margin-top: 8px; padding: 12px; border: 1px solid #cbd5e1; border-radius: 10px; background: #f8fafc; }
+.share-add-row { display: flex; align-items: center; gap: 8px; }
+.share-add-row .field { flex: 1; min-width: 0; }
+.hits { display: grid; gap: 2px; max-height: 160px; overflow: auto; }
+.hit { text-align: left; padding: 7px 10px; border: 1px solid transparent; border-radius: 7px; background: #fff; cursor: pointer; font: 500 13px var(--font); color: #1e293b; }
+.hit:hover { background: #eff6ff; border-color: #bfdbfe; color: var(--blue); }
+
+/* Custom themed dropdown for Share roles */
+.role-dd { position: relative; flex: none; }
+.role-dd-btn { display: inline-flex; align-items: center; justify-content: space-between; gap: 8px; min-width: 104px; height: 32px; padding: 0 10px 0 12px; border: 1px solid #cbd5e1; border-radius: 8px; background: #fff; color: #1e293b; font: 500 13px/1 var(--font); cursor: pointer; text-transform: capitalize; transition: border-color .15s, box-shadow .15s; }
+.role-dd-btn:hover { border-color: #94a3b8; background: #f8fafc; }
+.role-dd-btn:focus-visible, .role-dd.open .role-dd-btn { outline: none; border-color: var(--blue); box-shadow: 0 0 0 2px rgba(24, 104, 219, .2); }
+.role-dd-chev { width: 14px; height: 14px; color: #64748b; flex: none; transition: transform .15s; }
+.role-dd.open .role-dd-chev { transform: rotate(180deg); color: var(--blue); }
+.role-dd-menu { position: absolute; right: 0; top: calc(100% + 4px); min-width: 128px; padding: 4px; border: 1px solid #e2e8f0; border-radius: 10px; background: #fff; box-shadow: 0 10px 28px rgba(15, 23, 42, .18); z-index: 30; display: grid; gap: 2px; }
+.role-dd-opt { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; padding: 7px 10px; border: 0; border-radius: 7px; background: transparent; color: #334155; font: 500 13px/1.2 var(--font); text-align: left; text-transform: capitalize; cursor: pointer; }
+.role-dd-opt:hover { background: #f1f5f9; color: #0f172a; }
+.role-dd-opt.active { background: #eff6ff; color: var(--blue); font-weight: 600; }
+.role-dd-check { font-size: 12px; color: var(--blue); opacity: 0; }
+.role-dd-opt.active .role-dd-check { opacity: 1; }
+
+/* AI Collaborators modal & ? tooltips */
+.ai-box { display: grid; gap: 12px; padding: 4px 0; }
+.ai-setting { display: grid; gap: 5px; padding: 10px 12px; border: 1px solid #e2e8f0; border-radius: 10px; background: #f8fafc; }
+.ai-label-row { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; color: #1e293b; }
+.check { display: flex !important; align-items: center; gap: 8px; font-weight: 600 !important; color: #1e293b !important; cursor: pointer; }
+.help-tip { position: relative; display: inline-grid; place-items: center; width: 17px; height: 17px; border-radius: 50%; border: 1px solid #94a3b8; background: #fff; color: #475569; font: 700 11px/1 var(--font); cursor: help; flex: none; user-select: none; transition: background-color .15s, color .15s, border-color .15s; }
+.help-tip:hover, .help-tip:focus-visible { background: var(--blue); border-color: var(--blue); color: #fff; outline: none; }
+.help-tip-popup { position: absolute; bottom: calc(100% + 8px); right: -12px; width: 250px; padding: 9px 11px; border-radius: 8px; background: #0f172a; color: #f8fafc; font: 400 12px/1.45 var(--font); text-align: left; box-shadow: 0 10px 25px rgba(15, 23, 42, .35); pointer-events: none; opacity: 0; transform: translateY(4px); transition: opacity .15s, transform .15s; z-index: 50; }
+.help-tip:hover .help-tip-popup, .help-tip:focus-visible .help-tip-popup { opacity: 1; transform: translateY(0); }
 .ai-box small { color: #64748b; }
 .pwrow { display: flex; gap: 8px; }
 .pwrow .field { flex: 1; }

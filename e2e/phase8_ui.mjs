@@ -24,25 +24,35 @@ const id = alice.page.url().split('/d/')[1];
 await alice.page.waitForFunction(() => window.__adapter && window.__adapter.state().joined && document.getElementById('status').dataset.state === 'ready', null, { timeout: 60000 });
 check('NEW DIAGRAM: the title is the one typed', (await alice.page.inputValue('#title')) === 'Created with Enter');
 
-// 2. Share dialog
+// 2. Share dialog & AI Collaborators menu modal
 await alice.page.click('#btn-share');
-await alice.page.waitForSelector('#dlg[open] #share-q');
+await alice.page.waitForSelector('#dlg[open] #btn-add-user');
 const footer = await alice.page.$$eval('#dlg-actions button', bs => bs.map(b => b.textContent.trim() + (b.classList.contains('primary') ? '*' : '')));
-check('SHARE: the primary button is "Done" (not "Save AI policy"), AI settings have their own save button', footer.join() === 'Done*' && await alice.page.isVisible('#save-ai') && await alice.page.isDisabled('#save-ai'), footer.join());
+await alice.page.click('#btn-add-user');
+await alice.page.waitForSelector('#dlg[open] #share-q:visible');
 await alice.page.fill('#share-q', 'lab-test2');
 await alice.page.waitForSelector('.hit[data-user="lab-test2"]', { timeout: 8000 });
 await alice.page.click('.hit[data-user="lab-test2"]');
 await alice.page.waitForSelector('[data-remove="lab-test2"]', { timeout: 8000 });
 check('SHARE: picking a person shares immediately, and the row shows the name next to the role and Remove', (await alice.page.textContent('#share-list')).includes('lab-test2'));
+await alice.page.click('#btn-add-user');
 await alice.page.fill('#share-q', 'e2e'); await alice.page.keyboard.press('Enter');
 check('SHARE: Enter in the search box does not close the dialog', await alice.page.isVisible('#dlg[open] #share-q'));
-await alice.page.check('#ai-allowed');
-check('SHARE: changing AI settings enables their own Save button', await alice.page.isEnabled('#save-ai'));
-await alice.page.click('#save-ai');
-await alice.page.waitForFunction(() => document.getElementById('save-ai').disabled, null, { timeout: 5000 });
-check('SHARE: AI policy saved on the server', (await api(alice, 'GET', `/documents/${id}`)).document.aiPolicy.allowed === true);
 await alice.page.click('#dlg-actions .primary');
 check('SHARE: Done closes the dialog', !(await alice.page.isVisible('#dlg[open]')));
+
+// 2b. AI Collaborators menu item on menu bar
+const frame = alice.page.frameLocator('#editor');
+await frame.locator('[data-drawspace-menu="ai"]').click();
+await alice.page.waitForSelector('#dlg[open] #save-ai');
+check('AI MENU: primary button is "Done", AI settings have their own save button and ? tooltips', footer.join() === 'Done*' && await alice.page.isVisible('#save-ai') && await alice.page.isDisabled('#save-ai') && (await alice.page.locator('.help-tip').count()) === 3, footer.join());
+await alice.page.check('#ai-allowed');
+check('AI MENU: changing AI settings enables their own Save button', await alice.page.isEnabled('#save-ai'));
+await alice.page.click('#save-ai');
+await alice.page.waitForFunction(() => document.getElementById('save-ai').disabled, null, { timeout: 5000 });
+check('AI MENU: AI policy saved on the server', (await api(alice, 'GET', `/documents/${id}`)).document.aiPolicy.allowed === true);
+await alice.page.click('#dlg-actions .primary');
+check('AI MENU: Done closes the dialog', !(await alice.page.isVisible('#dlg[open]')));
 
 // 3. History follows live
 await bob.page.goto(BASE + '/d/' + id);

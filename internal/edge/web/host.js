@@ -157,7 +157,7 @@
         onEditorReady: function (ui, win) { installEditorMenus(ui, win, id); },
       });
       window.__adapter = adapter; // used by the end-to-end suite
-      window.__app = { openPanel: function (kind) { openKind(kind, id); }, dirty: unsaved };
+      window.__app = { openPanel: function (kind) { openKind(kind, id); }, openAi: function () { openAiSettings(id); }, dirty: unsaved };
     }).catch(function (e) {
       setStatus('error', 'Unavailable');
       var b = $('banner'); b.textContent = e.status === 404 ? 'This diagram does not exist or is not shared with you.' : e.message; b.hidden = false;
@@ -183,9 +183,10 @@
     else if (kind === 'comments' && FEATURES.comments) openPanel('Comments', id, renderComments);
   }
 
-  // Our functions live INSIDE draw.io's own menu bar (one bar, no second toolbar): a "History" menu and the copy-as-image entries.
+  // Our functions live INSIDE draw.io's own menu bar (one bar, no second toolbar): "History" and "AI" to the right of "Help", plus copy-as-image entries.
   function installEditorMenus(ui, win, id) {
     var Menu = win.Menu, canEdit = function () { return doc && doc.can && doc.can.edit; };
+    Array.prototype.slice.call(ui.menubar.container.querySelectorAll('[data-drawspace-menu]')).forEach(function (n) { n.remove(); });
     ui.menus.put('drawspace', new Menu(function (menu, parent) {
       menu.addItem('Change history', null, function () { openKind('history', id); }, parent);
       menu.addItem('Named versions', null, function () { openKind('versions', id); }, parent);
@@ -193,8 +194,28 @@
       if (FEATURES.comments) menu.addItem('Comments', null, function () { openKind('comments', id); }, parent);
     }));
     var elt = ui.menubar.addMenu('History', ui.menus.get('drawspace').funct);
+    elt.className = 'geItem';
+    elt.setAttribute('data-drawspace-menu', 'history');
+    var aiElt = ui.menubar.container.ownerDocument.createElement('a');
+    aiElt.className = 'geItem';
+    aiElt.setAttribute('data-drawspace-menu', 'ai');
+    aiElt.textContent = 'AI';
+    aiElt.addEventListener('click', function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+      if (ui.hideCurrentMenu) ui.hideCurrentMenu();
+      openAiSettings(id);
+    });
+    var statusAnchor = ui.menubar.container.querySelector('.geStatus');
     var help = Array.prototype.find.call(ui.menubar.container.children, function (c) { return c !== elt && /^help$/i.test((c.textContent || '').trim()); });
-    if (elt && help) ui.menubar.container.insertBefore(elt, help); // keep Help last, like draw.io does
+    var afterHelp = help ? help.nextSibling : statusAnchor;
+    if (afterHelp) {
+      ui.menubar.container.insertBefore(elt, afterHelp);
+      ui.menubar.container.insertBefore(aiElt, afterHelp);
+    } else {
+      ui.menubar.container.appendChild(elt);
+      ui.menubar.container.appendChild(aiElt);
+    }
     // copy the selection as an image (the clipboard accepts PNG and SVG only; JPG is saved as a file through draw.io's own export dialog)
     var graph = ui.editor.graph, act = function (name) { return function () { var a = ui.actions.get(name); if (a) a.funct(); }; };
     function addCopyAs(menu, parent) {
@@ -337,15 +358,107 @@
     }).catch(function (e) { body.textContent = e.message; });
   }
 
-  // ---- share -----------------------------------------------------------------------------------------------------------
+  // ---- share & AI collaborators ----------------------------------------------------------------------------------------
+  function makeRoleDropdown(initialValue, onChange, props) {
+    var val = initialValue === 'editor' ? 'editor' : 'viewer';
+    var root = el('div', Object.assign({ class: 'role-dd' }, props || {}), []);
+    var labelSpan = el('span', { text: val });
+    var chev = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    chev.setAttribute('viewBox', '0 0 24 24');
+    chev.setAttribute('class', 'role-dd-chev');
+    chev.setAttribute('fill', 'none');
+    chev.setAttribute('stroke', 'currentColor');
+    chev.setAttribute('stroke-width', '2.4');
+    chev.setAttribute('stroke-linecap', 'round');
+    chev.setAttribute('stroke-linejoin', 'round');
+    var path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    path.setAttribute('d', 'M6 9l6 6 6-6');
+    chev.appendChild(path);
+    var btn = el('button', { class: 'role-dd-btn', type: 'button', 'aria-haspopup': 'listbox', 'aria-expanded': 'false' }, [labelSpan, chev]);
+    var menuEl = el('div', { class: 'role-dd-menu', role: 'listbox', hidden: true }, []);
+    function renderOpts() {
+      menuEl.textContent = '';
+      ['viewer', 'editor'].forEach(function (opt) {
+        var item = el('button', {
+          class: 'role-dd-opt' + (opt === val ? ' active' : ''),
+          type: 'button',
+          role: 'option',
+          'data-value': opt,
+          onclick: function (e) {
+            e.stopPropagation();
+            val = opt;
+            labelSpan.textContent = val;
+            root.dataset.value = val;
+            closeDd();
+            renderOpts();
+            if (onChange) onChange(val);
+          }
+        }, [el('span', { text: opt }), el('span', { class: 'role-dd-check', text: '✓' })]);
+        menuEl.appendChild(item);
+      });
+    }
+    function closeDd() {
+      root.classList.remove('open');
+      menuEl.hidden = true;
+      btn.setAttribute('aria-expanded', 'false');
+    }
+    btn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      var wasOpen = !menuEl.hidden;
+      Array.prototype.slice.call(document.querySelectorAll('.role-dd.open')).forEach(function (d) {
+        d.classList.remove('open');
+        var m = d.querySelector('.role-dd-menu');
+        if (m) m.hidden = true;
+      });
+      if (!wasOpen) {
+        root.classList.add('open');
+        menuEl.hidden = false;
+        btn.setAttribute('aria-expanded', 'true');
+      }
+    });
+    renderOpts();
+    root.dataset.value = val;
+    root.getValue = function () { return val; };
+    root.appendChild(btn);
+    root.appendChild(menuEl);
+    return root;
+  }
+
+  document.addEventListener('click', function () {
+    Array.prototype.slice.call(document.querySelectorAll('.role-dd.open')).forEach(function (d) {
+      d.classList.remove('open');
+      var m = d.querySelector('.role-dd-menu');
+      if (m) m.hidden = true;
+    });
+  });
+
+  function helpTip(explanation) {
+    return el('span', { class: 'help-tip', tabindex: '0', role: 'note', 'aria-label': explanation }, [
+      '?',
+      el('span', { class: 'help-tip-popup', text: explanation }),
+    ]);
+  }
+
   function openShare(id) {
     api('GET', '/documents/' + id + '/permissions').then(function (r) {
       var wrap = el('div', null, []);
-      var list = el('div', { id: 'share-list' }, []);
+      var list = el('div', { id: 'share-list', class: 'share-list' }, []);
       var hits = el('div', { class: 'hits' }, []);
       var q = el('input', { class: 'field', id: 'share-q', type: 'search', placeholder: 'Add people by name or username', autocomplete: 'off', 'aria-label': 'Add people' });
-      var roleSel = el('select', { class: 'field', id: 'share-role', 'aria-label': 'Role' }, ['viewer', 'commenter', 'editor'].map(function (x) { return el('option', { value: x, text: x }); }));
-      roleSel.value = 'editor';
+      var roleDd = makeRoleDropdown('editor', null, { id: 'share-role', 'aria-label': 'Role' });
+      var addBox = el('div', { id: 'share-add-box', class: 'share-add-box', hidden: true }, []);
+      var addTrigger = el('div', { class: 'share-add-trigger' }, []);
+      var addBtn = el('button', {
+        id: 'btn-add-user',
+        class: 'add-user-btn',
+        type: 'button',
+        onclick: function () {
+          addBox.hidden = !addBox.hidden;
+          if (!addBox.hidden) setTimeout(function () { q.focus(); }, 20);
+        }
+      }, [el('span', { class: 'add-user-plus', 'aria-hidden': 'true', text: '+' }), el('span', { text: 'Add user' })]);
+      addTrigger.appendChild(addBtn);
+
       function refresh() {
         api('GET', '/documents/' + id + '/permissions').then(function (x) { r = x; draw(); });
       }
@@ -356,11 +469,12 @@
         list.textContent = '';
         list.appendChild(el('div', { class: 'share-row' }, [el('span', { class: 'grow', text: r.owner }), el('span', { class: 'chip', text: 'owner' })]));
         (r.permissions || []).forEach(function (p) {
-          var sel = el('select', { class: 'field', 'aria-label': 'Role of ' + p.subject, 'data-subject': p.subject }, ['viewer', 'commenter', 'editor'].map(function (x) { return el('option', { value: x, text: x }); }));
-          sel.value = p.role;
-          sel.onchange = function () { setRole(p.subject, sel.value); };
-          list.appendChild(el('div', { class: 'share-row' }, [el('span', { class: 'grow', text: p.subject === '*' ? 'Everyone with access to DrawSpace' : p.subject }), sel,
-            el('button', { class: 'btn danger', type: 'button', text: 'Remove', 'data-remove': p.subject, onclick: function () { setRole(p.subject, ''); } })]));
+          var dd = makeRoleDropdown(p.role, function (newRole) { setRole(p.subject, newRole); }, { 'aria-label': 'Role of ' + p.subject, 'data-subject': p.subject });
+          list.appendChild(el('div', { class: 'share-row' }, [
+            el('span', { class: 'grow', text: p.subject === '*' ? 'Everyone with access to DrawSpace' : p.subject }),
+            dd,
+            el('button', { class: 'btn danger', type: 'button', text: 'Remove', 'data-remove': p.subject, onclick: function () { setRole(p.subject, ''); } })
+          ]));
         });
       }
       draw();
@@ -373,18 +487,28 @@
           api('GET', '/users?q=' + encodeURIComponent(v)).then(function (u) {
             (u.users || []).filter(function (x) { return x.username !== r.owner; }).forEach(function (x) {
               hits.appendChild(el('button', { class: 'hit', type: 'button', 'data-user': x.username, text: (x.name ? x.name + ' · ' : '') + x.username + (x.kind === 'ai' ? ' (AI)' : ''),
-                onclick: function () { setRole(x.username, roleSel.value); q.value = ''; hits.textContent = ''; } }));
+                onclick: function () { setRole(x.username, roleDd.getValue()); q.value = ''; hits.textContent = ''; addBox.hidden = true; } }));
             });
           }).catch(function () { /* ignore */ });
         }, 200);
       };
-      var everyone = el('button', { class: 'btn', type: 'button', id: 'share-everyone', text: 'Share with everyone', onclick: function () { setRole('*', roleSel.value); } });
+      var everyone = el('button', { class: 'btn', type: 'button', id: 'share-everyone', text: 'Share with everyone', onclick: function () { setRole('*', roleDd.getValue()); addBox.hidden = true; } });
+      addBox.appendChild(el('div', { class: 'share-add-row' }, [q, roleDd]));
+      addBox.appendChild(hits);
+      addBox.appendChild(everyone);
+
       wrap.appendChild(el('label', null, ['People with access']));
       wrap.appendChild(list);
-      wrap.appendChild(el('div', { class: 'share-row' }, [q, roleSel]));
-      wrap.appendChild(hits);
-      wrap.appendChild(everyone);
-      // AI collaborator policy
+      wrap.appendChild(addTrigger);
+      wrap.appendChild(addBox);
+      q.addEventListener('keydown', function (e) { if (e.key === 'Enter') e.preventDefault(); }); // Enter in the search box must not close the dialog
+      var actions = [{ label: 'Done', cls: 'primary' }];
+      dialog('Share "' + (doc ? doc.document.title : '') + '"', wrap, actions);
+    }).catch(function (e) { toast('error', e.message); });
+  }
+
+  function openAiSettings(id) {
+    api('GET', '/documents/' + id + '/permissions').then(function (r) {
       var ai = r.aiPolicy || { allowed: false, maxOpsPerMin: 120, maxDelete: 20 };
       var allowed = el('input', { type: 'checkbox', id: 'ai-allowed' }); allowed.checked = !!ai.allowed;
       var rate = el('input', { class: 'field', id: 'ai-rate', type: 'number', min: '1', max: '5000', value: String(ai.maxOpsPerMin) }); rate.value = String(ai.maxOpsPerMin);
@@ -392,10 +516,26 @@
       var canPolicy = doc && doc.can && doc.can.policy;
       [allowed, rate, del].forEach(function (x) { x.disabled = !canPolicy; });
       var aiBox = el('div', { class: 'ai-box' }, [
-        el('strong', { text: 'AI collaborators' }),
-        el('label', { class: 'check' }, [allowed, ' Allow AI collaborators (agents) on this diagram']),
-        el('label', null, ['Max AI operations per minute', rate]),
-        el('label', null, ['Max AI deletions per change (larger needs confirmation)', del]),
+        el('div', { class: 'ai-setting' }, [
+          el('div', { class: 'ai-label-row' }, [
+            el('label', { class: 'check' }, [allowed, ' Allow AI collaborators (agents) on this diagram']),
+            helpTip('Izinkan agen AI (misal Claude / MCP) yang telah diberi akses pada menu Share untuk membaca dan mengedit diagram ini secara langsung.'),
+          ]),
+        ]),
+        el('div', { class: 'ai-setting' }, [
+          el('div', { class: 'ai-label-row' }, [
+            el('span', { text: 'Max AI operations per minute' }),
+            helpTip('Batas maksimum jumlah operasi perubahan sel/bentuk yang boleh dikirim oleh agen AI setiap menit (rate limit) agar tidak membebani diagram.'),
+          ]),
+          rate,
+        ]),
+        el('div', { class: 'ai-setting' }, [
+          el('div', { class: 'ai-label-row' }, [
+            el('span', { text: 'Max AI deletions per change (larger needs confirmation)' }),
+            helpTip('Batas maksimum jumlah elemen/sel yang boleh dihapus oleh agen AI dalam satu kali perintah perubahan guna mencegah penghapusan massal tanpa sengaja.'),
+          ]),
+          del,
+        ]),
       ]);
       if (canPolicy) {
         var saveAi = el('button', { class: 'btn', type: 'button', id: 'save-ai', text: 'Save AI settings', disabled: true, onclick: function () {
@@ -404,11 +544,10 @@
         } });
         [allowed, rate, del].forEach(function (x) { x.addEventListener('input', function () { saveAi.disabled = false; }); x.addEventListener('change', function () { saveAi.disabled = false; }); });
         aiBox.appendChild(saveAi);
-      } else aiBox.appendChild(el('small', { text: 'Only the owner or an administrator can change these settings.' }));
-      wrap.appendChild(aiBox);
-      q.addEventListener('keydown', function (e) { if (e.key === 'Enter') e.preventDefault(); }); // Enter in the search box must not close the dialog
-      var actions = [{ label: 'Done', cls: 'primary' }];
-      dialog('Share "' + (doc ? doc.document.title : '') + '"', wrap, actions);
+      } else {
+        aiBox.appendChild(el('small', { text: 'Only the owner or an administrator can change these settings.' }));
+      }
+      dialog('AI Collaborators — "' + (doc ? doc.document.title : '') + '"', aiBox, [{ label: 'Done', cls: 'primary' }]);
     }).catch(function (e) { toast('error', e.message); });
   }
 

@@ -45,11 +45,21 @@ Endpoint `https://drawio.lab.local/mcp` (Streamable HTTP, JSON-RPC). Metadata OA
   - **Sign in with AD BTN (Utama)**: form username dan password terhubung langsung ke Keycloak via Direct Access Grant (`POST /login/ad`). Menggunakan alur autentikasi khusus `drawio-direct-grant` (diikat pada `authenticationFlowBindingOverrides["direct_grant"]` client `drawio-lab`) agar pengguna yang memiliki OTP terdaftar di Keycloak (seperti `lab-admin`) tetap dapat login langsung dengan username & password tanpa gagal `invalid_grant`.
   - **Sign in with local account (Sekunder)**: tombol sekunder untuk login akun lokal (break-glass / administrator) melalui `POST /login/local`.
   - Akun lokal berperan `user` atau `admin`, dikelola admin di menu pengguna → **Manage users** (`/admin/users`), bisa berbagi diagram dengan pengguna SSO dan sebaliknya. Admin pertama dibuat dari Secret `LOCAL_ADMIN_PASSWORD` (`admin`). ADR-0014.
-- **Satu header**: logo vector DrawSpace (`drawspace-icon.svg`), pil status simpan ("All changes saved" / "Saving…" / "Offline · changes not saved yet"), judul + peran diagram, presence, Share, menu pengguna. Fungsi riwayat/versi ada di menu bar draw.io sendiri (**History**); ekspor memakai File → Export as bawaan draw.io. Komentar dinonaktifkan sementara (`FEATURES.comments` di `host.js`; API dan panel tetap ada).
+- **Satu header & menu bar**:
+  - **Logo putih di header biru**: ikon vector DrawSpace pada header biru (`#1868db`) menggunakan warna putih (`#FFFFFF`) dengan aksen kotak merah (`#FF151B`) agar kontras (sesuai varian "App Icon (Primary)" di `logo/drawspace.png`).
+  - **Input judul diagram terlihat jelas**: kotak nama diagram (`#title`) secara default memiliki latar biru gelap semi-transparan, outline putih halus, dan ikon pensil di sisi kanan agar pengguna langsung tahu judul dapat diklik untuk diedit.
+  - **Menu `History` dan `AI` di kanan `Help`**: menu bar draw.io menampilkan `File  Edit  View  Arrange  Extras  Help  History  AI` (`class="geItem"` sehingga tidak menumpuk `File`).
+  - **Dialog Share**: hanya menampilkan role `viewer` dan `editor` (tanpa `commenter`) menggunakan custom dropdown yang menyatu dengan tema, serta tombol **`+ Add user`** (`#btn-add-user`) di bawah daftar pengguna yang sudah memiliki akses.
+  - **Dialog AI Collaborators (`AI` di menu bar)**: pengaturan kolaborator AI dipisahkan ke pop-up tersendiri dari menu bar `AI`, dilengkapi ikon **`?`** pada setiap pengaturan yang menampilkan penjelasan saat di-hover.
 - **Salin sebagai gambar**: pilih bentuk → klik kanan atau menu Edit → *Copy as PNG image* / *Copy as SVG* (clipboard browser hanya menerima PNG dan SVG) dan *Save selection as JPG…* (unduh).
 - **Tanpa pop-up bawaan browser saat keluar** bila semua perubahan sudah tersimpan; dialog sendiri hanya muncul bila masih ada perubahan yang belum sampai ke server.
 
 ## Riwayat perubahan penting
+- **2026-10-26 (malam)**: Perbaikan UI Editor, Header, Menu Bar (`History` & `AI`), dan Dialog Share:
+  1. Perbaikan posisi menu **History** (`className = 'geItem'`, mengatasi bug draw.io `ui=atlas` yang memberi `class="geMenubar"` absolut sehingga menumpuk tombol `File`) dan penempatan di sebelah kanan **Help**.
+  2. Penambahan menu **AI** di sebelah kanan **History** (`File Edit View Arrange Extras Help History AI`) yang membuka pop-up pengaturan **AI Collaborators** tersendiri beserta ikon **`?`** (tooltip penjelasan saat hover) di setiap pengaturan.
+  3. Perubahan warna ikon logo DrawSpace di header biru menjadi putih (`#FFFFFF`) + aksen merah (`#FF151B`), serta penambahan outline, background kontras samar, dan ikon pensil pada input judul diagram (`#title`).
+  4. Penghapusan opsi `commenter` pada dialog **Share**, pembuatan custom themed dropdown (`viewer` / `editor`), dan penambahan tombol **`+ Add user`** di bawah daftar user yang memiliki akses.
 - **2026-10-26**: Pembaruan halaman login DrawSpace & Rekonstruksi Vector SVG:
   1. Rekonstruksi logo DrawSpace menjadi pure vector SVG (`drawspace-logo.svg`, `drawspace-logo-dark.svg`, `drawspace-icon.svg`, `drawspace-wordmark.svg`, serta ekspor PNG ukuran 1024/512/256/64/32 di `logo/`) sesuai spesifikasi geometri dan warna `logo/drawspace.png`, diintegrasikan ke `/login`, `/logged-out`, `/favicon.svg`, dan header editor `host.html`.
   2. Integrasi direct SSO Keycloak: tombol utama biru diubah menjadi **"Sign in with AD BTN"** (`POST /login/ad`) yang mengeksekusi direct access grant ke Keycloak sehingga pengguna login langsung tanpa dialihkan ke halaman web Keycloak.

@@ -107,6 +107,8 @@ await lu.page.click('#panel-close');
 
 // share with an SSO user and collaborate
 await lu.page.click('#btn-share');
+await lu.page.waitForSelector('#dlg[open] #btn-add-user');
+await lu.page.click('#btn-add-user');
 await lu.page.fill('#share-q', 'lab-test2');
 await lu.page.waitForSelector('.hit[data-user="lab-test2"]', { timeout: 8000 });
 await lu.page.click('.hit[data-user="lab-test2"]');
