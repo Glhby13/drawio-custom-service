@@ -41,20 +41,20 @@ Endpoint `https://drawio.lab.local/mcp` (Streamable HTTP, JSON-RPC). Metadata OA
 
 ## Login, akun lokal, dan tampilan (DrawSpace)
 - **Halaman login sendiri** (`/login`):
-  - **Logo DrawSpace resmi**: logo retina transparan (dark & light theme) sesuai mockup `logo/drawspace.png`.
-  - **Sign in with AD BTN (Utama)**: form username dan password terhubung langsung ke Keycloak via Direct Access Grant (`POST /login/ad`). Pengguna dapat login dengan akun AD BTN langsung dari UI DrawSpace tanpa dilempar ke halaman login Keycloak. Sesi SSO dan cookie `drawio_sid` terbuat secara seamless.
+  - **Logo Vector SVG DrawSpace resmi**: pure vector SVG tanpa ketergantungan font/raster eksternal (`/login-assets/drawspace-logo.svg`, `/login-assets/drawspace-logo-dark.svg`, `/login-assets/drawspace-icon.svg`, `/login-assets/drawspace-wordmark.svg`, `/favicon.svg`) direkonstruksi langsung dari geometri `logo/drawspace.png` (warna `#1463F3`, `#0D5FEF`, `#FF151B`, `#0B1B36`/`#FFFFFF`, `#8294AD`/`#94A3B8`).
+  - **Sign in with AD BTN (Utama)**: form username dan password terhubung langsung ke Keycloak via Direct Access Grant (`POST /login/ad`). Menggunakan alur autentikasi khusus `drawio-direct-grant` (diikat pada `authenticationFlowBindingOverrides["direct_grant"]` client `drawio-lab`) agar pengguna yang memiliki OTP terdaftar di Keycloak (seperti `lab-admin`) tetap dapat login langsung dengan username & password tanpa gagal `invalid_grant`.
   - **Sign in with local account (Sekunder)**: tombol sekunder untuk login akun lokal (break-glass / administrator) melalui `POST /login/local`.
   - Akun lokal berperan `user` atau `admin`, dikelola admin di menu pengguna → **Manage users** (`/admin/users`), bisa berbagi diagram dengan pengguna SSO dan sebaliknya. Admin pertama dibuat dari Secret `LOCAL_ADMIN_PASSWORD` (`admin`). ADR-0014.
-- **Satu header**: logo DrawSpace, pil status simpan ("All changes saved" / "Saving…" / "Offline · changes not saved yet"), judul + peran diagram, presence, Share, menu pengguna. Fungsi riwayat/versi ada di menu bar draw.io sendiri (**History**); ekspor memakai File → Export as bawaan draw.io. Komentar dinonaktifkan sementara (`FEATURES.comments` di `host.js`; API dan panel tetap ada).
+- **Satu header**: logo vector DrawSpace (`drawspace-icon.svg`), pil status simpan ("All changes saved" / "Saving…" / "Offline · changes not saved yet"), judul + peran diagram, presence, Share, menu pengguna. Fungsi riwayat/versi ada di menu bar draw.io sendiri (**History**); ekspor memakai File → Export as bawaan draw.io. Komentar dinonaktifkan sementara (`FEATURES.comments` di `host.js`; API dan panel tetap ada).
 - **Salin sebagai gambar**: pilih bentuk → klik kanan atau menu Edit → *Copy as PNG image* / *Copy as SVG* (clipboard browser hanya menerima PNG dan SVG) dan *Save selection as JPG…* (unduh).
 - **Tanpa pop-up bawaan browser saat keluar** bila semua perubahan sudah tersimpan; dialog sendiri hanya muncul bila masih ada perubahan yang belum sampai ke server.
 
 ## Riwayat perubahan penting
-- **2026-10-26**: Pembaruan halaman login DrawSpace:
-  1. Penyesuaian logo DrawSpace pada halaman login (`login-assets/logo-light.png` & `logo-dark.png`) sesuai mockup resmi `logo/drawspace.png`.
+- **2026-10-26**: Pembaruan halaman login DrawSpace & Rekonstruksi Vector SVG:
+  1. Rekonstruksi logo DrawSpace menjadi pure vector SVG (`drawspace-logo.svg`, `drawspace-logo-dark.svg`, `drawspace-icon.svg`, `drawspace-wordmark.svg`, serta ekspor PNG ukuran 1024/512/256/64/32 di `logo/`) sesuai spesifikasi geometri dan warna `logo/drawspace.png`, diintegrasikan ke `/login`, `/logged-out`, `/favicon.svg`, dan header editor `host.html`.
   2. Integrasi direct SSO Keycloak: tombol utama biru diubah menjadi **"Sign in with AD BTN"** (`POST /login/ad`) yang mengeksekusi direct access grant ke Keycloak sehingga pengguna login langsung tanpa dialihkan ke halaman web Keycloak.
   3. Tombol bawah disesuaikan menjadi **"Sign in with local account"** (`POST /login/local`) untuk akun lokal / break-glass.
-  4. Pengaktifan `directAccessGrantsEnabled: true` pada client Keycloak `drawio-lab`.
+  4. Pengaktifan `directAccessGrantsEnabled: true` dan pengikatan flow `drawio-direct-grant` (username + password tanpa syarat OTP) pada `authenticationFlowBindingOverrides["direct_grant"]` client Keycloak `drawio-lab` (`scripts/setup_keycloak_flow.py`), memperbaiki gagal login pada user yang memiliki credential OTP (`lab-admin`).
 
 ## Presence langsung (siapa sedang apa)
 Saat beberapa orang membuka diagram yang sama, setiap orang melihat **siapa memilih / mengedit / menggeser / mengubah ukuran apa**: kotak berwarna per pengguna + label "Nama · editing", hantu putus-putus saat drag/resize, dan teks yang sedang diketik (draft) di dekat sel. AI yang sedang menerapkan perubahan tampil sebagai "AI … applying changes". Ini **ephemeral** (WebSocket + Redis, TTL 8 dtk, tanpa DB/riwayat/lock): presence memberi tahu, lapisan operasi semantik yang menyelesaikan konflik. Desain/bukti: `docs/spikes/SPIKE-004-live-presence.md`, `docs/adr/0013-live-presence-ephemeral.md`, `e2e/phase7_presence.mjs`. Setelah rilis baru, muat ulang tab yang sudah terbuka sekali.

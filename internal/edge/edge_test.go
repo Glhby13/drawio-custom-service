@@ -826,3 +826,19 @@ func TestADSignInLocksAfterFailures(t *testing.T) {
 		t.Fatalf("after window: %d", r.StatusCode)
 	}
 }
+
+func TestLoginLogoSVGAssets(t *testing.T) {
+	e := newEnv(t, nil)
+	for _, p := range []string{
+		"/login-assets/drawspace-logo.svg",
+		"/login-assets/drawspace-logo-dark.svg",
+		"/login-assets/drawspace-icon.svg",
+		"/login-assets/drawspace-wordmark.svg",
+		"/favicon.svg",
+	} {
+		r := e.do(nil, "GET", p, nil)
+		if r.StatusCode != 200 || !strings.HasPrefix(r.Header.Get("Content-Type"), "image/svg+xml") {
+			t.Fatalf("%s: status %d ct %q", p, r.StatusCode, r.Header.Get("Content-Type"))
+		}
+	}
+}

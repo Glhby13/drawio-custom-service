@@ -48,10 +48,21 @@ for e in kc.api("GET", f"/authentication/flows/{TOP}/executions"):
         kc.api("POST", f"/authentication/executions/{e['id']}/config", {"alias": f"{NOROLE}-{ROLE}", "config": {"negate": "true", "condUserRole": f"{CLIENT}.{ROLE}"}})
         print("condition configured: deny unless the user has", f"{CLIENT}.{ROLE}")
 
-top = {f["alias"]: f for f in kc.api("GET", "/authentication/flows")}[TOP]
-cl["authenticationFlowBindingOverrides"] = {"browser": top["id"]}
+DG_FLOW = "drawio-direct-grant"
+if DG_FLOW not in flows:
+    kc.api("POST", "/authentication/flows", {"alias": DG_FLOW, "description": "Diagrams direct grant: username + password only (no OTP required)", "providerId": "basic-flow", "topLevel": True, "builtIn": False})
+    kc.api("POST", f"/authentication/flows/{DG_FLOW}/executions/execution", {"provider": "direct-grant-validate-username"})
+    kc.api("POST", f"/authentication/flows/{DG_FLOW}/executions/execution", {"provider": "direct-grant-validate-password"})
+for e in kc.api("GET", f"/authentication/flows/{DG_FLOW}/executions"):
+    if e["requirement"] != "REQUIRED":
+        kc.api("PUT", f"/authentication/flows/{DG_FLOW}/executions", {**e, "requirement": "REQUIRED"})
+
+all_flows = {f["alias"]: f for f in kc.api("GET", "/authentication/flows")}
+top = all_flows[TOP]
+dg = all_flows[DG_FLOW]
+cl["authenticationFlowBindingOverrides"] = {"browser": top["id"], "direct_grant": dg["id"]}
 cl["directAccessGrantsEnabled"] = True
 kc.api("PUT", f"/clients/{cid}", cl)
-print("bound: client", CLIENT, "browser flow ->", TOP, "(directAccessGrantsEnabled = True)")
+print("bound: client", CLIENT, "browser flow ->", TOP, "direct_grant ->", DG_FLOW, "(directAccessGrantsEnabled = True)")
 for e in kc.api("GET", f"/authentication/flows/{TOP}/executions"):
     print("  " * e["level"], e.get("displayName") or e.get("providerId"), "|", e["requirement"])
