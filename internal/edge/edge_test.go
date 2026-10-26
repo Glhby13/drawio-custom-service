@@ -80,6 +80,30 @@ func (p *fakeIdP) sign(key *rsa.PrivateKey, claims map[string]any) string {
 
 func (p *fakeIdP) token(w http.ResponseWriter, r *http.Request) {
 	_ = r.ParseForm()
+	now := time.Now()
+	key := p.key
+	base := func(sub string, extra map[string]any) map[string]any {
+		m := map[string]any{"iss": p.srv.URL, "sub": sub, "iat": now.Unix(), "exp": now.Add(5 * time.Minute).Unix()}
+		for k, v := range extra {
+			m[k] = v
+		}
+		return m
+	}
+	if r.Form.Get("grant_type") == "password" {
+		user := r.Form.Get("username")
+		pass := r.Form.Get("password")
+		if pass != "ad-valid-pass" {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadRequest)
+			_, _ = w.Write([]byte(`{"error":"invalid_grant","error_description":"Invalid user credentials"}`))
+			return
+		}
+		id := p.sign(key, base("sub-"+user, map[string]any{"aud": clientID, "preferred_username": user, "name": "AD User " + user, "email": user + "@btn.co.id"}))
+		at := p.sign(key, base("sub-"+user, map[string]any{"aud": "account", "azp": clientID, "resource_access": map[string]any{clientID: map[string]any{"roles": []string{"user"}}}}))
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"access_token": at, "id_token": id, "token_type": "Bearer", "expires_in": 300})
+		return
+	}
 	p.mu.Lock()
 	e, ok := p.codes[r.Form.Get("code")]
 	delete(p.codes, r.Form.Get("code"))
@@ -91,8 +115,6 @@ func (p *fakeIdP) token(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte(`{"error":"invalid_grant"}`))
 		return
 	}
-	now := time.Now()
-	key := p.key
 	if e.otherKey {
 		key = p.other
 	}
@@ -104,15 +126,8 @@ func (p *fakeIdP) token(w http.ResponseWriter, r *http.Request) {
 	if e.azp != "" {
 		azp = e.azp
 	}
-	base := func(extra map[string]any) map[string]any {
-		m := map[string]any{"iss": p.srv.URL, "sub": e.sub, "iat": now.Unix(), "exp": now.Add(5 * time.Minute).Unix()}
-		for k, v := range extra {
-			m[k] = v
-		}
-		return m
-	}
-	id := p.sign(key, base(map[string]any{"aud": clientID, "nonce": nonce, "preferred_username": "alice", "name": "Alice A", "email": "a@lab.local"}))
-	at := p.sign(key, base(map[string]any{"aud": "account", "azp": azp, "resource_access": map[string]any{clientID: map[string]any{"roles": e.roles}}}))
+	id := p.sign(key, base(e.sub, map[string]any{"aud": clientID, "nonce": nonce, "preferred_username": "alice", "name": "Alice A", "email": "a@lab.local"}))
+	at := p.sign(key, base(e.sub, map[string]any{"aud": "account", "azp": azp, "resource_access": map[string]any{clientID: map[string]any{"roles": e.roles}}}))
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]any{"access_token": at, "id_token": id, "token_type": "Bearer", "expires_in": 300})
 }
@@ -690,6 +705,12 @@ func TestLoginPageAndLocalSignIn(t *testing.T) {
 	if r := e.do(nil, "GET", "/favicon.svg", nil); r.StatusCode != 200 || r.Header.Get("Content-Type") != "image/svg+xml" {
 		t.Fatalf("favicon: %d", r.StatusCode)
 	}
+	if r := e.do(nil, "GET", "/login-assets/logo-light.png", nil); r.StatusCode != 200 || r.Header.Get("Content-Type") != "image/png" {
+		t.Fatalf("logo-light: %d", r.StatusCode)
+	}
+	if r := e.do(nil, "GET", "/login-assets/logo-dark.png", nil); r.StatusCode != 200 || r.Header.Get("Content-Type") != "image/png" {
+		t.Fatalf("logo-dark: %d", r.StatusCode)
+	}
 	// wrong password: generic 401, no cookie
 	j := jar{}
 	if r := e.postJSON(j, "/login/local", `{"username":"budi","password":"nope nope nope"}`, nil); r.StatusCode != 401 || len(j) != 0 {
@@ -765,5 +786,43 @@ func TestLocalSignInWorksWhileTheIdentityProviderIsDown(t *testing.T) {
 	e.idp.srv.Close()
 	if r := e.postJSON(nil, "/login/local", `{"username":"budi","password":"correct horse battery"}`, nil); r.StatusCode != 200 {
 		t.Fatalf("local sign-in with SSO down: %d", r.StatusCode)
+	}
+}
+
+func TestADSignIn(t *testing.T) {
+	e := newEnv(t, nil)
+	j := jar{}
+	// wrong password: 401
+	if r := e.postJSON(j, "/login/ad", `{"username":"john","password":"wrong"}`, nil); r.StatusCode != 401 || len(j) != 0 {
+		t.Fatalf("bad password: %d %v", r.StatusCode, j)
+	}
+	// success: sets cookie, idp=sso
+	r := e.postJSON(j, "/login/ad", `{"username":"john","password":"ad-valid-pass","return_to":"/d/doc1"}`, nil)
+	var out map[string]string
+	_ = json.NewDecoder(r.Body).Decode(&out)
+	if r.StatusCode != 200 || out["redirect"] != "/d/doc1" || j["__Host-drawio_sid"] == "" {
+		t.Fatalf("ad sign-in: %d %v %v", r.StatusCode, out, j)
+	}
+	me := e.do(j, "GET", "/api/me", nil)
+	var m map[string]any
+	_ = json.NewDecoder(me.Body).Decode(&m)
+	if m["username"] != "john" || m["idp"] != "sso" || m["sub"] != "sub-john" {
+		t.Fatalf("me: %v", m)
+	}
+}
+
+func TestADSignInLocksAfterFailures(t *testing.T) {
+	e := newEnv(t, nil)
+	for i := 0; i < maxLocalFailures; i++ {
+		if r := e.postJSON(nil, "/login/ad", `{"username":"john","password":"wrong"}`, nil); r.StatusCode != 401 {
+			t.Fatalf("attempt %d: %d", i, r.StatusCode)
+		}
+	}
+	if r := e.postJSON(nil, "/login/ad", `{"username":"john","password":"ad-valid-pass"}`, nil); r.StatusCode != 429 {
+		t.Fatalf("locked account: %d", r.StatusCode)
+	}
+	e.advance(failWindow + time.Minute)
+	if r := e.postJSON(nil, "/login/ad", `{"username":"john","password":"ad-valid-pass"}`, nil); r.StatusCode != 200 {
+		t.Fatalf("after window: %d", r.StatusCode)
 	}
 }

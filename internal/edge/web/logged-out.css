@@ -11,10 +11,8 @@ html, body { height: 100%; margin: 0; }
 body { font: 14px/1.5 var(--font); color: var(--text); background: linear-gradient(160deg, var(--bg-a), var(--bg-b) 60%); -webkit-font-smoothing: antialiased; }
 .shell { min-height: 100%; display: grid; place-items: center; padding: 24px; }
 .card { width: min(100%, 400px); padding: 32px 32px 28px; border-radius: 16px; background: var(--card); box-shadow: var(--shadow); text-align: center; }
-.brand { display: flex; align-items: center; justify-content: center; gap: 10px; margin-bottom: 28px; }
-.brand-mark { display: block; }
-.brand-name { font-size: 22px; font-weight: 400; letter-spacing: -.01em; }
-.brand-name b { font-weight: 800; color: var(--blue); }
+.brand { display: flex; align-items: center; justify-content: center; margin-bottom: 24px; }
+.brand-logo { max-width: 100%; height: auto; display: block; margin: 0 auto; }
 .badge { display: grid; place-items: center; width: 60px; height: 60px; margin: 0 auto 18px; border-radius: 50%; background: var(--badge-bg); color: var(--badge-fg); }
 h1 { margin: 0 0 8px; font-size: 21px; font-weight: 650; letter-spacing: -.01em; }
 .lead { margin: 0 0 24px; color: var(--muted); }

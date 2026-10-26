@@ -13,7 +13,7 @@ async function localLogin(user, pass, ret) {
   await s.page.goto(BASE + (ret || '/'), { waitUntil: 'domcontentloaded' });
   await s.page.waitForSelector('#f');
   await s.page.fill('#username', user); await s.page.fill('#password', pass);
-  await s.page.click('#submit');
+  if (await s.page.locator('#local-btn').count()) await s.page.click('#local-btn'); else await s.page.click('#submit');
   await s.page.waitForURL(u => !/^\/login$/.test(u.pathname), { timeout: 20000 });
   s.csrf = (await s.page.evaluate(() => fetch('/api/me').then(r => r.json()))).csrf;
   return s;
@@ -35,7 +35,7 @@ const ready = s => s.page.waitForFunction(() => window.__adapter && window.__ada
   const s = await newPage(browser);
   await s.page.goto(BASE + '/', { waitUntil: 'domcontentloaded' });
   await s.page.waitForSelector('#f');
-  check('LOGIN PAGE: DrawSpace branding, local form and SSO button', (await s.page.title()).includes('DrawSpace') && (await s.page.textContent('.wordmark')).includes('DrawSpace') && await s.page.isVisible('#sso') && (await s.page.textContent('.tagline')).includes('COLLABORATE'));
+  check('LOGIN PAGE: DrawSpace branding, AD BTN and local buttons', (await s.page.title()).includes('DrawSpace') && (await s.page.textContent('.wordmark')).includes('DrawSpace') && await s.page.isVisible('#local-btn') && await s.page.isVisible('#submit') && (await s.page.textContent('.tagline')).includes('COLLABORATE'));
   const csp = (await s.ctx.request.get(BASE + '/login')).headers()['content-security-policy'];
   check('LOGIN PAGE: strict CSP (no unsafe-inline, script from self only)', !/unsafe-inline/.test(csp) && /script-src 'self'/.test(csp), csp);
   await s.page.fill('#username', 'nosuchuser' + tag); await s.page.fill('#password', 'whatever-it-is');

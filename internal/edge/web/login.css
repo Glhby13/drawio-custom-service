@@ -11,10 +11,10 @@ html, body { height: 100%; margin: 0; }
 body { font: 14px/1.5 var(--font); color: var(--text); background: linear-gradient(160deg, var(--bg-a), var(--bg-b) 60%); -webkit-font-smoothing: antialiased; }
 .shell { min-height: 100%; display: grid; place-items: center; padding: 24px; }
 .card { width: min(100%, 420px); padding: 34px 34px 28px; border-radius: 18px; background: var(--card); box-shadow: var(--shadow); }
-.brand { display: flex; align-items: center; justify-content: center; gap: 12px; }
-.wordmark { font-size: 32px; letter-spacing: -.02em; font-weight: 400; color: var(--text); }
-.wordmark b { font-weight: 800; color: var(--blue); }
-.tagline { margin: 6px 0 22px; text-align: center; font-size: 10.5px; font-weight: 600; letter-spacing: .24em; color: var(--muted); }
+.brand { display: flex; align-items: center; justify-content: center; margin-bottom: 22px; }
+.brand-logo { max-width: 100%; height: auto; display: block; margin: 0 auto; }
+.totp-row { margin-top: 4px; }
+.totp-row[hidden] { display: none; }
 h1 { margin: 0 0 14px; font-size: 20px; font-weight: 650; letter-spacing: -.01em; }
 label { display: block; margin: 12px 0 5px; font-size: 12px; font-weight: 600; color: var(--muted); }
 input { width: 100%; height: 42px; padding: 0 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--field); color: var(--text); font: inherit; }

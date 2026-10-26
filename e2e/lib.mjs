@@ -103,10 +103,28 @@ export async function agentToken(ctx, user, client = 'drawio-mcp-claude') {
   return (await r.json()).access_token;
 }
 
-// the DrawSpace login page is the entry; "Sign in with SSO" leads to Keycloak
+// the DrawSpace login page is the entry; "Sign in with AD BTN" authenticates with Keycloak directly
 export async function keycloakLogin(page, user) {
   await page.waitForURL(u => /auth\.lab\.local/.test(u.host) || /^\/login$/.test(u.pathname), { timeout: 30000 });
-  if (/^\/login$/.test(new URL(page.url()).pathname)) await page.click('#sso');
+  if (/^\/login$/.test(new URL(page.url()).pathname)) {
+    await page.fill('#username', user);
+    await page.fill('#password', password(user));
+    const seed = seeds()[user];
+    if (seed) {
+      const code = await freshCode(user, seed);
+      if (await page.locator('#totp').count()) {
+        await page.fill('#totp', code);
+      }
+    }
+    await page.click('#submit');
+    const outcome = await Promise.race([
+      page.waitForURL(u => !/^\/login$/.test(u.pathname), { timeout: 30000 }).then(() => 'done'),
+      page.waitForSelector('#err:not([hidden])', { timeout: 5000 }).then(() => 'err'),
+      page.waitForURL(/auth\.lab\.local/, { timeout: 5000 }).then(() => 'kc'),
+    ]).catch(() => 'unknown');
+    if (outcome === 'done') return;
+    if (outcome !== 'kc') return;
+  }
   await page.waitForURL(/auth\.lab\.local\/realms\/lab\/protocol\/openid-connect\/auth/, { timeout: 30000 });
   await page.fill('#username', user);
   await page.fill('#password', password(user));

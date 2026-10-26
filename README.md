@@ -40,10 +40,21 @@ Tidak diwarisi dari n8n-custom-service: `InsecureSkipVerify`, penerimaan ID toke
 Endpoint `https://drawio.lab.local/mcp` (Streamable HTTP, JSON-RPC). Metadata OAuth: `/.well-known/oauth-protected-resource` → Keycloak realm `lab`. Satu client Keycloak per aplikasi agen (`scripts/setup_keycloak_mcp.py`: `drawio-mcp-claude` → aktor `ai-claude`); agen masuk sebagai **pengguna sungguhan** dan bekerja atas namanya. Agar agen melihat sebuah diagram, pemilik: (1) Share → centang "Allow AI collaborators", (2) bagikan ke `ai-claude` sebagai editor. Batas: ops/menit dan penghapusan per request diatur pemilik; semua perubahan AI tercatat (aktor, agen, model) dan bisa di-revert dari History.
 
 ## Login, akun lokal, dan tampilan (DrawSpace)
-- **Halaman login sendiri** (`/login`): akun lokal (username + password) atau "Sign in with SSO" (Keycloak). Akun lokal berperan `user` atau `admin`, dikelola admin di menu pengguna → **Manage users** (`/admin/users`), bisa berbagi diagram dengan pengguna SSO dan sebaliknya. Admin pertama dibuat dari Secret `LOCAL_ADMIN_PASSWORD` (`admin`). ADR-0014.
+- **Halaman login sendiri** (`/login`):
+  - **Logo DrawSpace resmi**: logo retina transparan (dark & light theme) sesuai mockup `logo/drawspace.png`.
+  - **Sign in with AD BTN (Utama)**: form username dan password terhubung langsung ke Keycloak via Direct Access Grant (`POST /login/ad`). Pengguna dapat login dengan akun AD BTN langsung dari UI DrawSpace tanpa dilempar ke halaman login Keycloak. Sesi SSO dan cookie `drawio_sid` terbuat secara seamless.
+  - **Sign in with local account (Sekunder)**: tombol sekunder untuk login akun lokal (break-glass / administrator) melalui `POST /login/local`.
+  - Akun lokal berperan `user` atau `admin`, dikelola admin di menu pengguna → **Manage users** (`/admin/users`), bisa berbagi diagram dengan pengguna SSO dan sebaliknya. Admin pertama dibuat dari Secret `LOCAL_ADMIN_PASSWORD` (`admin`). ADR-0014.
 - **Satu header**: logo DrawSpace, pil status simpan ("All changes saved" / "Saving…" / "Offline · changes not saved yet"), judul + peran diagram, presence, Share, menu pengguna. Fungsi riwayat/versi ada di menu bar draw.io sendiri (**History**); ekspor memakai File → Export as bawaan draw.io. Komentar dinonaktifkan sementara (`FEATURES.comments` di `host.js`; API dan panel tetap ada).
 - **Salin sebagai gambar**: pilih bentuk → klik kanan atau menu Edit → *Copy as PNG image* / *Copy as SVG* (clipboard browser hanya menerima PNG dan SVG) dan *Save selection as JPG…* (unduh).
 - **Tanpa pop-up bawaan browser saat keluar** bila semua perubahan sudah tersimpan; dialog sendiri hanya muncul bila masih ada perubahan yang belum sampai ke server.
+
+## Riwayat perubahan penting
+- **2026-10-26**: Pembaruan halaman login DrawSpace:
+  1. Penyesuaian logo DrawSpace pada halaman login (`login-assets/logo-light.png` & `logo-dark.png`) sesuai mockup resmi `logo/drawspace.png`.
+  2. Integrasi direct SSO Keycloak: tombol utama biru diubah menjadi **"Sign in with AD BTN"** (`POST /login/ad`) yang mengeksekusi direct access grant ke Keycloak sehingga pengguna login langsung tanpa dialihkan ke halaman web Keycloak.
+  3. Tombol bawah disesuaikan menjadi **"Sign in with local account"** (`POST /login/local`) untuk akun lokal / break-glass.
+  4. Pengaktifan `directAccessGrantsEnabled: true` pada client Keycloak `drawio-lab`.
 
 ## Presence langsung (siapa sedang apa)
 Saat beberapa orang membuka diagram yang sama, setiap orang melihat **siapa memilih / mengedit / menggeser / mengubah ukuran apa**: kotak berwarna per pengguna + label "Nama · editing", hantu putus-putus saat drag/resize, dan teks yang sedang diketik (draft) di dekat sel. AI yang sedang menerapkan perubahan tampil sebagai "AI … applying changes". Ini **ephemeral** (WebSocket + Redis, TTL 8 dtk, tanpa DB/riwayat/lock): presence memberi tahu, lapisan operasi semantik yang menyelesaikan konflik. Desain/bukti: `docs/spikes/SPIKE-004-live-presence.md`, `docs/adr/0013-live-presence-ephemeral.md`, `e2e/phase7_presence.mjs`. Setelah rilis baru, muat ulang tab yang sudah terbuka sekali.

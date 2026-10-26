@@ -3,10 +3,13 @@ package edge
 import (
 	"context"
 	"crypto/x509"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
+	"strings"
 	"sync"
 	"time"
 
@@ -86,6 +89,76 @@ func (o *OIDC) AuthURL(state, nonce, verifier string) (string, error) {
 // ErrNoRole is returned when the token carries no client role at all.
 var ErrNoRole = errors.New("no client roles")
 
+// ErrBadCredentials is returned when Keycloak refuses the username or password.
+var ErrBadCredentials = errors.New("invalid credentials")
+
+// ErrTOTPRequired is returned when Keycloak requires a one-time code.
+var ErrTOTPRequired = errors.New("totp required")
+
+// DirectGrant authenticates directly with Keycloak using username and password (Resource Owner Password Credentials).
+func (o *OIDC) DirectGrant(ctx context.Context, username, password, totp string) (*Identity, error) {
+	if err := o.ensure(); err != nil {
+		return nil, err
+	}
+	form := url.Values{
+		"grant_type":    {"password"},
+		"client_id":     {o.clientID},
+		"client_secret": {o.secret},
+		"username":      {username},
+		"password":      {password},
+		"scope":         {"openid profile email"},
+	}
+	if totp != "" {
+		form.Set("totp", totp)
+		form.Set("otp", totp)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, o.prov.Endpoint().TokenURL, strings.NewReader(form.Encode()))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	resp, err := o.client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("direct grant: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if err != nil {
+		return nil, err
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		var errResp struct {
+			Error       string `json:"error"`
+			Description string `json:"error_description"`
+		}
+		_ = json.Unmarshal(body, &errResp)
+		if errResp.Error == "invalid_grant" {
+			if strings.Contains(strings.ToLower(errResp.Description), "totp") || strings.Contains(strings.ToLower(errResp.Description), "otp") {
+				return nil, ErrTOTPRequired
+			}
+			return nil, ErrBadCredentials
+		}
+		return nil, fmt.Errorf("direct grant failed (%d): %s", resp.StatusCode, errResp.Description)
+	}
+
+	var tok struct {
+		AccessToken string `json:"access_token"`
+		IDToken     string `json:"id_token"`
+	}
+	if err := json.Unmarshal(body, &tok); err != nil {
+		return nil, fmt.Errorf("direct grant response: %w", err)
+	}
+	if tok.IDToken == "" {
+		return nil, errors.New("no id_token in direct grant response")
+	}
+
+	return o.verifyTokens(ctx, tok.IDToken, tok.AccessToken, "")
+}
+
 // Exchange trades the code for tokens and verifies everything.
 func (o *OIDC) Exchange(ctx context.Context, code, verifier, nonce string) (*Identity, error) {
 	if err := o.ensure(); err != nil {
@@ -100,11 +173,15 @@ func (o *OIDC) Exchange(ctx context.Context, code, verifier, nonce string) (*Ide
 	if raw == "" {
 		return nil, errors.New("no id_token")
 	}
-	idt, err := o.idv.Verify(ctx, raw)
+	return o.verifyTokens(ctx, raw, tok.AccessToken, nonce)
+}
+
+func (o *OIDC) verifyTokens(ctx context.Context, rawIDToken, rawAccessToken, nonce string) (*Identity, error) {
+	idt, err := o.idv.Verify(ctx, rawIDToken)
 	if err != nil {
 		return nil, fmt.Errorf("id token: %w", err)
 	}
-	if idt.Nonce != nonce {
+	if nonce != "" && idt.Nonce != nonce {
 		return nil, errors.New("nonce mismatch")
 	}
 	var idc struct {
@@ -115,7 +192,7 @@ func (o *OIDC) Exchange(ctx context.Context, code, verifier, nonce string) (*Ide
 	if err := idt.Claims(&idc); err != nil {
 		return nil, err
 	}
-	at, err := o.accv.Verify(ctx, tok.AccessToken)
+	at, err := o.accv.Verify(ctx, rawAccessToken)
 	if err != nil {
 		return nil, fmt.Errorf("access token: %w", err)
 	}
@@ -131,7 +208,7 @@ func (o *OIDC) Exchange(ctx context.Context, code, verifier, nonce string) (*Ide
 	if ac.Azp != o.clientID || at.Subject != idt.Subject {
 		return nil, errors.New("access token does not belong to this client/user")
 	}
-	return &Identity{Subject: idt.Subject, Username: idc.Username, Name: idc.Name, Email: idc.Email, Roles: ac.ResourceAccess[o.clientID].Roles, IDToken: raw}, nil
+	return &Identity{Subject: idt.Subject, Username: idc.Username, Name: idc.Name, Email: idc.Email, Roles: ac.ResourceAccess[o.clientID].Roles, IDToken: rawIDToken}, nil
 }
 
 // EndSessionURL is the RP-initiated logout URL (ends the Keycloak SSO session too).

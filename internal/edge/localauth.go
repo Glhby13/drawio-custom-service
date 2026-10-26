@@ -7,6 +7,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"slices"
 	"strings"
 	"time"
 
@@ -47,6 +48,90 @@ func (s *Server) loginPage(w http.ResponseWriter, r *http.Request) {
 	h.Set("Cache-Control", "no-store")
 	h.Set("Content-Type", "text/html; charset=utf-8")
 	_, _ = w.Write(s.loginBody)
+}
+
+func (s *Server) loginAD(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-store")
+	fail := func(code int, msg string, desc ...string) {
+		w.WriteHeader(code)
+		res := map[string]string{"error": msg}
+		if len(desc) > 0 && desc[0] != "" {
+			res["error_description"] = desc[0]
+		}
+		_ = json.NewEncoder(w).Encode(res)
+	}
+	if s.oidc == nil {
+		fail(http.StatusServiceUnavailable, "unavailable")
+		return
+	}
+	var in struct {
+		Username string `json:"username"`
+		Password string `json:"password"`
+		TOTP     string `json:"totp"`
+		ReturnTo string `json:"return_to"`
+	}
+	if err := json.NewDecoder(io.LimitReader(r.Body, 4096)).Decode(&in); err != nil || in.Username == "" || in.Password == "" || len(in.Username) > 64 || len(in.Password) > 256 {
+		fail(http.StatusBadRequest, "bad_request")
+		return
+	}
+	user := strings.ToLower(strings.TrimSpace(in.Username))
+	ip := clientIP(r)
+	ctx := r.Context()
+	for _, k := range []string{"u:" + user, "ip:" + ip} {
+		if n, err := s.store.Failures(ctx, k); err != nil {
+			fail(http.StatusServiceUnavailable, "unavailable")
+			return
+		} else if n >= maxLocalFailures*4 && strings.HasPrefix(k, "ip:") || n >= maxLocalFailures && strings.HasPrefix(k, "u:") {
+			w.Header().Set("Retry-After", "900")
+			s.log.Warn("ad sign-in locked", "request_id", RequestID(ctx), "key", strings.SplitN(k, ":", 2)[0])
+			fail(http.StatusTooManyRequests, "locked")
+			return
+		}
+	}
+	id, err := s.oidc.DirectGrant(ctx, user, in.Password, strings.TrimSpace(in.TOTP))
+	switch {
+	case errors.Is(err, ErrTOTPRequired):
+		fail(http.StatusUnauthorized, "totp_required")
+		return
+	case errors.Is(err, ErrBadCredentials):
+		_, _ = s.store.Fail(ctx, "u:"+user, failWindow)
+		_, _ = s.store.Fail(ctx, "ip:"+ip, failWindow)
+		s.log.Info("ad sign-in refused", "request_id", RequestID(ctx))
+		fail(http.StatusUnauthorized, "invalid_credentials")
+		return
+	case err != nil:
+		s.log.Error("ad sign-in backend", "request_id", RequestID(ctx), "err", err.Error())
+		fail(http.StatusServiceUnavailable, "unavailable")
+		return
+	}
+	if !slices.Contains(id.Roles, s.cfg.RequiredRole) && !slices.Contains(id.Roles, "admin") {
+		s.log.Info("ad sign-in denied: missing client role", "request_id", RequestID(ctx), "actor", id.Subject)
+		fail(http.StatusForbidden, "access_denied", "Access denied: your account has no access to this application.")
+		return
+	}
+	_ = s.store.ClearFail(ctx, "u:"+user)
+	now := time.Now()
+	sess := &session.Session{
+		Subject:   id.Subject,
+		Username:  id.Username,
+		Name:      id.Name,
+		Email:     id.Email,
+		Roles:     id.Roles,
+		CSRF:      session.RandomToken(24),
+		IDToken:   id.IDToken,
+		Idp:       "sso",
+		CreatedAt: now,
+		ExpiresAt: now.Add(s.cfg.SessionTTL),
+	}
+	sid, err := s.store.CreateSession(ctx, sess)
+	if err != nil {
+		fail(http.StatusServiceUnavailable, "unavailable")
+		return
+	}
+	http.SetCookie(w, s.secureCookie(s.cookie, sid, int(s.cfg.SessionTTL.Seconds())))
+	s.log.Info("login ok", "request_id", RequestID(ctx), "actor", id.Subject, "actor_type", identity.ActorHuman, "idp", "sso")
+	_ = json.NewEncoder(w).Encode(map[string]string{"redirect": safeReturn(in.ReturnTo)})
 }
 
 func (s *Server) loginLocal(w http.ResponseWriter, r *http.Request) {

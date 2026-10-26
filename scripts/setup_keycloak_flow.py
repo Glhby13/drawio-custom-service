@@ -50,7 +50,8 @@ for e in kc.api("GET", f"/authentication/flows/{TOP}/executions"):
 
 top = {f["alias"]: f for f in kc.api("GET", "/authentication/flows")}[TOP]
 cl["authenticationFlowBindingOverrides"] = {"browser": top["id"]}
+cl["directAccessGrantsEnabled"] = True
 kc.api("PUT", f"/clients/{cid}", cl)
-print("bound: client", CLIENT, "browser flow ->", TOP)
+print("bound: client", CLIENT, "browser flow ->", TOP, "(directAccessGrantsEnabled = True)")
 for e in kc.api("GET", f"/authentication/flows/{TOP}/executions"):
     print("  " * e["level"], e.get("displayName") or e.get("providerId"), "|", e["requirement"])
