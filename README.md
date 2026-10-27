@@ -85,10 +85,12 @@ Endpoint `https://drawio.lab.local/mcp` (Streamable HTTP, JSON-RPC). Metadata OA
   2. Integrasi direct SSO Keycloak: tombol utama biru diubah menjadi **"Sign in with AD BTN"** (`POST /login/ad`) yang mengeksekusi direct access grant ke Keycloak sehingga pengguna login langsung tanpa dialihkan ke halaman web Keycloak.
   3. Tombol bawah disesuaikan menjadi **"Sign in with local account"** (`POST /login/local`) untuk akun lokal / break-glass.
   4. Pengaktifan `directAccessGrantsEnabled: true` dan pengikatan flow `drawio-direct-grant` pada `authenticationFlowBindingOverrides["direct_grant"]` client Keycloak `drawio-lab` (`scripts/setup_keycloak_flow.py`).
-- **2026-10-27**: Penyempurnaan Direct Grant & Conditional Admin OTP:
+- **2026-10-27**: Penyempurnaan Direct Grant, Pop-up Modal TOTP & Keycloak Flow Role Gate:
   1. Penghapusan override Browser Flow pada client Keycloak `drawio-lab` karena DrawSpace murni menggunakan Direct Grant tanpa browser redirect.
-  2. Implementasi subflow conditional OTP pada `drawio-direct-grant`: pengguna biasa login hanya dengan username & password, sedangkan pengguna dengan client role `admin` wajib memasukkan kode TOTP 6-digit.
-  3. Penyesuaian `internal/edge/oidc.go` untuk menangani deskripsi error Keycloak `Invalid authenticator code` menjadi tantangan `totp_required` bagi form web UI.
+  2. Implementasi subflow conditional OTP pada `drawio-direct-grant`: pengguna biasa login hanya dengan username & password, sedangkan akun admin wajib memasukkan kode TOTP 6-digit.
+  3. Pemindahan gate hak akses `drawio-access` langsung ke level Flow Keycloak (`drawio-dg-deny-no-access`) menggunakan `Condition - user role` (negate: true) $\rightarrow$ `Deny access`, sehingga otorisasi dapat diubah sewaktu-waktu di Keycloak tanpa menyentuh source code.
+  4. Penyediaan UX Pop-up Modal Two-Factor Authentication (TOTP) di halaman login DrawSpace (`/login`): saat admin memasukkan username dan password valid, modal pop-up elegan muncul otomatis untuk meminta 6-digit kode authenticator tanpa berpindah atau me-reload halaman.
+  5. Pengaktifan Service Account pada client `drawio-lab` di Keycloak dengan role `view-users` untuk mendeteksi profil MFA admin secara aman.
 
 ## Presence langsung (siapa sedang apa)
 Saat beberapa orang membuka diagram yang sama, setiap orang melihat **siapa memilih / mengedit / menggeser / mengubah ukuran apa**: kotak berwarna per pengguna + label "Nama · editing", hantu putus-putus saat drag/resize, dan teks yang sedang diketik (draft) di dekat sel. AI yang sedang menerapkan perubahan tampil sebagai "AI … applying changes". Ini **ephemeral** (WebSocket + Redis, TTL 8 dtk, tanpa DB/riwayat/lock): presence memberi tahu, lapisan operasi semantik yang menyelesaikan konflik. Desain/bukti: `docs/spikes/SPIKE-004-live-presence.md`, `docs/adr/0013-live-presence-ephemeral.md`, `e2e/phase7_presence.mjs`. Setelah rilis baru, muat ulang tab yang sudah terbuka sekali.

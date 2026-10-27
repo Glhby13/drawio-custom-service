@@ -36,12 +36,32 @@ type OIDC struct {
 	prov                               *oidc.Provider
 	idv, accv                          *oidc.IDTokenVerifier
 	endSession                         string
+
+	adminCacheMu sync.RWMutex
+	adminCache   map[string]adminCacheEntry
+	saTokenMu    sync.Mutex
+	saToken      string
+	saExpiry     time.Time
+	clientUUIDMu sync.RWMutex
+	clientUUID   string
+}
+
+type adminCacheEntry struct {
+	isAdmin   bool
+	expiresAt time.Time
 }
 
 // NewOIDC builds the client; pool adds the lab CA to the system roots.
 func NewOIDC(issuer, clientID, secret, redirect string, pool *x509.CertPool) *OIDC {
 	tr := &http.Transport{TLSClientConfig: tlsConfig(pool), Proxy: http.ProxyFromEnvironment, TLSHandshakeTimeout: 5 * time.Second, ResponseHeaderTimeout: 10 * time.Second}
-	return &OIDC{issuer: issuer, clientID: clientID, secret: secret, redirect: redirect, client: &http.Client{Transport: tr, Timeout: 15 * time.Second}}
+	return &OIDC{
+		issuer:     issuer,
+		clientID:   clientID,
+		secret:     secret,
+		redirect:   redirect,
+		client:     &http.Client{Transport: tr, Timeout: 15 * time.Second},
+		adminCache: make(map[string]adminCacheEntry),
+	}
 }
 
 // ensure runs discovery lazily so the gateway starts even if Keycloak is briefly unreachable
@@ -141,6 +161,9 @@ func (o *OIDC) DirectGrant(ctx context.Context, username, password, totp string)
 			if strings.Contains(desc, "totp") || strings.Contains(desc, "otp") || strings.Contains(desc, "authenticator") {
 				return nil, ErrTOTPRequired
 			}
+			if totp == "" && o.IsAdminUser(ctx, username) {
+				return nil, ErrTOTPRequired
+			}
 			return nil, ErrBadCredentials
 		}
 		return nil, fmt.Errorf("direct grant failed (%d): %s", resp.StatusCode, errResp.Description)
@@ -158,6 +181,170 @@ func (o *OIDC) DirectGrant(ctx context.Context, username, password, totp string)
 	}
 
 	return o.verifyTokens(ctx, tok.IDToken, tok.AccessToken, "")
+}
+
+// IsAdminUser checks whether a username has the client role "admin" (or "drawio-admin") on this client in Keycloak.
+// Results are cached in-memory for 5 minutes.
+func (o *OIDC) IsAdminUser(ctx context.Context, username string) bool {
+	user := strings.ToLower(strings.TrimSpace(username))
+	if user == "" {
+		return false
+	}
+	o.adminCacheMu.RLock()
+	if entry, ok := o.adminCache[user]; ok && time.Now().Before(entry.expiresAt) {
+		o.adminCacheMu.RUnlock()
+		return entry.isAdmin
+	}
+	o.adminCacheMu.RUnlock()
+
+	isAdmin := o.checkAdminRemote(ctx, user)
+	o.adminCacheMu.Lock()
+	if o.adminCache == nil {
+		o.adminCache = make(map[string]adminCacheEntry)
+	}
+	o.adminCache[user] = adminCacheEntry{isAdmin: isAdmin, expiresAt: time.Now().Add(5 * time.Minute)}
+	o.adminCacheMu.Unlock()
+	return isAdmin
+}
+
+func (o *OIDC) getServiceAccountToken(ctx context.Context) (string, error) {
+	o.saTokenMu.Lock()
+	defer o.saTokenMu.Unlock()
+	if o.saToken != "" && time.Now().Add(30*time.Second).Before(o.saExpiry) {
+		return o.saToken, nil
+	}
+	if err := o.ensure(); err != nil {
+		return "", err
+	}
+	form := url.Values{
+		"grant_type":    {"client_credentials"},
+		"client_id":     {o.clientID},
+		"client_secret": {o.secret},
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, o.prov.Endpoint().TokenURL, strings.NewReader(form.Encode()))
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	resp, err := o.client.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("sa token http %d", resp.StatusCode)
+	}
+	var res struct {
+		AccessToken string `json:"access_token"`
+		ExpiresIn   int    `json:"expires_in"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&res); err != nil {
+		return "", err
+	}
+	o.saToken = res.AccessToken
+	o.saExpiry = time.Now().Add(time.Duration(res.ExpiresIn) * time.Second)
+	return o.saToken, nil
+}
+
+func (o *OIDC) getClientUUID(ctx context.Context, adminBase, token string) (string, error) {
+	o.clientUUIDMu.RLock()
+	if o.clientUUID != "" {
+		defer o.clientUUIDMu.RUnlock()
+		return o.clientUUID, nil
+	}
+	o.clientUUIDMu.RUnlock()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, adminBase+"/clients?clientId="+url.QueryEscape(o.clientID), nil)
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	resp, err := o.client.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("get client http %d", resp.StatusCode)
+	}
+	var clients []struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&clients); err != nil || len(clients) == 0 {
+		return "", errors.New("client not found")
+	}
+	o.clientUUIDMu.Lock()
+	o.clientUUID = clients[0].ID
+	o.clientUUIDMu.Unlock()
+	return clients[0].ID, nil
+}
+
+func (o *OIDC) checkAdminRemote(ctx context.Context, username string) bool {
+	saToken, err := o.getServiceAccountToken(ctx)
+	if err != nil {
+		return false
+	}
+	parts := strings.Split(strings.TrimRight(o.issuer, "/"), "/realms/")
+	if len(parts) != 2 {
+		return false
+	}
+	adminBase := parts[0] + "/admin/realms/" + parts[1]
+
+	// 1. Get user id
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, adminBase+"/users?username="+url.QueryEscape(username)+"&exact=true", nil)
+	if err != nil {
+		return false
+	}
+	req.Header.Set("Authorization", "Bearer "+saToken)
+	resp, err := o.client.Do(req)
+	if err != nil {
+		return false
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return false
+	}
+	var users []struct {
+		ID   string `json:"id"`
+		TOTP bool   `json:"totp"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&users); err != nil || len(users) == 0 {
+		return false
+	}
+	userID := users[0].ID
+
+	// 2. Get client UUID
+	clientUUID, err := o.getClientUUID(ctx, adminBase, saToken)
+	if err != nil {
+		return false
+	}
+
+	// 3. Get composite roles on this client
+	rolesReq, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("%s/users/%s/role-mappings/clients/%s/composite", adminBase, userID, clientUUID), nil)
+	if err != nil {
+		return false
+	}
+	rolesReq.Header.Set("Authorization", "Bearer "+saToken)
+	rolesResp, err := o.client.Do(rolesReq)
+	if err != nil {
+		return false
+	}
+	defer rolesResp.Body.Close()
+	if rolesResp.StatusCode != http.StatusOK {
+		return false
+	}
+	var roles []struct {
+		Name string `json:"name"`
+	}
+	if err := json.NewDecoder(rolesResp.Body).Decode(&roles); err != nil {
+		return false
+	}
+	for _, r := range roles {
+		if r.Name == "admin" || r.Name == "drawio-admin" {
+			return true
+		}
+	}
+	return false
 }
 
 // Exchange trades the code for tokens and verifies everything.

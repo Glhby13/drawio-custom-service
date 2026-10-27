@@ -6,14 +6,22 @@
   var errClose = document.getElementById('err-close');
   var btnAD = document.getElementById('submit');
   var btnLocal = document.getElementById('local-btn');
-  var totpRow = document.getElementById('totp-row');
-  var totpInput = document.getElementById('totp');
   var uInput = document.getElementById('username');
   var pInput = document.getElementById('password');
   var ssoLink = document.getElementById('sso');
   var themeToggle = document.getElementById('theme-toggle');
   var themeIcon = document.getElementById('theme-icon');
   var brandLogo = document.getElementById('brand-logo');
+
+  // TOTP Pop-up Modal elements
+  var totpModal = document.getElementById('totp-modal');
+  var totpModalForm = document.getElementById('totp-modal-form');
+  var modalTotpInput = document.getElementById('modal-totp-input');
+  var modalErr = document.getElementById('modal-err');
+  var modalErrText = document.getElementById('modal-err-text');
+  var modalErrClose = document.getElementById('modal-err-close');
+  var modalSubmitBtn = document.getElementById('modal-submit-btn');
+  var modalCancelBtn = document.getElementById('modal-cancel-btn');
 
   var q = new URLSearchParams(location.search);
   var back = q.get('return_to') || '/';
@@ -109,15 +117,36 @@
     }
   }
 
+  function showModalErr(msg) {
+    if (!modalErr) return;
+    if (modalErrText) modalErrText.textContent = msg;
+    else modalErr.textContent = msg;
+    modalErr.hidden = !msg;
+  }
+
   if (errClose) {
     errClose.addEventListener('click', function (e) {
       e.stopPropagation();
       show('');
     });
   }
+  if (modalErrClose) {
+    modalErrClose.addEventListener('click', function (e) {
+      e.stopPropagation();
+      showModalErr('');
+    });
+  }
   document.addEventListener('mousedown', function (e) {
     if (!err.hidden && !err.contains(e.target)) {
       show('');
+    }
+    if (totpModal && !totpModal.hidden && e.target === totpModal) {
+      totpModal.hidden = true;
+    }
+  });
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && totpModal && !totpModal.hidden) {
+      totpModal.hidden = true;
     }
   });
 
@@ -142,7 +171,6 @@
   function handleLogin(endpoint, isAD, targetBtn, loadingText) {
     var u = uInput.value.trim();
     var p = pInput.value;
-    var totp = totpInput ? totpInput.value.trim() : '';
 
     if (!u || !p) {
       show('Enter your username and password.');
@@ -152,7 +180,6 @@
     setBusy(true, targetBtn, loadingText);
 
     var payload = { username: u, password: p, return_to: back };
-    if (isAD && totp) payload.totp = totp;
 
     fetch(endpoint, {
       method: 'POST',
@@ -174,11 +201,17 @@
         if (x.status === 429) {
           show('Too many attempts. Wait a few minutes and try again.');
         } else if (x.j && x.j.error === 'totp_required') {
-          if (totpRow) {
-            totpRow.hidden = false;
-            totpInput.focus();
+          // Open TOTP pop-up modal!
+          if (totpModal) {
+            showModalErr('');
+            totpModal.hidden = false;
+            if (modalTotpInput) {
+              modalTotpInput.value = '';
+              setTimeout(function () { modalTotpInput.focus(); }, 60);
+            }
+          } else {
+            show('Enter your 6-digit authenticator code (TOTP).');
           }
-          show('Enter your 6-digit authenticator code (TOTP).');
         } else if (x.status === 403) {
           show(x.j.error_description || 'Access denied: your account has no access to this application.');
         } else if (x.status === 401) {
@@ -192,6 +225,74 @@
         setBusy(false);
         show('Could not reach the server. Check your connection.');
       });
+  }
+
+  // Submit TOTP Modal
+  if (totpModalForm) {
+    totpModalForm.addEventListener('submit', function (e) {
+      e.preventDefault();
+      var u = uInput.value.trim();
+      var p = pInput.value;
+      var code = modalTotpInput ? modalTotpInput.value.trim() : '';
+      if (!code || code.length < 6) {
+        showModalErr('Masukkan 6-digit kode authenticator.');
+        if (modalTotpInput) modalTotpInput.focus();
+        return;
+      }
+      showModalErr('');
+      if (modalSubmitBtn) {
+        modalSubmitBtn.disabled = true;
+        modalSubmitBtn.textContent = 'Memverifikasi…';
+      }
+      fetch('/login/ad', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: u, password: p, totp: code, return_to: back })
+      })
+        .then(function (r) {
+          return r.json().catch(function () { return {}; }).then(function (j) {
+            return { status: r.status, j: j };
+          });
+        })
+        .then(function (x) {
+          if (modalSubmitBtn) {
+            modalSubmitBtn.disabled = false;
+            modalSubmitBtn.textContent = 'Verifikasi & Masuk';
+          }
+          if (x.status === 200 && x.j.redirect) {
+            location.href = x.j.redirect;
+            return;
+          }
+          if (x.status === 429) {
+            showModalErr('Too many attempts. Wait a few minutes.');
+          } else if (x.status === 401) {
+            showModalErr('Kode authenticator tidak valid. Coba lagi.');
+            if (modalTotpInput) {
+              modalTotpInput.select();
+            }
+          } else if (x.status === 403) {
+            showModalErr(x.j.error_description || 'Access denied.');
+          } else {
+            showModalErr('Verifikasi gagal. Coba lagi.');
+          }
+        })
+        .catch(function () {
+          if (modalSubmitBtn) {
+            modalSubmitBtn.disabled = false;
+            modalSubmitBtn.textContent = 'Verifikasi & Masuk';
+          }
+          showModalErr('Koneksi terputus. Coba lagi.');
+        });
+    });
+  }
+
+  // Cancel TOTP Modal
+  if (modalCancelBtn) {
+    modalCancelBtn.addEventListener('click', function () {
+      if (totpModal) totpModal.hidden = true;
+      pInput.focus();
+    });
   }
 
   // Submit form -> Sign in with AD BTN

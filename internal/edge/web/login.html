@@ -30,10 +30,6 @@
         <input id="password" name="password" type="password" autocomplete="current-password" required>
         <button id="toggle" type="button" class="ghost" aria-label="Show password">Show</button>
       </div>
-      <div id="totp-row" class="totp-row" hidden>
-        <label for="totp">Authenticator code (TOTP)</label>
-        <input id="totp" name="totp" type="text" inputmode="numeric" pattern="[0-9]*" autocomplete="one-time-code" placeholder="6-digit code">
-      </div>
       <div id="err" class="err" role="alert" hidden>
         <span id="err-text" class="err-text"></span>
         <button id="err-close" class="err-close" type="button" aria-label="Close message">✕</button>
@@ -46,6 +42,29 @@
     <p class="hint">© 2026 PT Bank Tabungan Negara (Persero) Tbk<br>Tim Platform Engineering</p>
   </section>
 </main>
+
+<div id="totp-modal" class="totp-modal-backdrop" hidden>
+  <div class="totp-modal-card" role="dialog" aria-modal="true" aria-labelledby="totp-modal-title">
+    <div class="totp-icon-wrap" aria-hidden="true">
+      <svg class="totp-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <rect width="18" height="11" x="3" y="11" rx="2" ry="2"></rect>
+        <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+      </svg>
+    </div>
+    <h2 id="totp-modal-title">Two-Factor Authentication</h2>
+    <p class="totp-desc">Akun admin dilindungi verifikasi dua langkah. Masukkan 6-digit kode dari aplikasi authenticator Anda.</p>
+    <form id="totp-modal-form" novalidate>
+      <label for="modal-totp-input">Kode Authenticator (TOTP)</label>
+      <input id="modal-totp-input" name="totp" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="6" autocomplete="one-time-code" placeholder="000000" required>
+      <div id="modal-err" class="err" role="alert" hidden>
+        <span id="modal-err-text" class="err-text"></span>
+        <button id="modal-err-close" class="err-close" type="button" aria-label="Close message">✕</button>
+      </div>
+      <button id="modal-submit-btn" class="btn primary" type="submit">Verifikasi &amp; Masuk</button>
+      <button id="modal-cancel-btn" class="btn secondary" type="button">Batal</button>
+    </form>
+  </div>
+</div>
 <script src="/login-assets/login.js"></script>
 </body>
 </html>
