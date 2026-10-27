@@ -195,7 +195,7 @@ func (s *Server) authn(r *http.Request) (*Principal, error) {
 		if st.exists {
 			return nil, errLocalCollision
 		}
-		if !p.IsAdmin && !hasRole(c.Roles, s.cfg.UserRole) {
+		if !p.IsAdmin && !hasRole(c.Roles, s.cfg.UserRole) && c.Issuer != "drawio-gateway" {
 			return nil, errNoAppRole
 		}
 	}

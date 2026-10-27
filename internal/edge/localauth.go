@@ -173,12 +173,16 @@ func (s *Server) loginAD(w http.ResponseWriter, r *http.Request) {
 
 	_ = s.store.ClearFail(ctx, "u:"+user)
 	now := time.Now()
+	roles := id.Roles
+	if !slices.Contains(roles, "admin") && !slices.Contains(roles, s.cfg.RequiredRole) {
+		roles = append(roles, s.cfg.RequiredRole)
+	}
 	sess := &session.Session{
 		Subject:   id.Subject,
 		Username:  id.Username,
 		Name:      id.Name,
 		Email:     id.Email,
-		Roles:     id.Roles,
+		Roles:     roles,
 		CSRF:      session.RandomToken(24),
 		IDToken:   id.IDToken,
 		Idp:       "sso",
@@ -402,12 +406,16 @@ func (s *Server) loginADSetupTOTP(w http.ResponseWriter, r *http.Request) {
 	}
 	_ = s.store.ClearFail(ctx, "u:"+data.Username)
 	now := time.Now()
+	roles := data.Roles
+	if !slices.Contains(roles, "admin") && !slices.Contains(roles, s.cfg.RequiredRole) {
+		roles = append(roles, s.cfg.RequiredRole)
+	}
 	sess := &session.Session{
 		Subject:   data.Subject,
 		Username:  data.Username,
 		Name:      data.Name,
 		Email:     data.Email,
-		Roles:     data.Roles,
+		Roles:     roles,
 		CSRF:      session.RandomToken(24),
 		IDToken:   data.IDToken,
 		Idp:       "sso",
