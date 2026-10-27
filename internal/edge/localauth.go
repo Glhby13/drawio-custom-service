@@ -112,11 +112,6 @@ func (s *Server) loginAD(w http.ResponseWriter, r *http.Request) {
 		fail(http.StatusServiceUnavailable, "unavailable")
 		return
 	}
-	if !slices.Contains(id.Roles, s.cfg.RequiredRole) && !slices.Contains(id.Roles, "admin") {
-		s.log.Info("ad sign-in denied: missing client role", "request_id", RequestID(ctx), "actor", id.Subject)
-		fail(http.StatusForbidden, "access_denied", "Access denied: your account has no access to this application.")
-		return
-	}
 
 	isAdmin := slices.Contains(id.Roles, "admin")
 	if isAdmin {

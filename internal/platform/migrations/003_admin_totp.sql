@@ -7,3 +7,4 @@ CREATE TABLE IF NOT EXISTS admin_totp (
 
 INSERT INTO schema_version (version, description) VALUES (3, 'admin totp credentials for two-factor authentication')
 ON CONFLICT (version) DO NOTHING;
+
