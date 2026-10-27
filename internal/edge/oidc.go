@@ -137,7 +137,8 @@ func (o *OIDC) DirectGrant(ctx context.Context, username, password, totp string)
 		}
 		_ = json.Unmarshal(body, &errResp)
 		if errResp.Error == "invalid_grant" {
-			if strings.Contains(strings.ToLower(errResp.Description), "totp") || strings.Contains(strings.ToLower(errResp.Description), "otp") {
+			desc := strings.ToLower(errResp.Description)
+			if strings.Contains(desc, "totp") || strings.Contains(desc, "otp") || strings.Contains(desc, "authenticator") {
 				return nil, ErrTOTPRequired
 			}
 			return nil, ErrBadCredentials

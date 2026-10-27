@@ -49,20 +49,35 @@ for e in kc.api("GET", f"/authentication/flows/{TOP}/executions"):
         print("condition configured: deny unless the user has", f"{CLIENT}.{ROLE}")
 
 DG_FLOW = "drawio-direct-grant"
+DG_SUBFLOW = "drawio-dg-conditional-otp"
 if DG_FLOW not in flows:
-    kc.api("POST", "/authentication/flows", {"alias": DG_FLOW, "description": "Diagrams direct grant: username + password only (no OTP required)", "providerId": "basic-flow", "topLevel": True, "builtIn": False})
+    kc.api("POST", "/authentication/flows", {"alias": DG_FLOW, "description": "Diagrams direct grant: username + password (OTP conditional for admin)", "providerId": "basic-flow", "topLevel": True, "builtIn": False})
     kc.api("POST", f"/authentication/flows/{DG_FLOW}/executions/execution", {"provider": "direct-grant-validate-username"})
     kc.api("POST", f"/authentication/flows/{DG_FLOW}/executions/execution", {"provider": "direct-grant-validate-password"})
-for e in kc.api("GET", f"/authentication/flows/{DG_FLOW}/executions"):
-    if e["requirement"] != "REQUIRED":
-        kc.api("PUT", f"/authentication/flows/{DG_FLOW}/executions", {**e, "requirement": "REQUIRED"})
+
+dg_execs = {e.get("displayName") or e.get("providerId"): e for e in kc.api("GET", f"/authentication/flows/{DG_FLOW}/executions")}
+if DG_SUBFLOW not in dg_execs:
+    kc.api("POST", f"/authentication/flows/{DG_FLOW}/executions/flow", {"alias": DG_SUBFLOW, "type": "basic-flow", "description": "Require OTP only for admin role", "provider": "registration-page-form"})
+    kc.api("POST", f"/authentication/flows/{DG_SUBFLOW}/executions/execution", {"provider": "conditional-user-role"})
+    kc.api("POST", f"/authentication/flows/{DG_SUBFLOW}/executions/execution", {"provider": "direct-grant-validate-otp"})
+
+dg_execs = {e.get("displayName") or e.get("providerId"): e for e in kc.api("GET", f"/authentication/flows/{DG_FLOW}/executions")}
+dg_want = {"Username Validation": "REQUIRED", "Password": "REQUIRED", DG_SUBFLOW: "CONDITIONAL", "Condition - user role": "REQUIRED", "OTP": "REQUIRED"}
+for name, req in dg_want.items():
+    if name in dg_execs and dg_execs[name]["requirement"] != req:
+        kc.api("PUT", f"/authentication/flows/{DG_FLOW}/executions", {**dg_execs[name], "requirement": req})
+
+cond_e = dg_execs.get("Condition - user role")
+if cond_e and not cond_e.get("authenticationConfig"):
+    kc.api("POST", f"/authentication/executions/{cond_e['id']}/config", {"alias": f"{DG_SUBFLOW}-admin", "config": {"condUserRole": f"{CLIENT}.admin", "negate": "false"}})
+    print("direct grant condition configured: require OTP if user has", f"{CLIENT}.admin")
 
 all_flows = {f["alias"]: f for f in kc.api("GET", "/authentication/flows")}
-top = all_flows[TOP]
 dg = all_flows[DG_FLOW]
-cl["authenticationFlowBindingOverrides"] = {"browser": top["id"], "direct_grant": dg["id"]}
+# Direct Grant only; browser flow override is not needed since DrawSpace uses direct authentication without redirect
+cl["authenticationFlowBindingOverrides"] = {"browser": "", "direct_grant": dg["id"]}
 cl["directAccessGrantsEnabled"] = True
 kc.api("PUT", f"/clients/{cid}", cl)
-print("bound: client", CLIENT, "browser flow ->", TOP, "direct_grant ->", DG_FLOW, "(directAccessGrantsEnabled = True)")
+print("bound: client", CLIENT, "direct_grant ->", DG_FLOW, "(browser flow override removed, directAccessGrantsEnabled = True)")
 for e in kc.api("GET", f"/authentication/flows/{TOP}/executions"):
     print("  " * e["level"], e.get("displayName") or e.get("providerId"), "|", e["requirement"])
