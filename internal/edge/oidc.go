@@ -159,15 +159,17 @@ func (o *OIDC) DirectGrant(ctx context.Context, username, password, totp string)
 			Description string `json:"error_description"`
 		}
 		_ = json.Unmarshal(body, &errResp)
-		if resp.StatusCode == http.StatusUnauthorized || errResp.Error == "access_denied" {
+
+		bodyLower := strings.ToLower(string(body))
+		if resp.StatusCode == http.StatusForbidden ||
+			errResp.Error == "access_denied" ||
+			strings.Contains(bodyLower, "access denied") ||
+			(resp.StatusCode == http.StatusUnauthorized && errResp.Error != "invalid_grant") {
 			return nil, ErrAccessDenied
 		}
 		if errResp.Error == "invalid_grant" {
 			desc := strings.ToLower(errResp.Description)
 			if strings.Contains(desc, "totp") || strings.Contains(desc, "otp") || strings.Contains(desc, "authenticator") {
-				return nil, ErrTOTPRequired
-			}
-			if totp == "" && o.IsAdminUser(ctx, username) {
 				return nil, ErrTOTPRequired
 			}
 			return nil, ErrBadCredentials
