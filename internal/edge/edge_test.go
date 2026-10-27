@@ -504,7 +504,7 @@ func TestHostPageAssetsAndHeaders(t *testing.T) {
 	res := e.do(j, "GET", "/", nav)
 	body, _ := io.ReadAll(res.Body)
 	csp := res.Header.Get("Content-Security-Policy")
-	if res.StatusCode != 200 || !strings.Contains(string(body), `src="/static/adapter.js"`) || !strings.Contains(csp, "script-src 'self'") || strings.Contains(csp, "unsafe-inline'") && strings.Contains(csp, "script-src 'self' 'unsafe") || !strings.Contains(csp, "frame-ancestors 'self'") {
+	if res.StatusCode != 200 || !strings.Contains(string(body), `/static/adapter.js`) || !strings.Contains(csp, "script-src 'self'") || strings.Contains(csp, "unsafe-inline'") && strings.Contains(csp, "script-src 'self' 'unsafe") || !strings.Contains(csp, "frame-ancestors 'self'") {
 		t.Fatalf("host page: %d csp=%q", res.StatusCode, csp)
 	}
 	if strings.Contains(string(body), "<script>") || strings.Contains(string(body), "onclick=") {

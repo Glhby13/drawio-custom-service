@@ -10,7 +10,7 @@
 @property --border { syntax: "<color>"; inherits: true; initial-value: #e2e8f0; }
 @property --border-strong { syntax: "<color>"; inherits: true; initial-value: #cbd5e1; }
 
-:root, html[data-theme="light"] {
+:root, [data-theme="light"] {
   --blue: #1868db; --brand: #0b57f0; --bar-h: 48px;
   --bg: #f1f3f4; --surface: #ffffff; --surface-2: #f8fafc; --surface-hover: #f1f5f9;
   --text: #1e293b; --text-strong: #0f172a; --muted: #64748b; --border: #e2e8f0; --border-strong: #cbd5e1;
@@ -18,21 +18,26 @@
   --chev: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
   color-scheme: light;
 }
-html[data-theme="dark"] {
-  --bg: #0f172a; --surface: #1e293b; --surface-2: #0f172a; --surface-hover: #334155;
+[data-theme="dark"] {
+  --bg: #0f172a; --surface: #1e293b; --surface-2: #0b1329; --surface-hover: #334155;
   --text: #e2e8f0; --text-strong: #f8fafc; --muted: #94a3b8; --border: #334155; --border-strong: #475569;
   color-scheme: dark;
 }
-html.theme-transition,
+html.theme-transition {
+  transition-property: --bg, --surface, --surface-2, --surface-hover, --text, --text-strong, --muted, --border, --border-strong;
+  transition-duration: 320ms;
+  transition-timing-function: ease-in-out;
+}
 html.theme-transition *,
 html.theme-transition *::before,
 html.theme-transition *::after {
-  transition-property: --bg, --surface, --surface-2, --surface-hover, --text, --text-strong, --muted, --border, --border-strong, background-color, border-color, color, fill, stroke, box-shadow !important;
-  transition-duration: 340ms !important;
-  transition-timing-function: ease-in-out !important;
+  transition: none !important;
 }
 html, body { height: 100%; margin: 0; }
 body { display: flex; flex-direction: column; font: 14px/1.4 var(--font); background: var(--bg); color: var(--text); -webkit-font-smoothing: antialiased; }
+body, .panel, .panel-head, .menu, .item, .field, .btn, .dlg, .preview-canvas-box, .share-row, .ai-setting, .diff-row {
+  transition: background-color 320ms ease-in-out, border-color 320ms ease-in-out, color 320ms ease-in-out;
+}
 .grow { flex: 1; min-width: 0; }
 [hidden] { display: none !important; }
 

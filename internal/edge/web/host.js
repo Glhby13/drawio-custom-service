@@ -20,6 +20,7 @@
       }, 400);
     }
     root.setAttribute('data-theme', m);
+    if (document.body) document.body.setAttribute('data-theme', m);
     if (save) {
       try { localStorage.setItem(THEME_KEY, m); } catch (e) { /* storage disabled */ }
     }
@@ -32,8 +33,23 @@
       btnNight.classList.toggle('active', m === 'dark');
       btnNight.setAttribute('aria-pressed', String(m === 'dark'));
     }
-    if (editorUi && typeof editorUi.setDarkMode === 'function') {
-      try { editorUi.setDarkMode(m === 'dark'); } catch (e) { /* ignore */ }
+    if (editorUi) {
+      try {
+        var f = $('editor');
+        if (f && f.contentWindow && f.contentWindow.document) {
+          var idoc = f.contentWindow.document;
+          var style = idoc.getElementById('drawspace-theme-style');
+          if (!style) {
+            style = idoc.createElement('style');
+            style.id = 'drawspace-theme-style';
+            style.textContent = '.geEditor, .geMenubarContainer, .geSidebarContainer, .geDiagramContainer, .geBackgroundPage, .geHdiv, .geVdiv, .geFormatContainer { transition: background-color 320ms ease-in-out, border-color 320ms ease-in-out, color 320ms ease-in-out !important; }';
+            idoc.head.appendChild(style);
+          }
+        }
+      } catch (e) { /* cross-origin / not ready */ }
+      if (typeof editorUi.setDarkMode === 'function') {
+        try { editorUi.setDarkMode(m === 'dark'); } catch (e) { /* ignore */ }
+      }
     }
   }
   (function initTheme() {
@@ -234,6 +250,16 @@
       win.document.addEventListener('mousedown', function () {
         closeMenu();
       }, true);
+      try {
+        var idoc = win.document;
+        var style = idoc.getElementById('drawspace-theme-style');
+        if (!style) {
+          style = idoc.createElement('style');
+          style.id = 'drawspace-theme-style';
+          style.textContent = '.geEditor, .geMenubarContainer, .geSidebarContainer, .geDiagramContainer, .geBackgroundPage, .geHdiv, .geVdiv, .geFormatContainer { transition: background-color 320ms ease-in-out, border-color 320ms ease-in-out, color 320ms ease-in-out !important; }';
+          idoc.head.appendChild(style);
+        }
+      } catch (e) { /* ignore */ }
     }
     // Sync draw.io dark mode with saved DrawSpace theme if supported
     if (typeof ui.setDarkMode === 'function') {
@@ -410,6 +436,7 @@
     if (sn === 'rhombus' || st.rhombus === '1') return 'rhombus';
     if (sn === 'swimlane' || st.swimlane === '1') return 'swimlane';
     if (sn === 'flexarrow') return 'flexArrow';
+    if (sn === 'cylinder3' || sn === 'cylinder' || st.cylinder === '1') return 'cylinder';
     if (sn === 'text' || st.text === '1' || (p['st:strokeColor'] === 'none' && p['st:fillColor'] === 'none')) return 'text';
     return 'rect';
   }
@@ -428,6 +455,7 @@
       umlActor: 'Actor',
       swimlane: 'Container',
       flexArrow: 'Arrow',
+      cylinder: 'Cylinder',
       text: 'Text',
       edge: 'Connector',
       rect: 'Rectangle'
@@ -550,6 +578,33 @@
         hdr.setAttribute('stroke-width', String(strokeW));
         g.appendChild(hdr);
       }
+    } else if (st === 'cylinder') {
+      var cylRy = Math.max(3, Math.min(v.h * 0.22, 14));
+      var cylRx = Math.max(3, v.w / 2);
+      var cylCx = v.x + cylRx;
+      var cylBody = document.createElementNS(svgNS, 'path');
+      cylBody.setAttribute('d',
+        'M ' + v.x + ' ' + (v.y + cylRy) +
+        ' L ' + v.x + ' ' + (v.y + v.h - cylRy) +
+        ' A ' + cylRx + ' ' + cylRy + ' 0 0 0 ' + (v.x + v.w) + ' ' + (v.y + v.h - cylRy) +
+        ' L ' + (v.x + v.w) + ' ' + (v.y + cylRy)
+      );
+      cylBody.setAttribute('fill', fill);
+      cylBody.setAttribute('stroke', stroke);
+      cylBody.setAttribute('stroke-width', String(strokeW));
+      if (dashAttr) cylBody.setAttribute('stroke-dasharray', dashAttr);
+      g.appendChild(cylBody);
+
+      var cylTop = document.createElementNS(svgNS, 'ellipse');
+      cylTop.setAttribute('cx', String(cylCx));
+      cylTop.setAttribute('cy', String(v.y + cylRy));
+      cylTop.setAttribute('rx', String(cylRx));
+      cylTop.setAttribute('ry', String(cylRy));
+      cylTop.setAttribute('fill', fill);
+      cylTop.setAttribute('stroke', stroke);
+      cylTop.setAttribute('stroke-width', String(strokeW));
+      if (dashAttr) cylTop.setAttribute('stroke-dasharray', dashAttr);
+      g.appendChild(cylTop);
     } else if (st === 'text') {
       if (dashed) {
         var tbox = document.createElementNS(svgNS, 'rect');
@@ -585,6 +640,8 @@
       var anchor = 'middle';
       if (st === 'umlActor') {
         ty = v.y + v.h + 13;
+      } else if (st === 'cylinder') {
+        ty = v.y + v.h / 2 + 7;
       } else if (st === 'swimlane') {
         var hdrH = parseFloat(cellProp(v.props, 'startSize', '26')) || 26;
         ty = v.y + Math.min(hdrH / 2 + 4, v.h / 2 + 4);
@@ -1015,7 +1072,8 @@
             fn: function () {
               api('POST', '/documents/' + id + '/revert', { batch: h.batch, mode: 'restore_to' }).then(function (x) {
                 toast('info', 'Restored diagram to revision #' + detail.toSeq + ' (' + x.applied + ' op' + (x.applied === 1 ? '' : 's') + ')');
-                if (body) renderHistory(id, body);
+                if (adapter && typeof adapter.resync === 'function') adapter.resync('restore');
+                if (panelRender) panelRender();
               }).catch(function (e) { toast('error', e.message); });
             }
           });
@@ -1026,7 +1084,8 @@
           fn: function () {
             api('POST', '/documents/' + id + '/revert', { batch: h.batch }).then(function (x) {
               toast('info', 'Reverted change #' + detail.toSeq + ' (' + x.applied + ' operation' + (x.applied === 1 ? '' : 's') + ')');
-              if (body) renderHistory(id, body);
+              if (adapter && typeof adapter.resync === 'function') adapter.resync('revert');
+              if (panelRender) panelRender();
             }).catch(function (e) { toast('error', e.message); });
           }
         });
@@ -1077,6 +1136,8 @@
           fn: function () {
             api('POST', '/documents/' + id + '/versions/' + v.id + '/restore', {}).then(function () {
               toast('info', 'Version restored');
+              if (adapter && typeof adapter.resync === 'function') adapter.resync('restore');
+              if (panelRender) panelRender();
             }).catch(function (e) { toast('error', e.message); });
           }
         });
@@ -1104,6 +1165,7 @@
               if (!ok) return;
               api('POST', '/documents/' + id + '/revert', { batch: h.batch }).then(function (x) {
                 toast('info', 'Reverted change ' + seqLabel + ' (' + x.applied + ' operation' + (x.applied === 1 ? '' : 's') + ')');
+                if (adapter && typeof adapter.resync === 'function') adapter.resync('revert');
                 renderHistory(id, body);
               }).catch(function (e) { toast('error', e.message); });
             });
@@ -1138,7 +1200,11 @@
             e.stopPropagation();
             ask('Restore version', 'Restore "' + v.name + '"? The current state stays in history and can be reverted.', 'Restore').then(function (ok) {
               if (!ok) return;
-              api('POST', '/documents/' + id + '/versions/' + v.id + '/restore', {}).then(function () { toast('info', 'Version restored'); }).catch(function (e) { toast('error', e.message); });
+              api('POST', '/documents/' + id + '/versions/' + v.id + '/restore', {}).then(function () {
+                toast('info', 'Version restored');
+                if (adapter && typeof adapter.resync === 'function') adapter.resync('restore');
+                if (panelRender) panelRender();
+              }).catch(function (e) { toast('error', e.message); });
             });
           } }));
         }

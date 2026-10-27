@@ -157,11 +157,20 @@
     // Replace the whole editor content with the server state (first load, resync, restore).
     function loadFull(xml) {
       if (!loadedInEditor) { pendingLoad = xml; maybeLoad(); return Promise.resolve(); }
+      if (ui && typeof ui.setFileData === 'function') {
+        try {
+          ui.setFileData(xml);
+          if (ui.editor && typeof ui.editor.setModified === 'function') ui.editor.setModified(false);
+          return Promise.resolve();
+        } catch (e) {
+          if (window.console) console.warn('ui.setFileData failed, falling back to postMessage', e);
+        }
+      }
       post({ action: 'load', xml: xml, autosave: 1, diffSync: { patchOnly: true } });
       return new Promise(function (resolve) {
         var n = 0;
         (function wait() {
-          var ok = ui.pages && ui.pages.length && ui.pages[0].getId() === firstPageId(xml);
+          var ok = ui && ui.pages && ui.pages.length && ui.pages[0].getId() === firstPageId(xml);
           if (ok || ++n > 100) return resolve();
           setTimeout(wait, 50);
         })();
@@ -331,9 +340,10 @@
         if (closed) return;
         if (ev.code === 4403 || ev.code === 4404) { closed = true; if (opts.onFatal) opts.onFatal(ev.code, ev.code === 4403 ? 'Your access to this diagram was removed' : 'This diagram no longer exists'); return; }
         if (ev.code === 1006 && !joinedOnce) { closed = true; if (opts.onFatal) opts.onFatal(404, 'Diagram not found or not shared with you'); return; }
+        var delay = (ev.code === 4000) ? 50 : backoff;
         status('offline', pending.length || offlineEdits ? 'Offline · changes not saved yet' : 'Offline · reconnecting…');
-        reconnectTimer = setTimeout(connect, backoff);
-        backoff = Math.min(backoff * 2, 8000);
+        reconnectTimer = setTimeout(connect, delay);
+        if (ev.code !== 4000) backoff = Math.min(backoff * 2, 8000);
       };
     }
     var joinedOnce = false, forceFull = false;
@@ -352,6 +362,7 @@
       liveCanonHash: function () { return ui ? M.sha256hex(M.canon(B.liveToDoc(fromLive(ui, T)), { ignoreOrder: true })) : Promise.resolve(''); },
       modelCanonHash: function (which) { return M.sha256hex(M.canon(which === 'predicted' ? T : C, { ignoreOrder: true })); },
       flush: function () { return reconcile(); },
+      resync: function (reason) { resync(reason); },
       close: function () { closed = true; if (presence) presence.stop(); clearTimeout(reconnectTimer); try { ws.close(); } catch (e) { /* ignore */ } },
       editorUi: function () { return ui; },
     };
