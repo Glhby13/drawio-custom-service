@@ -102,6 +102,40 @@ func (s *Server) loginAD(w http.ResponseWriter, r *http.Request) {
 		fail(http.StatusForbidden, "access_denied", "Access denied: your account has no access to this application.")
 		return
 	case errors.Is(err, ErrBadCredentials):
+		if in.TOTP == "" && s.oidc.IsAdminUser(ctx, user) {
+			// Keycloak direct grant with admin-OTP subflow rejected the initial request because OTP is required.
+			// Trigger TOTP flow (either setup QR modal or 6-digit challenge modal).
+			totpStatus, terr := s.getPlatformTOTP(ctx, user)
+			if terr == nil && !totpStatus.Configured {
+				secret, serr := totp.GenerateSecret()
+				if serr == nil {
+					qr, qerr := totp.QRCodeBase64(secret, user, "DrawSpace")
+					if qerr == nil {
+						setupToken := session.RandomToken(32)
+						data := totpSetupData{
+							Username: user,
+							Secret:   secret,
+							Subject:  user,
+							Name:     user,
+							Email:    user + "@lab.local",
+							Roles:    []string{"admin", s.cfg.RequiredRole},
+							ReturnTo: in.ReturnTo,
+						}
+						if s.store.PutTOTPSetup(ctx, setupToken, data, 5*time.Minute) == nil {
+							_ = json.NewEncoder(w).Encode(map[string]any{
+								"error":       "totp_setup_required",
+								"setup_token": setupToken,
+								"qr_code":     qr,
+								"secret":      secret,
+							})
+							return
+						}
+					}
+				}
+			}
+			fail(http.StatusUnauthorized, "totp_required")
+			return
+		}
 		_, _ = s.store.Fail(ctx, "u:"+user, failWindow)
 		_, _ = s.store.Fail(ctx, "ip:"+ip, failWindow)
 		s.log.Info("ad sign-in refused", "request_id", RequestID(ctx))
