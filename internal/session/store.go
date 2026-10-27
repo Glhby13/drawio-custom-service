@@ -54,6 +54,8 @@ type Store interface {
 	Fail(ctx context.Context, key string, window time.Duration) (int64, error)
 	Failures(ctx context.Context, key string) (int64, error)
 	ClearFail(ctx context.Context, key string) error
+	PutTOTPSetup(ctx context.Context, token string, data any, ttl time.Duration) error
+	TakeTOTPSetup(ctx context.Context, token string, out any) error
 }
 
 // Redis implements Store.
@@ -193,4 +195,27 @@ func (r *Redis) Failures(ctx context.Context, key string) (int64, error) {
 // ClearFail forgets the counter after a successful sign-in.
 func (r *Redis) ClearFail(ctx context.Context, key string) error {
 	return r.c.Del(ctx, failKey(key)).Err()
+}
+
+func totpSetupKey(token string) string { return "drawio:totp_setup:" + Hash(token) }
+
+// PutTOTPSetup stores transient TOTP enrollment data for an administrator.
+func (r *Redis) PutTOTPSetup(ctx context.Context, token string, data any, ttl time.Duration) error {
+	b, err := json.Marshal(data)
+	if err != nil {
+		return err
+	}
+	return r.c.Set(ctx, totpSetupKey(token), b, ttl).Err()
+}
+
+// TakeTOTPSetup retrieves and removes the transient TOTP setup data (one-time use).
+func (r *Redis) TakeTOTPSetup(ctx context.Context, token string, out any) error {
+	b, err := r.c.GetDel(ctx, totpSetupKey(token)).Bytes()
+	if errors.Is(err, redis.Nil) {
+		return ErrNotFound
+	}
+	if err != nil {
+		return err
+	}
+	return json.Unmarshal(b, out)
 }

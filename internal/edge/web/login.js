@@ -15,6 +15,11 @@
 
   // TOTP Pop-up Modal elements
   var totpModal = document.getElementById('totp-modal');
+  var totpModalTitle = document.getElementById('totp-modal-title');
+  var totpModalDesc = document.getElementById('totp-modal-desc');
+  var modalQRContainer = document.getElementById('modal-qr-container');
+  var modalQRImg = document.getElementById('modal-qr-img');
+  var modalSecretText = document.getElementById('modal-secret-text');
   var totpModalForm = document.getElementById('totp-modal-form');
   var modalTotpInput = document.getElementById('modal-totp-input');
   var modalErr = document.getElementById('modal-err');
@@ -22,6 +27,7 @@
   var modalErrClose = document.getElementById('modal-err-close');
   var modalSubmitBtn = document.getElementById('modal-submit-btn');
   var modalCancelBtn = document.getElementById('modal-cancel-btn');
+  var currentSetupToken = '';
 
   var q = new URLSearchParams(location.search);
   var back = q.get('return_to') || '/';
@@ -200,10 +206,32 @@
         setBusy(false);
         if (x.status === 429) {
           show('Too many attempts. Wait a few minutes and try again.');
-        } else if (x.j && x.j.error === 'totp_required') {
-          // Open TOTP pop-up modal!
+        } else if (x.j && x.j.error === 'totp_setup_required') {
+          // Open TOTP Setup Modal with QR Code!
           if (totpModal) {
+            currentSetupToken = x.j.setup_token || '';
             showModalErr('');
+            if (totpModalTitle) totpModalTitle.textContent = 'Setup Mobile Authenticator';
+            if (totpModalDesc) totpModalDesc.textContent = 'Akun admin wajib menggunakan 2FA. Pindai kode QR di bawah dengan aplikasi authenticator (Google Authenticator, Microsoft Authenticator, dll), lalu masukkan 6-digit kode verifikasi pertama.';
+            if (modalQRContainer) modalQRContainer.hidden = false;
+            if (modalQRImg && x.j.qr_code) modalQRImg.src = x.j.qr_code;
+            if (modalSecretText && x.j.secret) modalSecretText.textContent = x.j.secret;
+            totpModal.hidden = false;
+            if (modalTotpInput) {
+              modalTotpInput.value = '';
+              setTimeout(function () { modalTotpInput.focus(); }, 60);
+            }
+          } else {
+            show('Setup authenticator code required.');
+          }
+        } else if (x.j && x.j.error === 'totp_required') {
+          // Open regular TOTP challenge modal
+          if (totpModal) {
+            currentSetupToken = '';
+            showModalErr('');
+            if (totpModalTitle) totpModalTitle.textContent = 'Two-Factor Authentication';
+            if (totpModalDesc) totpModalDesc.textContent = 'Akun admin dilindungi verifikasi dua langkah. Masukkan 6-digit kode dari aplikasi authenticator Anda.';
+            if (modalQRContainer) modalQRContainer.hidden = true;
             totpModal.hidden = false;
             if (modalTotpInput) {
               modalTotpInput.value = '';
@@ -244,11 +272,17 @@
         modalSubmitBtn.disabled = true;
         modalSubmitBtn.textContent = 'Memverifikasi…';
       }
-      fetch('/login/ad', {
+
+      var endpoint = currentSetupToken ? '/login/ad/totp-setup' : '/login/ad';
+      var payload = currentSetupToken
+        ? { setup_token: currentSetupToken, code: code, return_to: back }
+        : { username: u, password: p, totp: code, return_to: back };
+
+      fetch(endpoint, {
         method: 'POST',
         credentials: 'same-origin',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username: u, password: p, totp: code, return_to: back })
+        body: JSON.stringify(payload)
       })
         .then(function (r) {
           return r.json().catch(function () { return {}; }).then(function (j) {
@@ -267,14 +301,14 @@
           if (x.status === 429) {
             showModalErr('Too many attempts. Wait a few minutes.');
           } else if (x.status === 401) {
-            showModalErr('Kode authenticator tidak valid. Coba lagi.');
+            showModalErr(x.j.error_description || 'Kode authenticator tidak valid. Coba lagi.');
             if (modalTotpInput) {
               modalTotpInput.select();
             }
           } else if (x.status === 403) {
             showModalErr(x.j.error_description || 'Access denied.');
           } else {
-            showModalErr('Verifikasi gagal. Coba lagi.');
+            showModalErr(x.j.error_description || 'Verifikasi gagal. Coba lagi.');
           }
         })
         .catch(function () {

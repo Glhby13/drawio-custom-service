@@ -115,6 +115,9 @@ var ErrBadCredentials = errors.New("invalid credentials")
 // ErrTOTPRequired is returned when Keycloak requires a one-time code.
 var ErrTOTPRequired = errors.New("totp required")
 
+// ErrAccessDenied is returned when Keycloak refuses access (missing client role / group).
+var ErrAccessDenied = errors.New("access denied")
+
 // DirectGrant authenticates directly with Keycloak using username and password (Resource Owner Password Credentials).
 func (o *OIDC) DirectGrant(ctx context.Context, username, password, totp string) (*Identity, error) {
 	if err := o.ensure(); err != nil {
@@ -156,6 +159,9 @@ func (o *OIDC) DirectGrant(ctx context.Context, username, password, totp string)
 			Description string `json:"error_description"`
 		}
 		_ = json.Unmarshal(body, &errResp)
+		if resp.StatusCode == http.StatusUnauthorized || errResp.Error == "access_denied" {
+			return nil, ErrAccessDenied
+		}
 		if errResp.Error == "invalid_grant" {
 			desc := strings.ToLower(errResp.Description)
 			if strings.Contains(desc, "totp") || strings.Contains(desc, "otp") || strings.Contains(desc, "authenticator") {

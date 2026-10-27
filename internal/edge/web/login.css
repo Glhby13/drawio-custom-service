@@ -133,6 +133,36 @@ input:focus-visible { outline: 3px solid rgba(11, 87, 240, .35); outline-offset:
   text-align: center;
 }
 #modal-submit-btn { margin-top: 18px; }
+
+.modal-qr-container {
+  margin: 10px 0 14px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.modal-qr-container[hidden] { display: none !important; }
+.modal-qr-img {
+  width: 170px;
+  height: 170px;
+  border-radius: 10px;
+  background: #ffffff;
+  padding: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+  display: block;
+}
+.modal-secret-wrap {
+  margin-top: 10px;
+  font-size: 11.5px;
+  color: var(--muted);
+  user-select: text;
+}
+.modal-secret-code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text);
+  letter-spacing: 1px;
+}
 #modal-cancel-btn { margin-top: 10px; }
 
 @keyframes modal-fade-in {

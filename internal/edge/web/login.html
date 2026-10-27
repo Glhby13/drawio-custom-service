@@ -52,7 +52,11 @@
       </svg>
     </div>
     <h2 id="totp-modal-title">Two-Factor Authentication</h2>
-    <p class="totp-desc">Akun admin dilindungi verifikasi dua langkah. Masukkan 6-digit kode dari aplikasi authenticator Anda.</p>
+    <p id="totp-modal-desc" class="totp-desc">Akun admin dilindungi verifikasi dua langkah. Masukkan 6-digit kode dari aplikasi authenticator Anda.</p>
+    <div id="modal-qr-container" class="modal-qr-container" hidden>
+      <img id="modal-qr-img" class="modal-qr-img" alt="QR Code Authenticator">
+      <div class="modal-secret-wrap">Key manual: <span id="modal-secret-text" class="modal-secret-code"></span></div>
+    </div>
     <form id="totp-modal-form" novalidate>
       <label for="modal-totp-input">Kode Authenticator (TOTP)</label>
       <input id="modal-totp-input" name="totp" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="6" autocomplete="one-time-code" placeholder="000000" required>

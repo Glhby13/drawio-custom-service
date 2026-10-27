@@ -86,6 +86,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /login", s.limited(s.loginPage))
 	mux.HandleFunc("GET /login/sso", s.limited(s.loginSSO))
 	mux.HandleFunc("POST /login/ad", s.limited(s.loginAD))
+	mux.HandleFunc("POST /login/ad/totp-setup", s.limited(s.loginADSetupTOTP))
 	mux.HandleFunc("POST /login/sso", s.limited(s.loginAD))
 	mux.HandleFunc("POST /login/local", s.limited(s.loginLocal))
 	mux.HandleFunc("GET /login-assets/login.js", s.publicAsset("login.js", "text/javascript; charset=utf-8"))
