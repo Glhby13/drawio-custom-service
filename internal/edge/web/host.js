@@ -9,6 +9,20 @@
   var THEME_KEY = 'drawspace_theme';
   var hostThemeTimer = null;
 
+  // Host-side CSS injected into the draw.io iframe (the draw.io files themselves are untouched): theme transitions, a menu bar that follows the DrawSpace theme
+  // (draw.io atlas paints it blue in day and black in night), and no GitHub link in the bottom-right corner.
+  function editorFrameCss(m) {
+    var css = '.geEditor, .geMenubarContainer, .geSidebarContainer, .geDiagramContainer, .geBackgroundPage, .geHdiv, .geVdiv, .geFormatContainer { transition: background-color 320ms ease-in-out, border-color 320ms ease-in-out, color 320ms ease-in-out !important; }'
+      + '.geTabContainer a:has(> img[src*="github-logo"]) { display: none !important; }';
+    var bar = m === 'dark'
+      ? { bg: '#1e293b', border: '#334155', text: '#e2e8f0', hover: '#334155', accent: '#60a5fa' }
+      : { bg: '#ffffff', border: '#e2e8f0', text: '#1e293b', hover: '#eef2ff', accent: '#1868db' };
+    css += '.geMenubarContainer { background-color: ' + bar.bg + ' !important; border-bottom: 1px solid ' + bar.border + ' !important; }'
+      + '.geMenubarContainer .geItem, .geMenubarContainer .geItem:visited, .geMenubarContainer .geStatus, .geMenubarContainer .geStatus * { color: ' + bar.text + ' !important; border-radius: 6px; }'
+      + '.geMenubarContainer .geItem:hover, .geMenubarContainer .geItem.geActiveItem { background-color: ' + bar.hover + ' !important; color: ' + bar.accent + ' !important; }';
+    return css;
+  }
+
   function applyHostTheme(mode, save) {
     var m = mode === 'dark' ? 'dark' : 'light';
     var root = document.documentElement;
@@ -42,9 +56,9 @@
           if (!style) {
             style = idoc.createElement('style');
             style.id = 'drawspace-theme-style';
-            style.textContent = '.geEditor, .geMenubarContainer, .geSidebarContainer, .geDiagramContainer, .geBackgroundPage, .geHdiv, .geVdiv, .geFormatContainer { transition: background-color 320ms ease-in-out, border-color 320ms ease-in-out, color 320ms ease-in-out !important; }';
             idoc.head.appendChild(style);
           }
+          style.textContent = editorFrameCss(m);
         }
       } catch (e) { /* cross-origin / not ready */ }
       if (typeof editorUi.setDarkMode === 'function') {
@@ -58,7 +72,7 @@
     applyHostTheme(saved === 'dark' ? 'dark' : 'light', false);
   })();
 
-  function setStatus(state, text) { statusEl.dataset.state = state; $('status-text').textContent = text; }
+  function setStatus(state, text) { statusEl.hidden = state === 'auth'; statusEl.dataset.state = state; $('status-text').textContent = text; }
   function initials(name) {
     var parts = String(name || '').trim().split(/[\s._@-]+/).filter(Boolean);
     if (!parts.length) return '?';
@@ -256,9 +270,9 @@
         if (!style) {
           style = idoc.createElement('style');
           style.id = 'drawspace-theme-style';
-          style.textContent = '.geEditor, .geMenubarContainer, .geSidebarContainer, .geDiagramContainer, .geBackgroundPage, .geHdiv, .geVdiv, .geFormatContainer { transition: background-color 320ms ease-in-out, border-color 320ms ease-in-out, color 320ms ease-in-out !important; }';
           idoc.head.appendChild(style);
         }
+        style.textContent = editorFrameCss(document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light');
       } catch (e) { /* ignore */ }
     }
     // Sync draw.io dark mode with saved DrawSpace theme if supported
