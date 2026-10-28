@@ -99,12 +99,12 @@ cl["serviceAccountsEnabled"] = True
 kc.api("PUT", f"/clients/{cid}", cl)
 print("bound: client", CLIENT, "direct_grant ->", DG_FLOW, "(serviceAccountsEnabled=True, directAccessGrantsEnabled=True)")
 
-# Ensure service account has view-users and view-clients roles to detect MFA requirements
+# Ensure the service account can read users/clients (MFA detection) and register the OTP credential (manage-users)
 try:
     sa_user = kc.api("GET", f"/clients/{cid}/service-account-user")
     rm_client = kc.api("GET", "/clients?clientId=realm-management")[0]
     rm_roles = {r["name"]: r for r in kc.api("GET", f"/clients/{rm_client['id']}/roles")}
-    need_roles = [rm_roles[name] for name in ["view-users", "view-clients"] if name in rm_roles]
+    need_roles = [rm_roles[name] for name in ["view-users", "query-users", "manage-users", "view-clients", "query-clients"] if name in rm_roles]
     if need_roles:
         kc.api("POST", f"/users/{sa_user['id']}/role-mappings/clients/{rm_client['id']}", need_roles)
         print("service account configured with realm-management roles:", [r["name"] for r in need_roles])

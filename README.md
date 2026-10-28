@@ -7,12 +7,12 @@ Lapisan enterprise di sekitar **draw.io Community** (image `jgraph/drawio` dipak
 (SeaweedFS S3 + PostgreSQL), izin/share, versi, kolaborasi, audit, MCP, dan AI sebagai kolaborator — tanpa mengubah draw.io dan tanpa PVC.
 Pola repo dan deploy mengikuti `n8n-custom-service`. Satu sumber untuk lab (ARM64) dan office (AMD64).
 
-**Status (2026-10-25, lab-first): Phase 0–8 selesai di lab — SSO, penyimpanan terpusat (PostgreSQL + SeaweedFS + Redis, tanpa PVC), izin/share, kolaborasi realtime, riwayat/revert, versi, komentar, ekspor, audit, MCP server, dan AI sebagai kolaborator terotorisasi. Deploy GitOps (Jenkins → Harbor → ArgoCD) dan 3 suite E2E Chrome nyata lulus (25 + 44 + 43 cek). Kantor RHEL/RKE AMD64: UNVERIFIED (langkah: `lab/docs/office-sync/DRAWIO-PHASE2-8-OFFICE-STEPS.md`).**
+**Status (2026-10-25, lab-first; OTP admin = kredensial Keycloak sejak 2026-10-28, lihat Riwayat): Phase 0–8 selesai di lab — SSO, penyimpanan terpusat (PostgreSQL + SeaweedFS + Redis, tanpa PVC), izin/share, kolaborasi realtime, riwayat/revert, versi, komentar, ekspor, audit, MCP server, dan AI sebagai kolaborator terotorisasi. Deploy GitOps (Jenkins → Harbor → ArgoCD) dan 3 suite E2E Chrome nyata lulus (25 + 44 + 43 cek). Kantor RHEL/RKE AMD64: UNVERIFIED (langkah: `lab/docs/office-sync/DRAWIO-PHASE2-8-OFFICE-STEPS.md`).**
 
 | Dokumen | Isi |
 |---|---|
 | [docs/MASTER-PLAN.md](docs/MASTER-PLAN.md) | rencana induk, roadmap per fase, status matrix, keputusan review |
-| [docs/adr/](docs/adr/README.md) | ADR-0001 … ADR-0012 |
+| [docs/adr/](docs/adr/README.md) | ADR-0001 … ADR-0015 (ADR-0015: OTP adalah kredensial Keycloak) |
 | [docs/spikes/SPIKE-000-drawio-image-embed.md](docs/spikes/SPIKE-000-drawio-image-embed.md) | image & dasar embed |
 | [docs/spikes/SPIKE-001-drawio-change-model.md](docs/spikes/SPIKE-001-drawio-change-model.md) | change model, konflik, benchmark (dengan koreksi) |
 | [docs/spikes/SPIKE-002-cross-platform.md](docs/spikes/SPIKE-002-cross-platform.md) | ARM64 ↔ AMD64, re-verifikasi, fuzz, checksum, PostgreSQL, gap RHEL/RKE |
@@ -30,6 +30,9 @@ Pola repo dan deploy mengikuti `n8n-custom-service`. Satu sumber untuk lab (ARM6
 | `Dockerfile` | satu Dockerfile multi-target (`SERVICE_NAME`), `CGO_ENABLED=0`, scratch, uid 65532 |
 | `Jenkinsfile` | lint, test, govulncheck, audit CGO → Kaniko → Harbor `drawio-custom-service` → bump `image.tag` **dan** `image.digest` di helm-values-lab |
 | `e2e/` | E2E Chrome nyata terhadap lab: `phase2_gateway.mjs` (25), `phase5_collab.mjs` (44: izin, kolaborasi 3 pengguna, revert/restore, restart pod, revoke), `phase6_mcp.mjs` (43: MCP + AI), `phase7_presence.mjs` (51: presence), `phase8_ui.mjs` (9: dialog, share, riwayat live), `phase9_local.mjs` (login page, akun lokal, user management, shell, copy PNG, leave guard). Login Keycloak memakai flow `drawio-browser-role-otp` (role `drawio-access` + OTP): suite mendaftarkan TOTP user uji otomatis (seed di `e2e/.otp-seeds.json`, git-ignored). Password uji dibaca dari `lab/SECRETS.md`. `LOCAL_WEB=1` melayani aset host dari working tree (loop cepat tanpa build) |
+| `internal/totp` | helper TOTP: secret gaya Keycloak (`NewKeycloakSecret`: bentuk mentah untuk Keycloak, base32 untuk QR), URI/QR `<issuer>:<username>`, validasi kode (hanya dipakai saat pendaftaran) |
+| `scripts/keycloak_otp_check.py` | periksa (`--check`, hanya membaca) dan siapkan sisi Keycloak: Direct Access Grants, flow Direct Grant dengan OTP kondisional, izin service account; idempoten |
+| `scripts/setup_keycloak_flow.py` | (lab) membuat flow `drawio-direct-grant` dan memberi izin service account lewat `scripts/e2e/kc.py` |
 | `scripts/dev-image.sh` | build multi-arch lokal + push ke Harbor lab lewat bastion (hanya sampai Jenkins membangun repo ini) |
 | `deploy/nginx/drawio.lab.local.conf` | vhost nginx lab (TLS edge) satu-satunya jalan masuk |
 
@@ -45,7 +48,10 @@ Endpoint `https://drawio.lab.local/mcp` (Streamable HTTP, JSON-RPC). Metadata OA
   - **Mode Tema Day / Night (Tombol Ikon Kotak seperti Portal Platform)**: tombol kotak icon-only (`36px × 36px`, Lucide `sun` / `moon`, tanpa label teks) di kanan atas halaman login dengan transisi tema halus (`@property` CSS color variables + `340ms ease-in-out`). Saat `/login` dibuka, mode awal dipilih secara acak (`light` atau `dark`, menyesuaikan logo `drawspace-logo.svg` / `drawspace-logo-dark.svg`) dan dapat diubah oleh pengguna (tidak disimpan untuk halaman login).
   - **Dismissible Error Card (Auto-Close 3 Detik)**: kartu merah pesan gagal login (`Invalid username or password.`) dapat ditutup dengan menekan tombol `✕`, mengklik di luar kartu, atau tertutup otomatis setelah 3 detik.
   - **Footer Copyright BTN**: menampilkan `© 2026 PT Bank Tabungan Negara (Persero) Tbk — Tim Platform Engineering`.
-  - **Sign in with AD BTN (Utama)**: form username dan password terhubung langsung ke Keycloak via Direct Access Grant (`POST /login/ad`). Menggunakan alur autentikasi khusus `drawio-direct-grant` (diikat pada `authenticationFlowBindingOverrides["direct_grant"]` client `drawio-lab`) agar pengguna yang memiliki OTP terdaftar di Keycloak (seperti `lab-admin`) tetap dapat login langsung dengan username & password tanpa gagal `invalid_grant`.
+  - **Sign in with AD BTN (Utama)**: form username dan password terhubung langsung ke Keycloak via Direct Access Grant (`POST /login/ad`). Menggunakan alur autentikasi khusus `drawio-direct-grant` (diikat pada `authenticationFlowBindingOverrides["direct_grant"]` client `drawio-lab`) agar OTP hanya diminta untuk administrator (`drawio-admin`) yang punya kredensial OTP; pengguna biasa masuk dengan username dan password saja.
+    - **Admin yang sudah punya OTP**: Keycloak meminta kode, gateway menjawab `totp_required`, halaman memunculkan modal 6 digit, dan **Keycloak** memverifikasinya.
+    - **Admin yang belum punya OTP**: gateway menampilkan QR di modal (`totp_setup_required`); secret mentah tertahan di Redis (5 menit, sekali pakai, maks. 5 kode salah) dan baru ditulis ke Keycloak (`PUT /users/{id}`, `credentials[otp]`) setelah kode pertama benar (`POST /login/ad/totp-setup`). OTP yang sudah ada tidak pernah ditimpa. Tidak ada tabel TOTP di database platform.
+    - **Label di aplikasi authenticator** sama dengan halaman Keycloak: `<OTP_ISSUER>:<username>` (mis. `Lab:lab-test3`). OTP milik user, jadi satu entri berlaku di semua aplikasi Keycloak yang meminta OTP (ADR-0015).
   - **Sign in with local account (Sekunder)**: tombol sekunder untuk login akun lokal (break-glass / administrator) melalui `POST /login/local`.
   - Akun lokal berperan `user` atau `admin`, dikelola admin di menu pengguna → **Manage users** (`/admin/users`), bisa berbagi diagram dengan pengguna SSO dan sebaliknya. Admin pertama dibuat dari Secret `LOCAL_ADMIN_PASSWORD` (`admin`). ADR-0014.
 - **Satu header & menu bar**:
@@ -59,7 +65,17 @@ Endpoint `https://drawio.lab.local/mcp` (Streamable HTTP, JSON-RPC). Metadata OA
 - **Salin sebagai gambar**: pilih bentuk → klik kanan atau menu Edit → *Copy as PNG image* / *Copy as SVG* (clipboard browser hanya menerima PNG dan SVG) dan *Save selection as JPG…* (unduh).
 - **Tanpa pop-up bawaan browser saat keluar** bila semua perubahan sudah tersimpan; dialog sendiri hanya muncul bila masih ada perubahan yang belum sampai ke server.
 
+## Penerapan di lingkungan lain (checklist, mis. kantor)
+Tanpa DDL baru: skema platform = **versi 2** (`001_init.sql`, `002_local_users.sql`; tidak ada migrasi 003 dan tidak ada tabel `admin_totp`).
+
+1. **Keycloak** (realm SSO): client confidential `OIDC_CLIENT_ID` (*Direct Access Grants* dan *Service accounts roles* aktif, PKCE S256 untuk alur code), client role `drawio-access` dan `drawio-admin`, grup yang memetakannya, flow Direct Grant khusus client: `Username Validation` (REQUIRED) → `Password` (REQUIRED) → sub-flow **CONDITIONAL** (`Condition - user role` = `<client>.drawio-admin`, `Condition - user configured`, `OTP`, semuanya REQUIRED). Periksa dan siapkan dengan `python3 -I scripts/keycloak_otp_check.py --check` lalu tanpa `--check` untuk memberi izin service account yang kurang (`view-users`, `query-users`, `manage-users`, `view-clients`, `query-clients`). Env skrip: `KC_URL`, `KC_REALM`, `KC_CLIENT`, `KC_ADMIN_ROLE`, `KC_ADMIN_PASSWORD` (kosong = ditanya di terminal), `KC_INSECURE=1` hanya untuk sertifikat self-signed.
+2. **Env gateway** (values): `ISSUER_URL` (URL realm, https), `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET` (Secret), `REDIS_*` (token enrolment OTP ikut di Redis ini), `REQUIRED_ROLE`, dan **`OTP_ISSUER`** = nama tampilan realm Keycloak (kosong = nama realm dari `ISSUER_URL`).
+3. **Deploy**: gerbang lokal (lint, vet, test, govulncheck, audit CGO) → push → Jenkins membangun `gateway`, `platform`, `mcp-server` → ArgoCD. Setelah rollout selesai (`kubectl rollout status` untuk ketiganya), uji.
+4. **Verifikasi**: `/login` memuat Sign in with AD BTN dan Sign in with local account; user biasa masuk tanpa kode; admin ber-OTP diminta 6 digit; admin tanpa OTP melihat QR, masuk, dan di Keycloak Admin user itu punya kredensial OTP berlabel "Authenticator"; entri di authenticator berjudul `<OTP_ISSUER>:<username>`; log gateway tidak berisi `register otp ... status 403` (itu tanda `manage-users` belum diberikan).
+5. **Pelajaran dari lab**: setelah mengubah role service account, restart pod gateway (token service account tersimpan di memori); cek rollout dengan `kubectl rollout status`, bukan dengan melihat image di spec (pod lama masih hidup sampai rollout selesai).
+
 ## Riwayat perubahan penting
+- **2026-10-28 (sore 3)**: `scripts/keycloak_otp_check.py` (periksa/siapkan Keycloak: flow + izin service account) dan checklist "Penerapan di lingkungan lain" di README ini; `setup_keycloak_flow.py` memberi kelima izin service account.
 - **2026-10-28 (sore 2)**: **OTP admin = kredensial OTP asli Keycloak, tanpa tabel `admin_totp`** (`internal/edge/localauth.go`, `internal/edge/oidc.go`, `internal/totp/totp.go`, ADR-0015):
   1. Admin (`drawio-admin`) yang belum punya OTP melihat QR di modal; secret mentah tertahan di Redis (5 menit, sekali pakai, maks. 5 salah kode, ikut penguncian akun) dan **baru ditulis ke Keycloak** (`PUT /users/{id}` dengan `credentials[otp]`) setelah kode pertama terbukti benar. `RegisterOTP` tidak pernah menimpa OTP yang sudah ada. `secretData.value` = secret **mentah**; QR/authenticator memakai base32-nya (`totp.NewKeycloakSecret`).
   2. Setelah itu **Keycloak sendiri** yang meminta dan memverifikasi kode di setiap login (flow `drawio-direct-grant`); gateway tidak lagi memeriksa TOTP. Satu OTP per user berlaku di semua aplikasi Keycloak yang meminta OTP.
