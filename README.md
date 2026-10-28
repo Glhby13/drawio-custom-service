@@ -60,6 +60,16 @@ Endpoint `https://drawio.lab.local/mcp` (Streamable HTTP, JSON-RPC). Metadata OA
 - **Tanpa pop-up bawaan browser saat keluar** bila semua perubahan sudah tersimpan; dialog sendiri hanya muncul bila masih ada perubahan yang belum sampai ke server.
 
 ## Riwayat perubahan penting
+- **2026-10-28 (siang)**: Penyempurnaan Alur 2FA & Deteksi Status OTP Keycloak Direct Grant (`internal/edge/oidc.go`, `internal/edge/localauth.go`, `internal/edge/server.go`, `scripts/setup_keycloak_flow.py`):
+  1. **Pencegahan Crash HTTP 500/503 Keycloak**: Penambahan eksekusi `Condition - user configured` [`REQUIRED`] sebelum `OTP` (`direct-grant-validate-otp`) pada subflow `drawio-dg-conditional-otp`. Keycloak tidak lagi melempar exception Java jika admin belum memiliki OTP.
+  2. **UI Adaptif Headless DrawSpace Berdasarkan Status Keycloak**:
+     - **Admin yang sudah punya TOTP di Keycloak** (seperti `lab-admin`): Keycloak menolak login awal tanpa OTP $\rightarrow$ Gateway menerima `invalid_grant` $\rightarrow$ UI memunculkan **Pop-up Input 6-Digit TOTP**, dan kode diverifikasi secara native oleh Keycloak.
+     - **Admin yang belum punya TOTP di Keycloak** (seperti `lab-test3`): Keycloak meloloskan verifikasi username & password $\rightarrow$ Gateway mendeteksi via Keycloak Admin API (`users[0].totp == false`) $\rightarrow$ Gateway mengembalikan `totp_setup_required` $\rightarrow$ UI memunculkan **Pop-up Scan Barcode / QR Setup** $\rightarrow$ kode verifikasi pertama dikirim ke rute `POST /login/ad/totp-setup` dan disimpan di database platform (`drawio_db.admin_totp`). Login berikutnya otomatis meminta 6 digit TOTP.
+     - **User biasa non-admin** (seperti `lab-test`): langsung masuk ke dashboard tanpa pop-up (200 OK).
+  3. **Verifikasi E2E Live**: Commit `5475fa4`, Jenkins build #35 SUCCESS, ArgoCD Synced/Healthy, live test curl/python E2E lulus 100% untuk semua skenario akun.
+- **2026-10-28 (pagi)**: Pemetaan Role `drawio-admin` & Direct Grant Native Keycloak:
+  1. Pemetaan client role `drawio-admin` dari Keycloak menjadi hak administrator penuh di gateway dan platform.
+  2. Gateway menantang admin AD dengan modal input 6-digit TOTP standar yang diverifikasi langsung oleh Keycloak.
 - **2026-10-27 (pagi 2)**: Sinkronisasi Restore Versi & Transisi Tema Day/Night Iframe (`adapter.js`, `host.js`, `host.css`, `host.html`):
   1. **Restore Versi Sinkron & Seketika**: mengganti `postMessage` asinkron pada `loadFull(xml)` dengan pemanggilan `ui.setFileData(xml)` langsung pada instance UI draw.io editor, dan memicu `adapter.resync('restore'/'revert')` via WebSocket (reconnect 50ms) saat menekan tombol Restore/Revert pada Version maupun History sehingga kanvas langsung kembali ke state revisi yang dipilih tanpa perlu reload browser.
   2. **Transisi Tema Day/Night Serempak & Halus**: menerapkan pola transisi Portal Platform (`html.theme-transition`) dengan element transitions 320ms pada host shell dan menyuntikkan style transisi ke dokumen iframe draw.io (`.geEditor, .geMenubarContainer, .geSidebarContainer, .geDiagramContainer, .geBackgroundPage`) sehingga pergantian mode tema berlangsung serempak dan halus di seluruh layar.
