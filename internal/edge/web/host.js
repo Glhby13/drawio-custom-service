@@ -20,6 +20,8 @@
     css += '.geMenubarContainer { background-color: ' + bar.bg + ' !important; border-bottom: 1px solid ' + bar.border + ' !important; }'
       + '.geMenubarContainer .geItem, .geMenubarContainer .geItem:visited, .geMenubarContainer .geStatus, .geMenubarContainer .geStatus * { color: ' + bar.text + ' !important; border-radius: 6px; }'
       + '.geMenubarContainer .geItem, .geMenubarContainer .geItem:hover, .geMenubarContainer .geItem:focus, .geMenubarContainer .geItem:active, .geMenubarContainer .geItem.geActiveItem { background: none !important; background-color: transparent !important; box-shadow: none !important; outline: none !important; }'
+      // draw.io's atlas theme paints hovered items with `.geAtlas .geMenubarContainer .geItem:hover:not(.geDarkMode *) { background-color: ... !important }`; repeat classes to out-rank it
+      + 'body.geAtlas .geMenubarContainer .geItem.geItem.geItem:hover:not(.geDarkMode *), body.geAtlas .geMenubarContainer .geItem.geItem.geItem:active:not(.geDarkMode *) { background: none !important; background-color: transparent !important; }'
       + '.geMenubarContainer .geItem:hover, .geMenubarContainer .geItem:active, .geMenubarContainer .geItem.geActiveItem { color: ' + bar.accent + ' !important; }';
     return css;
   }
