@@ -132,7 +132,8 @@ func (s *Server) loginAD(w http.ResponseWriter, r *http.Request) {
 				fail(http.StatusInternalServerError, "internal")
 				return
 			}
-			qr, qerr := totp.QRCodeBase64(b32, user, "DrawSpace")
+			// the account is the Keycloak user name and the issuer the realm's, exactly like Keycloak's own enrolment page
+			qr, qerr := totp.QRCodeBase64(b32, id.Username, s.cfg.OTPIssuer)
 			if qerr != nil {
 				fail(http.StatusInternalServerError, "internal")
 				return

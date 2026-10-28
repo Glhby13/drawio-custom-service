@@ -446,7 +446,7 @@ func (o *OIDC) RegisterOTP(ctx context.Context, userID, secret string) error {
 	credData, _ := json.Marshal(map[string]any{"subType": "totp", "digits": 6, "period": 30, "algorithm": "HmacSHA1", "counter": 0})
 	rep["credentials"] = []map[string]any{{
 		"type":           "otp",
-		"userLabel":      "DrawSpace authenticator",
+		"userLabel":      "Authenticator",
 		"secretData":     string(secretData),
 		"credentialData": string(credData),
 	}}

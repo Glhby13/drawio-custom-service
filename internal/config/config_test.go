@@ -58,3 +58,14 @@ func TestErrorsNeverEchoSecrets(t *testing.T) {
 		t.Fatalf("error leaks a secret: %v", err)
 	}
 }
+
+func TestOTPIssuerDefaultsToTheRealmAndCanBeSet(t *testing.T) {
+	g, err := LoadGateway(env(nil))
+	if err != nil || g.OTPIssuer != "lab" {
+		t.Fatalf("default issuer must be the realm name: %q %v", g.OTPIssuer, err)
+	}
+	g, err = LoadGateway(env(map[string]string{"OTP_ISSUER": " Lab "}))
+	if err != nil || g.OTPIssuer != "Lab" {
+		t.Fatalf("OTP_ISSUER must win (display name of the realm): %q %v", g.OTPIssuer, err)
+	}
+}

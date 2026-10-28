@@ -80,21 +80,25 @@ func GenerateCode(secret string) (string, error) {
 	return computeCode(key, step), nil
 }
 
-// QRCodeBase64 generates a data:image/png;base64,... URI for the authenticator setup.
-func QRCodeBase64(secret, username, issuer string) (string, error) {
-	label := username
+// OTPAuthURI is the enrolment URI an authenticator app reads. Its label is "<issuer>:<account>", the same form
+// Keycloak's own enrolment page produces, so the entry looks identical whichever application showed the QR code.
+func OTPAuthURI(secret, account, issuer string) string {
+	label := account
 	if issuer != "" {
-		label = issuer + ":" + username
+		label = issuer + ":" + account
 	}
-	uri := fmt.Sprintf("otpauth://totp/%s?secret=%s&issuer=%s&algorithm=SHA1&digits=%d&period=%d",
+	return fmt.Sprintf("otpauth://totp/%s?secret=%s&issuer=%s&algorithm=SHA1&digits=%d&period=%d",
 		url.PathEscape(label),
 		url.QueryEscape(strings.ToUpper(strings.TrimSpace(secret))),
 		url.QueryEscape(issuer),
 		digits,
 		period,
 	)
+}
 
-	pngBytes, err := qrcode.Encode(uri, qrcode.Medium, 256)
+// QRCodeBase64 generates a data:image/png;base64,... URI for the authenticator setup.
+func QRCodeBase64(secret, account, issuer string) (string, error) {
+	pngBytes, err := qrcode.Encode(OTPAuthURI(secret, account, issuer), qrcode.Medium, 256)
 	if err != nil {
 		return "", err
 	}

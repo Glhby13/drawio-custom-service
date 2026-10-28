@@ -34,6 +34,9 @@ type Gateway struct {
 	InternalKey      ed25519.PrivateKey
 	InternalKeyID    string
 	InsecureCookie   bool // plain-HTTP local tests only; refused when PUBLIC_URL is https
+	// OTPIssuer is the issuer shown in the authenticator app for the one-time code ("Lab:lab-test3"). Keep it equal to
+	// the realm's display name so a code enrolled here looks exactly like one enrolled on Keycloak's own page.
+	OTPIssuer string
 }
 
 // LoadGateway reads and validates the environment; getenv is injectable for tests.
@@ -50,6 +53,7 @@ func LoadGateway(getenv func(string) string) (Gateway, error) {
 		CAFile:        getenv("EXTRA_CA_FILE"),
 		InternalKeyID: or(getenv("INTERNAL_KEY_ID"), "edge-1"),
 	}
+	g.OTPIssuer = or(strings.TrimSpace(getenv("OTP_ISSUER")), realmName(g.IssuerURL))
 	var errs []error
 	pu, err := parseURL("PUBLIC_URL", getenv("PUBLIC_URL"))
 	errs = append(errs, err)
@@ -98,6 +102,14 @@ func LoadGateway(getenv func(string) string) (Gateway, error) {
 		return Gateway{}, e
 	}
 	return g, nil
+}
+
+// realmName is the realm segment of a Keycloak realm URL, the fallback issuer when OTP_ISSUER is not set.
+func realmName(realmURL string) string {
+	if i := strings.LastIndex(realmURL, "/realms/"); i >= 0 && i+len("/realms/") < len(realmURL) {
+		return realmURL[i+len("/realms/"):]
+	}
+	return "Keycloak"
 }
 
 func or(v, d string) string {

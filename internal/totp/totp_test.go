@@ -59,3 +59,12 @@ func TestNewKeycloakSecretAgreesInBothForms(t *testing.T) {
 		t.Fatal("secrets must be random")
 	}
 }
+
+func TestOTPAuthURIMatchesKeycloaksOwnLabel(t *testing.T) {
+	uri := OTPAuthURI("jbswy3dpehpk3pxp", "lab-test3", "Lab")
+	for _, want := range []string{"otpauth://totp/Lab:lab-test3?", "secret=JBSWY3DPEHPK3PXP", "issuer=Lab", "digits=6", "period=30", "algorithm=SHA1"} {
+		if !strings.Contains(uri, want) {
+			t.Fatalf("uri %q lacks %q", uri, want)
+		}
+	}
+}

@@ -17,7 +17,11 @@ gave two places to enrol, reset and audit a second factor, and a code enrolled i
    code is proved registers it with the Admin API (`PUT /users/{id}`, `credentials[type=otp]`, raw secret in
    `secretData.value`, base32 form in the QR). An existing OTP credential is never replaced.
 3. The client's service account holds `view-users`, `query-users`, `manage-users`, `view-clients`, `query-clients`.
-4. `admin_totp`, its migration, its endpoints and the local-account "Authenticator" dialog are removed. DrawSpace had
+4. The enrolment QR is labelled the way Keycloak's own page labels it: `<realm display name>:<user name>` (config
+   `OTP_ISSUER`, account = `preferred_username`), never the application name or the e-mail address, and the credential's
+   label in Keycloak is the neutral "Authenticator". The code belongs to the user, so the entry in the authenticator app
+   must look the same whichever application showed the QR code.
+5. `admin_totp`, its migration, its endpoints and the local-account "Authenticator" dialog are removed. DrawSpace had
    not been deployed to the office, so the office receives the final schema (version 2) with no create-then-drop history.
 
 ## Consequences
