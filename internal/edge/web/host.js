@@ -15,11 +15,11 @@
     var css = '.geEditor, .geMenubarContainer, .geSidebarContainer, .geDiagramContainer, .geBackgroundPage, .geHdiv, .geVdiv, .geFormatContainer { transition: background-color 320ms ease-in-out, border-color 320ms ease-in-out, color 320ms ease-in-out !important; }'
       + '.geTabContainer a:has(> img[src*="github-logo"]) { display: none !important; }';
     var bar = m === 'dark'
-      ? { bg: '#1e293b', border: '#334155', text: '#e2e8f0', hover: '#334155', accent: '#60a5fa' }
-      : { bg: '#ffffff', border: '#e2e8f0', text: '#1e293b', hover: '#eef2ff', accent: '#1868db' };
+      ? { bg: '#1e293b', border: '#334155', text: '#e2e8f0', accent: '#60a5fa' }
+      : { bg: '#ffffff', border: '#e2e8f0', text: '#1e293b', accent: '#1868db' };
     css += '.geMenubarContainer { background-color: ' + bar.bg + ' !important; border-bottom: 1px solid ' + bar.border + ' !important; }'
       + '.geMenubarContainer .geItem, .geMenubarContainer .geItem:visited, .geMenubarContainer .geStatus, .geMenubarContainer .geStatus * { color: ' + bar.text + ' !important; border-radius: 6px; }'
-      + '.geMenubarContainer .geItem:hover, .geMenubarContainer .geItem.geActiveItem { background-color: ' + bar.hover + ' !important; color: ' + bar.accent + ' !important; }';
+      + '.geMenubarContainer .geItem:hover, .geMenubarContainer .geItem.geActiveItem { background: transparent !important; color: ' + bar.accent + ' !important; }';
     return css;
   }
 
@@ -261,8 +261,9 @@
     editorUi = ui;
     // Close host dropdowns when the user clicks inside the draw.io iframe
     if (win && win.document) {
-      win.document.addEventListener('mousedown', function () {
+      win.document.addEventListener('mousedown', function (e) {
         closeMenu();
+        if (!(e.target && e.target.closest && e.target.closest('[data-drawspace-menu="ai"]'))) closeAiPop();
       }, true);
       try {
         var idoc = win.document;
@@ -302,7 +303,7 @@
       e.preventDefault();
       e.stopPropagation();
       if (ui.hideCurrentMenu) ui.hideCurrentMenu();
-      openAiSettings(id);
+      openAiSettings(id, aiElt);
     });
     var statusAnchor = ui.menubar.container.querySelector('.geStatus');
     var help = Array.prototype.find.call(ui.menubar.container.children, function (c) { return c !== elt && /^help$/i.test((c.textContent || '').trim()); });
@@ -1427,49 +1428,57 @@
     }).catch(function (e) { toast('error', e.message); });
   }
 
-  function openAiSettings(id) {
+  // AI settings as a dropdown under the "AI" menu item (same look as the other menus), not a modal dialog.
+  var aiPopAnchor = null;
+  function closeAiPop() {
+    var p = $('ai-pop'); if (p) p.remove();
+    aiPopAnchor = null;
+  }
+  function openAiSettings(id, anchor) {
+    if ($('ai-pop')) { closeAiPop(); return; }
     api('GET', '/documents/' + id + '/permissions').then(function (r) {
       var ai = r.aiPolicy || { allowed: false, maxOpsPerMin: 120, maxDelete: 20 };
       var allowed = el('input', { type: 'checkbox', id: 'ai-allowed' }); allowed.checked = !!ai.allowed;
-      var rate = el('input', { class: 'field', id: 'ai-rate', type: 'number', min: '1', max: '5000', value: String(ai.maxOpsPerMin) }); rate.value = String(ai.maxOpsPerMin);
-      var del = el('input', { class: 'field', id: 'ai-del', type: 'number', min: '0', max: '1000', value: String(ai.maxDelete) }); del.value = String(ai.maxDelete);
+      var rate = el('input', { class: 'field ai-num', id: 'ai-rate', type: 'number', min: '1', max: '5000', value: String(ai.maxOpsPerMin), 'aria-label': 'Max AI operations per minute' }); rate.value = String(ai.maxOpsPerMin);
+      var del = el('input', { class: 'field ai-num', id: 'ai-del', type: 'number', min: '0', max: '1000', value: String(ai.maxDelete), 'aria-label': 'Max AI deletions per change' }); del.value = String(ai.maxDelete);
       var canPolicy = doc && doc.can && doc.can.policy;
       [allowed, rate, del].forEach(function (x) { x.disabled = !canPolicy; });
-      var aiBox = el('div', { class: 'ai-box' }, [
-        el('div', { class: 'ai-setting' }, [
-          el('div', { class: 'ai-label-row' }, [
-            el('label', { class: 'check' }, [allowed, ' Allow AI collaborators (agents) on this diagram']),
-            helpTip('Izinkan agen AI (misal Claude / MCP) yang telah diberi akses pada menu Share untuk membaca dan mengedit diagram ini secara langsung.'),
-          ]),
+      var pop = el('div', { id: 'ai-pop', class: 'ai-pop', role: 'dialog', 'aria-label': 'AI collaborators' }, [
+        el('div', { class: 'ai-pop-head' }, [el('strong', { text: 'AI collaborators' }), el('small', { text: doc ? doc.document.title : '' })]),
+        el('div', { class: 'ai-pop-row' }, [
+          el('label', { class: 'check' }, [allowed, ' Allow AI agents on this diagram']),
+          helpTip('Izinkan agen AI (misal Claude / MCP) yang telah diberi akses pada menu Share untuk membaca dan mengedit diagram ini secara langsung.'),
         ]),
-        el('div', { class: 'ai-setting' }, [
-          el('div', { class: 'ai-label-row' }, [
-            el('span', { text: 'Max AI operations per minute' }),
-            helpTip('Batas maksimum jumlah operasi perubahan sel/bentuk yang boleh dikirim oleh agen AI setiap menit (rate limit) agar tidak membebani diagram.'),
-          ]),
-          rate,
+        el('div', { class: 'ai-pop-row' }, [
+          el('span', { class: 'ai-pop-label', text: 'Max operations / minute' }), rate,
+          helpTip('Batas maksimum jumlah operasi perubahan sel/bentuk yang boleh dikirim oleh agen AI setiap menit (rate limit) agar tidak membebani diagram.'),
         ]),
-        el('div', { class: 'ai-setting' }, [
-          el('div', { class: 'ai-label-row' }, [
-            el('span', { text: 'Max AI deletions per change (larger needs confirmation)' }),
-            helpTip('Batas maksimum jumlah elemen/sel yang boleh dihapus oleh agen AI dalam satu kali perintah perubahan guna mencegah penghapusan massal tanpa sengaja.'),
-          ]),
-          del,
+        el('div', { class: 'ai-pop-row' }, [
+          el('span', { class: 'ai-pop-label', text: 'Max deletions / change' }), del,
+          helpTip('Batas maksimum jumlah elemen/sel yang boleh dihapus oleh agen AI dalam satu kali perintah perubahan guna mencegah penghapusan massal tanpa sengaja (lebih besar perlu konfirmasi).'),
         ]),
       ]);
       if (canPolicy) {
-        var saveAi = el('button', { class: 'btn', type: 'button', id: 'save-ai', text: 'Save AI settings', disabled: true, onclick: function () {
+        var saveAi = el('button', { class: 'ai-pop-save', type: 'button', id: 'save-ai', text: 'Save', disabled: true, onclick: function () {
           api('PUT', '/documents/' + id + '/ai-policy', { allowed: allowed.checked, maxOpsPerMin: parseInt(rate.value, 10), maxDelete: parseInt(del.value, 10) })
             .then(function () { toast('info', 'AI settings saved'); saveAi.disabled = true; }).catch(function (e) { toast('error', e.message); });
         } });
         [allowed, rate, del].forEach(function (x) { x.addEventListener('input', function () { saveAi.disabled = false; }); x.addEventListener('change', function () { saveAi.disabled = false; }); });
-        aiBox.appendChild(saveAi);
+        pop.appendChild(el('div', { class: 'ai-pop-foot' }, [saveAi]));
       } else {
-        aiBox.appendChild(el('small', { text: 'Only the owner or an administrator can change these settings.' }));
+        pop.appendChild(el('div', { class: 'ai-pop-foot' }, [el('small', { text: 'Only the owner or an administrator can change these settings.' })]));
       }
-      dialog('AI Collaborators — "' + (doc ? doc.document.title : '') + '"', aiBox, [{ label: 'Done', cls: 'primary' }]);
+      document.body.appendChild(pop);
+      // anchor under the "AI" item (the editor lives in an iframe, so add the frame offset)
+      var f = $('editor'), fr = f ? f.getBoundingClientRect() : { left: 0, top: 0 }, ar = anchor ? anchor.getBoundingClientRect() : { left: 0, bottom: 0 };
+      var left = Math.max(8, Math.min(fr.left + ar.left, window.innerWidth - pop.offsetWidth - 8));
+      pop.style.left = left + 'px';
+      pop.style.top = (fr.top + ar.bottom + 4) + 'px';
+      aiPopAnchor = anchor || null;
     }).catch(function (e) { toast('error', e.message); });
   }
+  document.addEventListener('mousedown', function (e) { var p = $('ai-pop'); if (p && !p.contains(e.target)) closeAiPop(); });
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeAiPop(); });
 
   // ---- users (local accounts, administrators only) ------------------------------------------------------------------------------------------------------
   function showUsers() {

@@ -244,3 +244,18 @@ select.field, .select { appearance: none; -webkit-appearance: none; padding: 0 3
 @media (max-width: 720px) { .user-name, .role, .btn-label, .sep { display: none; } .presence { display: none; } .title { flex-basis: 140px; } .sync { padding: 0 9px; } }
 @media (max-width: 480px) { .sync-text { display: none; } .sync { padding: 0 7px; } .wordmark { display: none; } .panel { width: min(360px, 100%); } }
 @media (prefers-reduced-motion: reduce) { .sync-icon { animation: none !important; } }
+
+/* AI settings dropdown under the editor's "AI" menu item (same surface/shadow as .menu) */
+.ai-pop { position: fixed; z-index: 30; width: 330px; padding: 6px; border-radius: 12px; background: var(--surface); color: var(--text); box-shadow: 0 12px 40px rgba(15, 23, 42, .32), 0 0 0 1px var(--border); font: 13px var(--font); }
+.ai-pop-head { display: grid; gap: 1px; padding: 8px 10px 10px; border-bottom: 1px solid var(--border); }
+.ai-pop-head strong { font-size: 14px; color: var(--text-strong); }
+.ai-pop-head small { color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ai-pop-row { display: flex; align-items: center; gap: 10px; padding: 9px 10px; border-radius: 8px; }
+.ai-pop-row + .ai-pop-row { border-top: 1px solid var(--border); border-radius: 0; }
+.ai-pop-row .check { flex: 1; font-size: 13.5px; }
+.ai-pop-label { flex: 1; color: var(--text); font-weight: 500; }
+.ai-pop .ai-num { width: 84px; height: 30px; text-align: right; }
+.ai-pop-foot { display: flex; justify-content: flex-end; align-items: center; padding: 8px 10px 4px; border-top: 1px solid var(--border); }
+.ai-pop-foot small { color: var(--muted); }
+.ai-pop-save { height: 30px; padding: 0 16px; border: 0; border-radius: 8px; background: var(--blue); color: #fff; font: 600 13px var(--font); cursor: pointer; }
+.ai-pop-save:disabled { opacity: .45; cursor: default; }
