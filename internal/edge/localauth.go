@@ -5,10 +5,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 	"net/http"
-	"net/url"
 	"slices"
 	"strings"
 	"time"
@@ -118,66 +116,51 @@ func (s *Server) loginAD(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// User authentication succeeded with Keycloak. Check if admin requires 2FA setup.
-	isAdmin := slices.Contains(id.Roles, "admin") || slices.Contains(id.Roles, "drawio-admin")
-	if isAdmin {
-		_, hasKeycloakTOTP := s.oidc.GetAdminUserInfo(ctx, user)
-		if !hasKeycloakTOTP {
-			totpStatus, terr := s.getPlatformTOTP(ctx, user)
-			if terr != nil {
-				s.log.Error("platform totp lookup failed", "request_id", RequestID(ctx), "err", terr.Error(), "user", user)
+	// Keycloak asks for the one-time code itself when a drawio-admin user holds an OTP credential, so an administrator
+	// who got this far either just proved the code or has no OTP credential yet. Ask Keycloak (never a cache) and, when
+	// there is none, offer enrolment: the secret reaches Keycloak only after the user proves the authenticator works.
+	if slices.Contains(id.Roles, "drawio-admin") {
+		has, herr := s.oidc.HasOTP(ctx, id.Subject)
+		if herr != nil {
+			s.log.Error("otp lookup failed", "request_id", RequestID(ctx), "err", herr.Error(), "user", user)
+			fail(http.StatusServiceUnavailable, "unavailable")
+			return
+		}
+		if !has {
+			raw, b32, serr := totp.NewKeycloakSecret()
+			if serr != nil {
+				fail(http.StatusInternalServerError, "internal")
+				return
+			}
+			qr, qerr := totp.QRCodeBase64(b32, user, "DrawSpace")
+			if qerr != nil {
+				fail(http.StatusInternalServerError, "internal")
+				return
+			}
+			setupToken := session.RandomToken(32)
+			data := totpSetupData{
+				Username: user,
+				Secret:   b32,
+				Raw:      raw,
+				Subject:  id.Subject,
+				Name:     id.Name,
+				Email:    id.Email,
+				Roles:    id.Roles,
+				IDToken:  id.IDToken,
+				ReturnTo: in.ReturnTo,
+			}
+			if perr := s.store.PutTOTPSetup(ctx, setupToken, data, setupTTL); perr != nil {
 				fail(http.StatusServiceUnavailable, "unavailable")
 				return
 			}
-			if !totpStatus.Configured {
-				secret, serr := totp.GenerateSecret()
-				if serr != nil {
-					fail(http.StatusInternalServerError, "internal")
-					return
-				}
-				qr, qerr := totp.QRCodeBase64(secret, user, "DrawSpace")
-				if qerr != nil {
-					fail(http.StatusInternalServerError, "internal")
-					return
-				}
-				setupToken := session.RandomToken(32)
-				data := totpSetupData{
-					Username: user,
-					Secret:   secret,
-					Subject:  id.Subject,
-					Name:     id.Name,
-					Email:    id.Email,
-					Roles:    id.Roles,
-					IDToken:  id.IDToken,
-					ReturnTo: in.ReturnTo,
-				}
-				if perr := s.store.PutTOTPSetup(ctx, setupToken, data, 5*time.Minute); perr != nil {
-					fail(http.StatusServiceUnavailable, "unavailable")
-					return
-				}
-				w.WriteHeader(http.StatusUnauthorized)
-				_ = json.NewEncoder(w).Encode(map[string]any{
-					"error":       "totp_setup_required",
-					"qr_code":     qr,
-					"secret":      secret,
-					"setup_token": setupToken,
-				})
-				return
-			}
-
-			// Admin has configured DrawSpace TOTP locally.
-			code := strings.TrimSpace(in.TOTP)
-			if code == "" {
-				fail(http.StatusUnauthorized, "totp_required")
-				return
-			}
-			if !totp.Validate(totpStatus.Secret, code) {
-				_, _ = s.store.Fail(ctx, "u:"+user, failWindow)
-				_, _ = s.store.Fail(ctx, "ip:"+ip, failWindow)
-				s.log.Info("ad totp invalid", "request_id", RequestID(ctx), "user", user)
-				fail(http.StatusUnauthorized, "invalid_credentials", "Kode authenticator atau kredensial tidak valid.")
-				return
-			}
+			w.WriteHeader(http.StatusUnauthorized)
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"error":       "totp_setup_required",
+				"qr_code":     qr,
+				"secret":      b32,
+				"setup_token": setupToken,
+			})
+			return
 		}
 	}
 
@@ -308,78 +291,24 @@ func (s *Server) verifyLocal(ctx context.Context, username, password string) (*l
 	return nil, errAuthBackend
 }
 
-type platformTOTPStatus struct {
-	Configured bool   `json:"configured"`
-	Secret     string `json:"secret,omitempty"`
-}
+const (
+	setupTTL      = 5 * time.Minute
+	maxSetupTries = 5
+)
 
+// totpSetupData is one pending authenticator enrolment (held in Redis for setupTTL, single use): Secret is the base32
+// form shown to the user, Raw the form Keycloak stores.
 type totpSetupData struct {
 	Username string   `json:"username"`
 	Secret   string   `json:"secret"`
+	Raw      string   `json:"raw"`
 	Subject  string   `json:"subject"`
 	Name     string   `json:"name"`
 	Email    string   `json:"email"`
 	Roles    []string `json:"roles"`
 	IDToken  string   `json:"idToken"`
 	ReturnTo string   `json:"returnTo"`
-}
-
-func (s *Server) getPlatformTOTP(ctx context.Context, username string) (*platformTOTPStatus, error) {
-	if s.platform == nil || s.cfg.PlatformUpstream == nil {
-		return nil, errors.New("platform upstream nil")
-	}
-	tok, err := s.signer.Sign(identity.Claims{Subject: "gateway-auth", Audience: platformAudience, ActorType: identity.ActorService}, 30*time.Second)
-	if err != nil {
-		return nil, err
-	}
-	u := strings.TrimRight(s.cfg.PlatformUpstream.String(), "/") + "/api/v1/internal/totp/" + url.PathEscape(username)
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("Authorization", "Bearer "+tok)
-	c := &http.Client{Timeout: 5 * time.Second}
-	resp, err := c.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("platform totp get returned %d", resp.StatusCode)
-	}
-	var res platformTOTPStatus
-	if err := json.NewDecoder(io.LimitReader(resp.Body, 4096)).Decode(&res); err != nil {
-		return nil, err
-	}
-	return &res, nil
-}
-
-func (s *Server) setPlatformTOTP(ctx context.Context, username, secret string) error {
-	if s.platform == nil || s.cfg.PlatformUpstream == nil {
-		return errors.New("platform upstream nil")
-	}
-	tok, err := s.signer.Sign(identity.Claims{Subject: "gateway-auth", Audience: platformAudience, ActorType: identity.ActorService}, 30*time.Second)
-	if err != nil {
-		return err
-	}
-	body, _ := json.Marshal(map[string]string{"secret": secret})
-	u := strings.TrimRight(s.cfg.PlatformUpstream.String(), "/") + "/api/v1/internal/totp/" + url.PathEscape(username)
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, u, bytes.NewReader(body))
-	if err != nil {
-		return err
-	}
-	req.Header.Set("Authorization", "Bearer "+tok)
-	req.Header.Set("Content-Type", "application/json")
-	c := &http.Client{Timeout: 5 * time.Second}
-	resp, err := c.Do(req)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("platform totp set returned %d", resp.StatusCode)
-	}
-	return nil
+	Tries    int      `json:"tries"`
 }
 
 func (s *Server) loginADSetupTOTP(w http.ResponseWriter, r *http.Request) {
@@ -407,14 +336,29 @@ func (s *Server) loginADSetupTOTP(w http.ResponseWriter, r *http.Request) {
 		fail(http.StatusBadRequest, "invalid_or_expired_token", "Sesi setup telah kedaluwarsa. Silakan login kembali.")
 		return
 	}
+	if n, ferr := s.store.Failures(ctx, "u:"+data.Username); ferr == nil && n >= maxLocalFailures {
+		w.Header().Set("Retry-After", "900")
+		fail(http.StatusTooManyRequests, "locked", "Terlalu banyak percobaan gagal. Coba lagi dalam 15 menit.")
+		return
+	}
+	ip := clientIP(r)
 	if !totp.Validate(data.Secret, in.Code) {
-		_ = s.store.PutTOTPSetup(ctx, in.SetupToken, data, 5*time.Minute)
+		_, _ = s.store.Fail(ctx, "u:"+data.Username, failWindow)
+		_, _ = s.store.Fail(ctx, "ip:"+ip, failWindow)
+		data.Tries++
+		if data.Tries < maxSetupTries {
+			_ = s.store.PutTOTPSetup(ctx, in.SetupToken, data, setupTTL)
+		}
 		fail(http.StatusUnauthorized, "invalid_code", "Kode authenticator tidak valid. Coba lagi.")
 		return
 	}
-	if err := s.setPlatformTOTP(ctx, data.Username, data.Secret); err != nil {
-		s.log.Error("failed to persist totp to platform", "request_id", RequestID(ctx), "err", err.Error(), "user", data.Username)
-		fail(http.StatusServiceUnavailable, "unavailable")
+	if err := s.oidc.RegisterOTP(ctx, data.Subject, data.Raw); err != nil {
+		if errors.Is(err, ErrOTPExists) {
+			fail(http.StatusConflict, "otp_exists", "Akun ini sudah punya authenticator. Silakan login kembali.")
+			return
+		}
+		s.log.Error("failed to register otp in keycloak", "request_id", RequestID(ctx), "err", err.Error(), "user", data.Username)
+		fail(http.StatusServiceUnavailable, "unavailable", "Gagal menyimpan authenticator di Keycloak.")
 		return
 	}
 	_ = s.store.ClearFail(ctx, "u:"+data.Username)

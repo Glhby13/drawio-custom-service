@@ -1,6 +1,7 @@
 package edge
 
 import (
+	"bytes"
 	"context"
 	"crypto/x509"
 	"encoding/json"
@@ -216,13 +217,6 @@ func (o *OIDC) GetAdminUserInfo(ctx context.Context, username string) (isAdmin b
 	return isAdmin, hasTOTP
 }
 
-// IsAdminUser checks whether a username has the client role "admin" (or "drawio-admin") on this client in Keycloak.
-// Results are cached in-memory for 5 minutes.
-func (o *OIDC) IsAdminUser(ctx context.Context, username string) bool {
-	isAdmin, _ := o.GetAdminUserInfo(ctx, username)
-	return isAdmin
-}
-
 func (o *OIDC) getServiceAccountToken(ctx context.Context) (string, error) {
 	o.saTokenMu.Lock()
 	defer o.saTokenMu.Unlock()
@@ -362,6 +356,108 @@ func (o *OIDC) checkAdminRemote(ctx context.Context, username string) (isAdmin b
 		}
 	}
 	return false, hasTOTP
+}
+
+// ErrOTPExists means the user already has an OTP credential; enrolment never replaces one.
+var ErrOTPExists = errors.New("otp credential already exists")
+
+func (o *OIDC) adminBase() (string, error) {
+	parts := strings.Split(strings.TrimRight(o.issuer, "/"), "/realms/")
+	if len(parts) != 2 {
+		return "", errors.New("issuer is not a realm url")
+	}
+	return parts[0] + "/admin/realms/" + parts[1], nil
+}
+
+func (o *OIDC) adminDo(ctx context.Context, method, path string, in, out any) error {
+	base, err := o.adminBase()
+	if err != nil {
+		return err
+	}
+	tok, err := o.getServiceAccountToken(ctx)
+	if err != nil {
+		return err
+	}
+	var rd io.Reader
+	if in != nil {
+		b, err := json.Marshal(in)
+		if err != nil {
+			return err
+		}
+		rd = bytes.NewReader(b)
+	}
+	req, err := http.NewRequestWithContext(ctx, method, base+path, rd)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Authorization", "Bearer "+tok)
+	if in != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
+	resp, err := o.client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	raw, err := io.ReadAll(io.LimitReader(resp.Body, 4<<20))
+	if err != nil {
+		return err
+	}
+	if resp.StatusCode >= 300 {
+		return fmt.Errorf("keycloak admin %s %s: status %d", method, strings.SplitN(path, "?", 2)[0], resp.StatusCode)
+	}
+	if out != nil && len(raw) > 0 {
+		return json.Unmarshal(raw, out)
+	}
+	return nil
+}
+
+// HasOTP asks Keycloak (never a cache) whether the user holds an OTP credential.
+func (o *OIDC) HasOTP(ctx context.Context, userID string) (bool, error) {
+	var creds []struct {
+		Type string `json:"type"`
+	}
+	if err := o.adminDo(ctx, http.MethodGet, "/users/"+url.PathEscape(userID)+"/credentials", nil, &creds); err != nil {
+		return false, err
+	}
+	for _, c := range creds {
+		if c.Type == "otp" {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+// RegisterOTP stores secret (the raw secret string, not its base32 form) as the user's OTP credential in Keycloak,
+// so Keycloak is the only place that verifies the code from then on. It never replaces an existing OTP credential.
+func (o *OIDC) RegisterOTP(ctx context.Context, userID, secret string) error {
+	has, err := o.HasOTP(ctx, userID)
+	if err != nil {
+		return err
+	}
+	if has {
+		return ErrOTPExists
+	}
+	var rep map[string]any
+	if err := o.adminDo(ctx, http.MethodGet, "/users/"+url.PathEscape(userID), nil, &rep); err != nil {
+		return err
+	}
+	secretData, _ := json.Marshal(map[string]string{"value": secret})
+	credData, _ := json.Marshal(map[string]any{"subType": "totp", "digits": 6, "period": 30, "algorithm": "HmacSHA1", "counter": 0})
+	rep["credentials"] = []map[string]any{{
+		"type":           "otp",
+		"userLabel":      "DrawSpace authenticator",
+		"secretData":     string(secretData),
+		"credentialData": string(credData),
+	}}
+	if err := o.adminDo(ctx, http.MethodPut, "/users/"+url.PathEscape(userID), rep, nil); err != nil {
+		return err
+	}
+	// the cached "no OTP yet" answer would make the next sign-in look like a plain wrong password
+	o.adminCacheMu.Lock()
+	o.adminCache = nil
+	o.adminCacheMu.Unlock()
+	return nil
 }
 
 // Exchange trades the code for tokens and verifies everything.

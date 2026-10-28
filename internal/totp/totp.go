@@ -8,6 +8,7 @@ import (
 	"encoding/base64"
 	"encoding/binary"
 	"fmt"
+	"math/big"
 	"net/url"
 	"strings"
 	"time"
@@ -19,16 +20,6 @@ const (
 	period = 30
 	digits = 6
 )
-
-// GenerateSecret creates a 20-byte cryptographically secure random base32-encoded secret.
-func GenerateSecret() (string, error) {
-	buf := make([]byte, 20)
-	if _, err := rand.Read(buf); err != nil {
-		return "", err
-	}
-	// RFC 4648 base32 without padding
-	return strings.TrimRight(base32.StdEncoding.EncodeToString(buf), "="), nil
-}
 
 // Validate checks a 6-digit TOTP code against a base32 secret with a +/- 1 step (30s) tolerance.
 func Validate(secret, code string) bool {
@@ -108,4 +99,24 @@ func QRCodeBase64(secret, username, issuer string) (string, error) {
 		return "", err
 	}
 	return "data:image/png;base64," + base64.StdEncoding.EncodeToString(pngBytes), nil
+}
+
+// keycloakSecretAlphabet is the alphabet Keycloak itself draws OTP secrets from.
+const keycloakSecretAlphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
+
+// NewKeycloakSecret returns a fresh 20 character secret in the two forms it travels in: raw (what Keycloak stores as
+// the OTP credential's secretData value, so it must be valid text) and b32 (the same bytes in base32, what the QR code
+// and the authenticator app use). Validate(b32, code) therefore agrees with Keycloak's own check of the raw form.
+func NewKeycloakSecret() (raw, b32 string, err error) {
+	var sb strings.Builder
+	max := big.NewInt(int64(len(keycloakSecretAlphabet)))
+	for range 20 {
+		n, err := rand.Int(rand.Reader, max)
+		if err != nil {
+			return "", "", err
+		}
+		sb.WriteByte(keycloakSecretAlphabet[n.Int64()])
+	}
+	raw = sb.String()
+	return raw, strings.TrimRight(base32.StdEncoding.EncodeToString([]byte(raw)), "="), nil
 }

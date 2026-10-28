@@ -1527,56 +1527,6 @@
     setTimeout(function () { cur.focus(); }, 30);
   }
 
-  function totpDialog() {
-    var msg = el('div', { class: 'msg', hidden: true });
-    var desc = el('p', { style: 'margin: 0 0 14px; font-size: 13px; color: var(--muted); line-height: 1.45;' }, [
-      'Pindai kode QR berikut menggunakan aplikasi Authenticator (Google Authenticator, Microsoft Authenticator, dll) di ponsel Anda, lalu masukkan 6-digit kode verifikasi.'
-    ]);
-    var qrImg = el('img', { style: 'display: block; margin: 10px auto; width: 170px; height: 170px; border-radius: 10px; background: #fff; padding: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.12);', alt: 'QR Code' });
-    var secretText = el('strong', { style: 'user-select: all; font-family: monospace; font-size: 12px; color: var(--text); letter-spacing: 1px;' });
-    var secretWrap = el('div', { style: 'margin: 8px 0 16px; font-size: 11.5px; color: var(--muted); text-align: center;' }, ['Key manual: ', secretText]);
-    var codeInput = el('input', { class: 'field', type: 'text', inputmode: 'numeric', maxlength: '6', placeholder: '000000', style: 'text-align: center; font-size: 20px; font-weight: 700; letter-spacing: 4px; font-family: monospace;', required: true });
-    var currentSecret = '';
-
-    dialog('Authenticator (TOTP)', el('div', { class: 'dlg-body' }, [
-      msg, desc, qrImg, secretWrap, el('label', null, ['Kode Verifikasi (6 digit)', codeInput])
-    ]), [
-      { label: 'Batal' },
-      { label: 'Simpan Authenticator Baru', cls: 'primary', keep: true, fn: function () {
-        var c = codeInput.value.trim();
-        if (!c || c.length < 6) {
-          msg.textContent = 'Masukkan 6-digit kode authenticator.';
-          msg.hidden = false;
-          codeInput.focus();
-          return false;
-        }
-        api('POST', '/me/totp/verify', { secret: currentSecret, code: c })
-          .then(function () {
-            $('dlg').close();
-            toast('info', 'Authenticator berhasil diperbarui!');
-          })
-          .catch(function (e) {
-            msg.textContent = e.message || 'Verifikasi kode gagal.';
-            msg.hidden = false;
-            codeInput.select();
-          });
-        return false;
-      } }
-    ]);
-
-    api('POST', '/me/totp/setup', {})
-      .then(function (res) {
-        currentSecret = res.secret;
-        qrImg.src = res.qr_code;
-        secretText.textContent = res.secret;
-        setTimeout(function () { codeInput.focus(); }, 40);
-      })
-      .catch(function (err) {
-        msg.textContent = 'Gagal memuat QR Code: ' + err.message;
-        msg.hidden = false;
-      });
-  }
-
   // ---- boot ------------------------------------------------------------------------------------------------------------
   var menu = $('menu'), userbtn = $('userbtn');
   function closeMenu() { menu.hidden = true; userbtn.setAttribute('aria-expanded', 'false'); }
@@ -1586,7 +1536,6 @@
   document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !menu.hidden) { closeMenu(); userbtn.focus(); } });
   if ($('theme-day')) $('theme-day').addEventListener('click', function (e) { e.stopPropagation(); applyHostTheme('light', true); });
   if ($('theme-night')) $('theme-night').addEventListener('click', function (e) { e.stopPropagation(); applyHostTheme('dark', true); });
-  if ($('mi-totp')) $('mi-totp').addEventListener('click', function () { closeMenu(); totpDialog(); });
   $('mi-password').addEventListener('click', function () { closeMenu(); passwordDialog(); });
 
   fetch('/api/me', { credentials: 'same-origin' })
@@ -1597,7 +1546,7 @@
       $('who').textContent = name; $('avatar').textContent = initials(name);
       $('menu-name').textContent = name;
       $('menu-sub').textContent = (m.username || '') + ' · ' + (m.idp === 'local' ? 'local account' : 'SSO') + (isAdmin ? ' · administrator' : '');
-      if (isAdmin) { $('role').hidden = false; $('mi-users').hidden = false; if ($('mi-totp') && m.idp === 'local') $('mi-totp').hidden = false; }
+      if (isAdmin) { $('role').hidden = false; $('mi-users').hidden = false; }
       if (m.idp === 'local') $('mi-password').hidden = false;
       $('user').hidden = false;
       var match = /^\/d\/([^/]+)\/?$/.exec(location.pathname);
