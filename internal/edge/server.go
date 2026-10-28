@@ -86,7 +86,6 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /login", s.limited(s.loginPage))
 	mux.HandleFunc("GET /login/sso", s.limited(s.loginSSO))
 	mux.HandleFunc("POST /login/ad", s.limited(s.loginAD))
-	mux.HandleFunc("POST /login/ad/totp-setup", s.limited(s.loginADSetupTOTP))
 	mux.HandleFunc("POST /login/sso", s.limited(s.loginAD))
 	mux.HandleFunc("POST /login/local", s.limited(s.loginLocal))
 	mux.HandleFunc("GET /login-assets/login.js", s.publicAsset("login.js", "text/javascript; charset=utf-8"))
@@ -293,7 +292,7 @@ func (s *Server) callback(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "login failed", http.StatusForbidden)
 		return
 	}
-	if !slices.Contains(id.Roles, s.cfg.RequiredRole) && !slices.Contains(id.Roles, "admin") {
+	if !slices.Contains(id.Roles, s.cfg.RequiredRole) && !slices.Contains(id.Roles, "admin") && !slices.Contains(id.Roles, "drawio-admin") {
 		s.log.Info("login denied: missing client role", "request_id", RequestID(r.Context()), "actor", id.Subject)
 		http.Error(w, "access denied: your account has no access to this application", http.StatusForbidden)
 		return

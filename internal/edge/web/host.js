@@ -1597,7 +1597,7 @@
       $('who').textContent = name; $('avatar').textContent = initials(name);
       $('menu-name').textContent = name;
       $('menu-sub').textContent = (m.username || '') + ' · ' + (m.idp === 'local' ? 'local account' : 'SSO') + (isAdmin ? ' · administrator' : '');
-      if (isAdmin) { $('role').hidden = false; $('mi-users').hidden = false; if ($('mi-totp')) $('mi-totp').hidden = false; }
+      if (isAdmin) { $('role').hidden = false; $('mi-users').hidden = false; if ($('mi-totp') && m.idp === 'local') $('mi-totp').hidden = false; }
       if (m.idp === 'local') $('mi-password').hidden = false;
       $('user').hidden = false;
       var match = /^\/d\/([^/]+)\/?$/.exec(location.pathname);

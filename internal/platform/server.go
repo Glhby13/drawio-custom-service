@@ -168,7 +168,7 @@ func (s *Server) authn(r *http.Request) (*Principal, error) {
 	}
 	p := &Principal{Sub: c.Subject, Username: username, Name: c.Name, Roles: c.Roles, Session: c.SessionID}
 	for _, r := range c.Roles {
-		if r == s.cfg.AdminRole {
+		if r == s.cfg.AdminRole || r == "drawio-admin" {
 			p.IsAdmin = true
 		}
 	}
