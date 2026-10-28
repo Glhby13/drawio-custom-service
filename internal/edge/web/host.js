@@ -19,7 +19,8 @@
       : { bg: '#ffffff', border: '#e2e8f0', text: '#1e293b', accent: '#1868db' };
     css += '.geMenubarContainer { background-color: ' + bar.bg + ' !important; border-bottom: 1px solid ' + bar.border + ' !important; }'
       + '.geMenubarContainer .geItem, .geMenubarContainer .geItem:visited, .geMenubarContainer .geStatus, .geMenubarContainer .geStatus * { color: ' + bar.text + ' !important; border-radius: 6px; }'
-      + '.geMenubarContainer .geItem:hover, .geMenubarContainer .geItem.geActiveItem { background: transparent !important; color: ' + bar.accent + ' !important; }';
+      + '.geMenubarContainer .geItem, .geMenubarContainer .geItem:hover, .geMenubarContainer .geItem:focus, .geMenubarContainer .geItem:active, .geMenubarContainer .geItem.geActiveItem { background: none !important; background-color: transparent !important; box-shadow: none !important; outline: none !important; }'
+      + '.geMenubarContainer .geItem:hover, .geMenubarContainer .geItem:active, .geMenubarContainer .geItem.geActiveItem { color: ' + bar.accent + ' !important; }';
     return css;
   }
 
@@ -1331,35 +1332,6 @@
     });
   });
 
-  function helpTip(explanation) {
-    var svgNS = 'http://www.w3.org/2000/svg';
-    var icon = document.createElementNS(svgNS, 'svg');
-    icon.setAttribute('viewBox', '0 0 24 24');
-    icon.setAttribute('width', '15');
-    icon.setAttribute('height', '15');
-    icon.setAttribute('fill', 'none');
-    icon.setAttribute('stroke', 'currentColor');
-    icon.setAttribute('stroke-width', '2');
-    icon.setAttribute('stroke-linecap', 'round');
-    icon.setAttribute('stroke-linejoin', 'round');
-    icon.setAttribute('aria-hidden', 'true');
-    var c = document.createElementNS(svgNS, 'circle');
-    c.setAttribute('cx', '12');
-    c.setAttribute('cy', '12');
-    c.setAttribute('r', '10');
-    var p1 = document.createElementNS(svgNS, 'path');
-    p1.setAttribute('d', 'M12 16v-4');
-    var p2 = document.createElementNS(svgNS, 'path');
-    p2.setAttribute('d', 'M12 8h.01');
-    icon.appendChild(c);
-    icon.appendChild(p1);
-    icon.appendChild(p2);
-    return el('span', { class: 'help-tip', tabindex: '0', role: 'note', 'aria-label': explanation }, [
-      icon,
-      el('span', { class: 'help-tip-popup', text: explanation }),
-    ]);
-  }
-
   function openShare(id) {
     api('GET', '/documents/' + id + '/permissions').then(function (r) {
       var wrap = el('div', null, []);
@@ -1439,34 +1411,26 @@
     api('GET', '/documents/' + id + '/permissions').then(function (r) {
       var ai = r.aiPolicy || { allowed: false, maxOpsPerMin: 120, maxDelete: 20 };
       var allowed = el('input', { type: 'checkbox', id: 'ai-allowed' }); allowed.checked = !!ai.allowed;
-      var rate = el('input', { class: 'field ai-num', id: 'ai-rate', type: 'number', min: '1', max: '5000', value: String(ai.maxOpsPerMin), 'aria-label': 'Max AI operations per minute' }); rate.value = String(ai.maxOpsPerMin);
-      var del = el('input', { class: 'field ai-num', id: 'ai-del', type: 'number', min: '0', max: '1000', value: String(ai.maxDelete), 'aria-label': 'Max AI deletions per change' }); del.value = String(ai.maxDelete);
+      var rate = el('input', { class: 'ai-num', id: 'ai-rate', type: 'number', min: '1', max: '5000', value: String(ai.maxOpsPerMin), 'aria-label': 'Max AI operations per minute' }); rate.value = String(ai.maxOpsPerMin);
+      var del = el('input', { class: 'ai-num', id: 'ai-del', type: 'number', min: '0', max: '1000', value: String(ai.maxDelete), 'aria-label': 'Max AI deletions per change' }); del.value = String(ai.maxDelete);
       var canPolicy = doc && doc.can && doc.can.policy;
       [allowed, rate, del].forEach(function (x) { x.disabled = !canPolicy; });
       var pop = el('div', { id: 'ai-pop', class: 'ai-pop', role: 'dialog', 'aria-label': 'AI collaborators' }, [
-        el('div', { class: 'ai-pop-head' }, [el('strong', { text: 'AI collaborators' }), el('small', { text: doc ? doc.document.title : '' })]),
-        el('div', { class: 'ai-pop-row' }, [
-          el('label', { class: 'check' }, [allowed, ' Allow AI agents on this diagram']),
-          helpTip('Izinkan agen AI (misal Claude / MCP) yang telah diberi akses pada menu Share untuk membaca dan mengedit diagram ini secara langsung.'),
-        ]),
-        el('div', { class: 'ai-pop-row' }, [
-          el('span', { class: 'ai-pop-label', text: 'Max operations / minute' }), rate,
-          helpTip('Batas maksimum jumlah operasi perubahan sel/bentuk yang boleh dikirim oleh agen AI setiap menit (rate limit) agar tidak membebani diagram.'),
-        ]),
-        el('div', { class: 'ai-pop-row' }, [
-          el('span', { class: 'ai-pop-label', text: 'Max deletions / change' }), del,
-          helpTip('Batas maksimum jumlah elemen/sel yang boleh dihapus oleh agen AI dalam satu kali perintah perubahan guna mencegah penghapusan massal tanpa sengaja (lebih besar perlu konfirmasi).'),
-        ]),
+        el('label', { class: 'ai-pop-row ai-pop-check', title: 'Izinkan agen AI (misal Claude / MCP) yang telah diberi akses pada menu Share untuk membaca dan mengedit diagram ini secara langsung.' }, [allowed, 'Allow AI agents']),
+        el('label', { class: 'ai-pop-row', title: 'Batas jumlah operasi perubahan sel/bentuk dari agen AI per menit (rate limit).' }, [el('span', { class: 'ai-pop-label', text: 'Operations / minute' }), rate]),
+        el('label', { class: 'ai-pop-row', title: 'Batas jumlah elemen yang boleh dihapus agen AI dalam satu perubahan; lebih besar perlu konfirmasi.' }, [el('span', { class: 'ai-pop-label', text: 'Deletions / change' }), del]),
       ]);
       if (canPolicy) {
-        var saveAi = el('button', { class: 'ai-pop-save', type: 'button', id: 'save-ai', text: 'Save', disabled: true, onclick: function () {
+        var saveAi = el('button', { class: 'ai-pop-row ai-pop-save', type: 'button', id: 'save-ai', text: 'Save settings', disabled: true, onclick: function () {
           api('PUT', '/documents/' + id + '/ai-policy', { allowed: allowed.checked, maxOpsPerMin: parseInt(rate.value, 10), maxDelete: parseInt(del.value, 10) })
             .then(function () { toast('info', 'AI settings saved'); saveAi.disabled = true; }).catch(function (e) { toast('error', e.message); });
         } });
         [allowed, rate, del].forEach(function (x) { x.addEventListener('input', function () { saveAi.disabled = false; }); x.addEventListener('change', function () { saveAi.disabled = false; }); });
-        pop.appendChild(el('div', { class: 'ai-pop-foot' }, [saveAi]));
+        pop.appendChild(el('div', { class: 'ai-pop-sep' }));
+        pop.appendChild(saveAi);
       } else {
-        pop.appendChild(el('div', { class: 'ai-pop-foot' }, [el('small', { text: 'Only the owner or an administrator can change these settings.' })]));
+        pop.appendChild(el('div', { class: 'ai-pop-sep' }));
+        pop.appendChild(el('div', { class: 'ai-pop-note', text: 'Only the owner or an administrator can change these.' }));
       }
       document.body.appendChild(pop);
       // anchor under the "AI" item (the editor lives in an iframe, so add the frame offset)
