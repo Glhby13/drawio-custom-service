@@ -48,6 +48,7 @@ type OIDC struct {
 
 type adminCacheEntry struct {
 	isAdmin   bool
+	hasTOTP   bool
 	expiresAt time.Time
 }
 
@@ -191,27 +192,34 @@ func (o *OIDC) DirectGrant(ctx context.Context, username, password, totp string)
 	return o.verifyTokens(ctx, tok.IDToken, tok.AccessToken, "")
 }
 
-// IsAdminUser checks whether a username has the client role "admin" (or "drawio-admin") on this client in Keycloak.
-// Results are cached in-memory for 5 minutes.
-func (o *OIDC) IsAdminUser(ctx context.Context, username string) bool {
+// GetAdminUserInfo checks whether a username has the client role "admin" (or "drawio-admin") on this client in Keycloak,
+// and whether the user already has TOTP configured in Keycloak. Results are cached in-memory for 5 minutes.
+func (o *OIDC) GetAdminUserInfo(ctx context.Context, username string) (isAdmin bool, hasTOTP bool) {
 	user := strings.ToLower(strings.TrimSpace(username))
 	if user == "" {
-		return false
+		return false, false
 	}
 	o.adminCacheMu.RLock()
 	if entry, ok := o.adminCache[user]; ok && time.Now().Before(entry.expiresAt) {
 		o.adminCacheMu.RUnlock()
-		return entry.isAdmin
+		return entry.isAdmin, entry.hasTOTP
 	}
 	o.adminCacheMu.RUnlock()
 
-	isAdmin := o.checkAdminRemote(ctx, user)
+	isAdmin, hasTOTP = o.checkAdminRemote(ctx, user)
 	o.adminCacheMu.Lock()
 	if o.adminCache == nil {
 		o.adminCache = make(map[string]adminCacheEntry)
 	}
-	o.adminCache[user] = adminCacheEntry{isAdmin: isAdmin, expiresAt: time.Now().Add(5 * time.Minute)}
+	o.adminCache[user] = adminCacheEntry{isAdmin: isAdmin, hasTOTP: hasTOTP, expiresAt: time.Now().Add(5 * time.Minute)}
 	o.adminCacheMu.Unlock()
+	return isAdmin, hasTOTP
+}
+
+// IsAdminUser checks whether a username has the client role "admin" (or "drawio-admin") on this client in Keycloak.
+// Results are cached in-memory for 5 minutes.
+func (o *OIDC) IsAdminUser(ctx context.Context, username string) bool {
+	isAdmin, _ := o.GetAdminUserInfo(ctx, username)
 	return isAdmin
 }
 
@@ -287,72 +295,73 @@ func (o *OIDC) getClientUUID(ctx context.Context, adminBase, token string) (stri
 	return clients[0].ID, nil
 }
 
-func (o *OIDC) checkAdminRemote(ctx context.Context, username string) bool {
+func (o *OIDC) checkAdminRemote(ctx context.Context, username string) (isAdmin bool, hasTOTP bool) {
 	saToken, err := o.getServiceAccountToken(ctx)
 	if err != nil {
-		return false
+		return false, false
 	}
 	parts := strings.Split(strings.TrimRight(o.issuer, "/"), "/realms/")
 	if len(parts) != 2 {
-		return false
+		return false, false
 	}
 	adminBase := parts[0] + "/admin/realms/" + parts[1]
 
 	// 1. Get user id
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, adminBase+"/users?username="+url.QueryEscape(username)+"&exact=true", nil)
 	if err != nil {
-		return false
+		return false, false
 	}
 	req.Header.Set("Authorization", "Bearer "+saToken)
 	resp, err := o.client.Do(req)
 	if err != nil {
-		return false
+		return false, false
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return false
+		return false, false
 	}
 	var users []struct {
 		ID   string `json:"id"`
 		TOTP bool   `json:"totp"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&users); err != nil || len(users) == 0 {
-		return false
+		return false, false
 	}
 	userID := users[0].ID
+	hasTOTP = users[0].TOTP
 
 	// 2. Get client UUID
 	clientUUID, err := o.getClientUUID(ctx, adminBase, saToken)
 	if err != nil {
-		return false
+		return false, hasTOTP
 	}
 
 	// 3. Get composite roles on this client
 	rolesReq, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("%s/users/%s/role-mappings/clients/%s/composite", adminBase, userID, clientUUID), nil)
 	if err != nil {
-		return false
+		return false, hasTOTP
 	}
 	rolesReq.Header.Set("Authorization", "Bearer "+saToken)
 	rolesResp, err := o.client.Do(rolesReq)
 	if err != nil {
-		return false
+		return false, hasTOTP
 	}
 	defer rolesResp.Body.Close()
 	if rolesResp.StatusCode != http.StatusOK {
-		return false
+		return false, hasTOTP
 	}
 	var roles []struct {
 		Name string `json:"name"`
 	}
 	if err := json.NewDecoder(rolesResp.Body).Decode(&roles); err != nil {
-		return false
+		return false, hasTOTP
 	}
 	for _, r := range roles {
 		if r.Name == "admin" || r.Name == "drawio-admin" {
-			return true
+			return true, hasTOTP
 		}
 	}
-	return false
+	return false, hasTOTP
 }
 
 // Exchange trades the code for tokens and verifies everything.

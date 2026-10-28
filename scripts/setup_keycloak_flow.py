@@ -65,10 +65,15 @@ if DENY_SUBFLOW not in dg_execs:
 if DG_SUBFLOW not in dg_execs:
     kc.api("POST", f"/authentication/flows/{DG_FLOW}/executions/flow", {"alias": DG_SUBFLOW, "type": "basic-flow", "description": "Require OTP only for admin role", "provider": "registration-page-form"})
     kc.api("POST", f"/authentication/flows/{DG_SUBFLOW}/executions/execution", {"provider": "conditional-user-role"})
+    kc.api("POST", f"/authentication/flows/{DG_SUBFLOW}/executions/execution", {"provider": "conditional-user-configured"})
     kc.api("POST", f"/authentication/flows/{DG_SUBFLOW}/executions/execution", {"provider": "direct-grant-validate-otp"})
 
 dg_execs = {e.get("displayName") or e.get("providerId"): e for e in kc.api("GET", f"/authentication/flows/{DG_FLOW}/executions")}
-dg_want = {"Username Validation": "REQUIRED", "Password": "REQUIRED", DENY_SUBFLOW: "CONDITIONAL", DG_SUBFLOW: "CONDITIONAL", "Deny access": "REQUIRED", "OTP": "REQUIRED"}
+if "Condition - user configured" not in dg_execs and "conditional-user-configured" not in dg_execs:
+    kc.api("POST", f"/authentication/flows/{DG_SUBFLOW}/executions/execution", {"provider": "conditional-user-configured"})
+
+dg_execs = {e.get("displayName") or e.get("providerId"): e for e in kc.api("GET", f"/authentication/flows/{DG_FLOW}/executions")}
+dg_want = {"Username Validation": "REQUIRED", "Password": "REQUIRED", DENY_SUBFLOW: "CONDITIONAL", DG_SUBFLOW: "CONDITIONAL", "Deny access": "REQUIRED", "Condition - user configured": "REQUIRED", "OTP": "REQUIRED"}
 for name, req in dg_want.items():
     if name in dg_execs and dg_execs[name]["requirement"] != req:
         kc.api("PUT", f"/authentication/flows/{DG_FLOW}/executions", {**dg_execs[name], "requirement": req})
@@ -82,8 +87,8 @@ for e in kc.api("GET", f"/authentication/flows/{DG_FLOW}/executions"):
             kc.api("POST", f"/authentication/executions/{e['id']}/config", {"alias": "drawio-dg-deny-no-access-config", "config": {"negate": "true", "condUserRole": f"{CLIENT}.{ROLE}"}})
             print("configured direct grant deny condition: negate=true, role=", f"{CLIENT}.{ROLE}")
         else:
-            kc.api("POST", f"/authentication/executions/{e['id']}/config", {"alias": "drawio-dg-conditional-otp-admin", "config": {"negate": "false", "condUserRole": f"{CLIENT}.admin"}})
-            print("configured direct grant OTP condition: negate=false, role=", f"{CLIENT}.admin")
+            kc.api("POST", f"/authentication/executions/{e['id']}/config", {"alias": "drawio-dg-conditional-otp-admin", "config": {"negate": "false", "condUserRole": f"{CLIENT}.drawio-admin"}})
+            print("configured direct grant OTP condition: negate=false, role=", f"{CLIENT}.drawio-admin")
 
 all_flows = {f["alias"]: f for f in kc.api("GET", "/authentication/flows")}
 dg = all_flows[DG_FLOW]
