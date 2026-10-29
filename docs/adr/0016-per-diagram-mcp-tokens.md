@@ -14,7 +14,7 @@ penting: token berlaku untuk **satu diagram**, bukan seluruh akun, dan hanya **p
   (tabel `document_tokens`, migrasi 003, `schema_version` 3); token ditampilkan **sekali** saat dibuat. Atribut: nama, 4 karakter terakhir (hint), peran
   (`viewer`/`commenter`/`editor`), pembuat, kedaluwarsa (opsional, maks. 365 hari; UI default 30 hari), terakhir dipakai, dicabut.
 - **Hanya pemilik** membuat dan melihat daftar token (`POST|GET /api/v1/documents/{id}/mcp-tokens`). Aktor AI, editor, dan administrator aplikasi tidak
-  bisa membuat. Mencabut (`DELETE …/{tid}`) boleh pemilik, dan administrator aplikasi sebagai saklar darurat. Maks. 20 token hidup per diagram.
+  bisa membuat. Mencabut (`DELETE …/{tid}`) boleh pemilik, dan administrator aplikasi sebagai saklar darurat. Catatan token yang sudah mati (dicabut/kedaluwarsa) dapat dihapus (`DELETE …/{tid}?purge=1`, 409 `token_live` untuk token hidup); audit `mcp-token-delete`. Maks. 20 token hidup per diagram.
 - **Membuat token menyalakan "Allow AI agents"** bila belum aktif (`enableAI`, UI selalu mengirimnya; API tanpa flag menjawab 409 `ai_disabled`).
 - **Jalur MCP**: `Authorization: Bearer dsp_…` ke `POST /mcp`. mcp-server tidak punya kredensial database (ADR-0008), jadi ia bertanya ke platform di
   **setiap request** (`POST /api/v1/internal/mcp-tokens/resolve`, hanya dengan service token `drawio-mcp`/`mcp-resolver`): pencabutan, kedaluwarsa, atau

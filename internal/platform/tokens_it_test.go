@@ -174,6 +174,7 @@ func TestIT_MCPTokens(t *testing.T) {
 	}
 	_, out = e.call(alice, "POST", base, tokenReq{Name: "short", Role: "viewer", ExpiresInDays: 1})
 	tok2 := out["token"].(string)
+	tid2 := out["tokenInfo"].(map[string]any)["id"].(string)
 	if c, _ := resolve(tok2); c != 200 {
 		t.Fatalf("second token: %d", c)
 	}
@@ -185,6 +186,7 @@ func TestIT_MCPTokens(t *testing.T) {
 	}
 	_, out = e.call(alice, "POST", base, tokenReq{Name: "third", Role: "editor"})
 	tok3 := out["token"].(string)
+	tid3 := out["tokenInfo"].(map[string]any)["id"].(string)
 	if c, _ := resolve(tok3); c != 200 {
 		t.Fatalf("third token: %d", c)
 	}
@@ -197,6 +199,35 @@ func TestIT_MCPTokens(t *testing.T) {
 	// the list keeps the history, revoked ones included
 	if _, o := e.call(alice, "GET", base, nil); len(o["tokens"].([]any)) != 3 {
 		t.Errorf("token history: %v", o)
+	}
+	// deleting a token record: only dead ones (revoked / expired), only the owner
+	purge := func(who who, tid string) int {
+		c, _ := e.call(who, "DELETE", base+"/"+tid+"?purge=1", nil)
+		return c
+	}
+	if c := purge(alice, tid3); c != 409 {
+		t.Errorf("deleting a live token: %d, want 409", c)
+	}
+	if c := purge(bob, tid); c != 403 {
+		t.Errorf("editor deletes a token record: %d, want 403", c)
+	}
+	if c := purge(alice, "tnope"); c != 404 {
+		t.Errorf("deleting an unknown token: %d, want 404", c)
+	}
+	if c := purge(alice, tid); c != 200 { // revoked
+		t.Errorf("deleting a revoked token: %d, want 200", c)
+	}
+	if c := purge(alice, tid2); c != 200 { // expired
+		t.Errorf("deleting an expired token: %d, want 200", c)
+	}
+	if c := purge(alice, tid); c != 404 {
+		t.Errorf("deleting twice: %d, want 404", c)
+	}
+	if _, o := e.call(alice, "GET", base, nil); len(o["tokens"].([]any)) != 1 {
+		t.Errorf("after deleting two records one token should remain: %v", o)
+	}
+	if c, _ := resolve(tok3); c != 401 { // still dead: AI is off
+		t.Errorf("remaining token resolves although AI is off: %d", c)
 	}
 	// deleting the diagram kills its tokens
 	e.call(alice, "PUT", "/api/v1/documents/"+doc+"/ai-policy", map[string]any{"allowed": true, "maxOpsPerMin": p["maxOpsPerMin"], "maxDelete": p["maxDelete"]})

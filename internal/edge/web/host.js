@@ -1357,6 +1357,19 @@
         navigator.clipboard.writeText(text).then(function () { b.textContent = 'Copied'; setTimeout(function () { b.textContent = label; }, 1500); }, function () { toast('error', 'Copy failed: select the text and copy it manually'); });
       } });
     }
+    // a button that asks once, inline, before it calls DELETE (revoking and deleting cannot be undone)
+    function dangerBtn(label, busy, attrs, path) {
+      return el('button', Object.assign({ class: 'btn danger', type: 'button', text: label, onclick: function (ev) {
+        var b = ev.currentTarget;
+        if (!b.dataset.armed) {
+          b.dataset.armed = '1'; b.textContent = 'Confirm ' + label.toLowerCase();
+          setTimeout(function () { delete b.dataset.armed; if (!b.disabled) b.textContent = label; }, 4000);
+          return;
+        }
+        b.disabled = true; b.textContent = busy;
+        api('DELETE', path).then(load).catch(function (e) { b.disabled = false; b.textContent = label; delete b.dataset.armed; toast('error', e.message); });
+      } }, attrs));
+    }
     function drawList(tokens) {
       listBox.textContent = '';
       if (!tokens.length) { listBox.appendChild(el('p', { class: 'mcp-empty', text: 'No tokens yet.' })); return; }
@@ -1366,16 +1379,9 @@
         listBox.appendChild(el('div', { class: 'share-row mcp-row' + (dead ? ' dead' : ''), 'data-token': t.id }, [
           el('span', { class: 'grow' }, [el('strong', { text: t.name }), el('small', { class: 'mcp-meta', text: ' …' + t.hint + ' · created ' + fmt(t.createdAt) + ' · last used ' + fmt(t.lastUsedAt) + (t.expiresAt ? ' · expires ' + fmt(t.expiresAt) : ' · never expires') })]),
           el('span', { class: 'chip', text: state }),
-          dead ? el('span') : el('button', { class: 'btn danger', type: 'button', text: 'Revoke', 'data-revoke': t.id, onclick: function (ev) {
-            var b = ev.currentTarget; // revoking cannot be undone: ask once, inline
-            if (!b.dataset.armed) {
-              b.dataset.armed = '1'; b.textContent = 'Confirm revoke';
-              setTimeout(function () { delete b.dataset.armed; b.textContent = 'Revoke'; }, 4000);
-              return;
-            }
-            b.disabled = true; b.textContent = 'Revoking…';
-            api('DELETE', '/documents/' + id + '/mcp-tokens/' + t.id).then(load).catch(function (e) { b.disabled = false; b.textContent = 'Revoke'; toast('error', e.message); });
-          } })
+          dead
+            ? dangerBtn('Delete', 'Deleting…', { 'data-delete': t.id }, '/documents/' + id + '/mcp-tokens/' + t.id + '?purge=1')
+            : dangerBtn('Revoke', 'Revoking…', { 'data-revoke': t.id }, '/documents/' + id + '/mcp-tokens/' + t.id)
         ]));
       });
     }

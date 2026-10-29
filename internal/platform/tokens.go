@@ -114,6 +114,12 @@ func (s *Store) RevokeToken(ctx context.Context, docID, id, by string) (bool, er
 	return tag.RowsAffected() > 0, err
 }
 
+// PurgeToken deletes the row of a token that can no longer be used (revoked or expired); it reports whether a row was deleted.
+func (s *Store) PurgeToken(ctx context.Context, docID, id string) (bool, error) {
+	tag, err := s.pool.Exec(ctx, `DELETE FROM document_tokens WHERE document_id=$1 AND id=$2 AND (revoked_at IS NOT NULL OR (expires_at IS NOT NULL AND expires_at <= now()))`, docID, id)
+	return tag.RowsAffected() > 0, err
+}
+
 // RevokeAllTokens revokes every live token of a document.
 func (s *Store) RevokeAllTokens(ctx context.Context, docID, by string) (int64, error) {
 	tag, err := s.pool.Exec(ctx, `UPDATE document_tokens SET revoked_at=now(), revoked_by=$2 WHERE document_id=$1 AND revoked_at IS NULL`, docID, by)
@@ -226,7 +232,8 @@ func (s *Server) listTokens(w http.ResponseWriter, r *http.Request, p *Principal
 	writeJSON(w, http.StatusOK, map[string]any{"tokens": ts})
 }
 
-// revokeToken: the owner, or an application admin as an emergency switch.
+// revokeToken: the owner, or an application admin as an emergency switch. With ?purge=1 it deletes the record of a token that is
+// already revoked or expired (a live token has to be revoked first); the audit trail keeps the creation, revocation and deletion.
 func (s *Server) revokeToken(w http.ResponseWriter, r *http.Request, p *Principal) {
 	d, role, ok := s.access(w, r, p, ActRead)
 	if !ok {
@@ -238,12 +245,27 @@ func (s *Server) revokeToken(w http.ResponseWriter, r *http.Request, p *Principa
 		return
 	}
 	id := r.PathValue("tid")
-	if _, err := s.store.GetToken(r.Context(), d.ID, id); err != nil {
+	t, err := s.store.GetToken(r.Context(), d.ID, id)
+	if err != nil {
 		if errors.Is(err, errNotFound) {
 			writeErr(w, http.StatusNotFound, "not_found", "token not found")
 		} else {
 			writeErr(w, http.StatusInternalServerError, "internal", "")
 		}
+		return
+	}
+	if r.URL.Query().Get("purge") == "1" {
+		gone, err := s.store.PurgeToken(r.Context(), d.ID, id)
+		if err != nil {
+			writeErr(w, http.StatusInternalServerError, "internal", "")
+			return
+		}
+		if !gone {
+			writeErr(w, http.StatusConflict, "token_live", "revoke the token before deleting it")
+			return
+		}
+		_ = s.store.Audit(r.Context(), p.Actor, d.ID, "mcp-token-delete", "ok", map[string]string{"tokenId": id, "name": t.Name})
+		writeJSON(w, http.StatusOK, map[string]bool{"deleted": true})
 		return
 	}
 	if _, err := s.store.RevokeToken(r.Context(), d.ID, id, p.Username); err != nil {

@@ -115,9 +115,21 @@ check('a revoked token is refused on the very next call', (await mcp(ctx, tok, '
 r = await api(owner, 'GET', '/documents/' + id + '/mcp-tokens');
 check('the revoked token stays in the list as revoked', r.json?.tokens?.some(t => t.id === tokId && t.revokedAt), r.text.slice(0, 160));
 
+r = await api(owner, 'DELETE', '/documents/' + id + '/mcp-tokens/' + (await api(owner, 'GET', '/documents/' + id + '/mcp-tokens')).json.tokens.find(t => !t.revokedAt).id + '?purge=1');
+check('a live token cannot be deleted before it is revoked (409)', r.status === 409, r.status + ' ' + r.text.slice(0, 100));
+check('a non-owner cannot delete a token record', (await api(other, 'DELETE', '/documents/' + id + '/mcp-tokens/' + tokId + '?purge=1')).status === 403);
+r = await api(owner, 'DELETE', '/documents/' + id + '/mcp-tokens/' + tokId + '?purge=1');
+check('the owner deletes a revoked token record', r.status === 200 && r.json?.deleted === true, r.text.slice(0, 80));
+check('the deleted token is gone from the list', !(await api(owner, 'GET', '/documents/' + id + '/mcp-tokens')).json.tokens.some(t => t.id === tokId));
+check('deleting it again says not found', (await api(owner, 'DELETE', '/documents/' + id + '/mcp-tokens/' + tokId + '?purge=1')).status === 404);
+
 const aiOff = (await api(owner, 'GET', '/documents/' + id + '/permissions')).json.aiPolicy;
 await api(owner, 'PUT', '/documents/' + id + '/ai-policy', { allowed: false, maxOpsPerMin: aiOff.maxOpsPerMin, maxDelete: aiOff.maxDelete });
 check('switching "allow AI" off stops the remaining token at once', (await mcp(ctx, viewerTok, 'ping', {})).status === 401);
+
+// a revoked token for the UI to offer "Delete" on
+r = await api(owner, 'POST', '/documents/' + id + '/mcp-tokens', { name: 'Old agent', role: 'viewer', enableAI: true });
+await api(owner, 'DELETE', '/documents/' + id + '/mcp-tokens/' + r.json.tokenInfo.id);
 
 // ---- UI: "MCP access" lives in the AI menu (not in Share) -------------------------------------------------------------------------------
 const openAiMenu = async s => { await s.page.frameLocator('#editor').locator('[data-drawspace-menu="ai"]').click(); await s.page.waitForSelector('#ai-pop', { timeout: 10000 }); };
@@ -144,6 +156,18 @@ await owner.page.click('#dlg-actions .primary');
 await openAiMenu(owner);
 check('the AI menu shows how many tokens are active', /active/.test(await owner.page.textContent('#ai-mcp')), await owner.page.textContent('#ai-mcp'));
 await owner.page.keyboard.press('Escape');
+await openAiMenu(owner);
+await owner.page.click('#ai-mcp');
+await owner.page.waitForSelector('#dlg[open] #mcp-access', { timeout: 10000 });
+check('revoked tokens offer Delete, live ones offer Revoke', (await owner.page.locator('.mcp-row.dead [data-delete]').count()) >= 1 && (await owner.page.locator('.mcp-row:not(.dead) [data-revoke]').count()) >= 1);
+const before = await owner.page.locator('.mcp-row').count();
+const del = owner.page.locator('.mcp-row.dead [data-delete]').first();
+await del.click();
+check('Delete asks for a second click first', /confirm/i.test(await del.textContent()));
+await del.click();
+await owner.page.waitForFunction(n => document.querySelectorAll('.mcp-row').length === n - 1, before, { timeout: 10000 }).catch(() => {});
+check('confirming Delete removes the row', (await owner.page.locator('.mcp-row').count()) === before - 1, before + ' -> ' + await owner.page.locator('.mcp-row').count());
+await owner.page.click('#dlg-actions .primary');
 
 await other.page.goto(BASE + '/d/' + id, { waitUntil: 'domcontentloaded' });
 await other.page.waitForFunction(() => window.__adapter && window.__adapter.state().joined && document.getElementById('status')?.dataset.state === 'ready', null, { timeout: 90000 });
