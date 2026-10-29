@@ -48,6 +48,9 @@ type Principal struct {
 	IsAI     bool
 	Session  string
 	Idp      string // "local" (DrawSpace account), "sso" or "" (AI actors)
+
+	// set only for an AI actor that came in with a per-diagram MCP token (ADR-0016): it sees that one document, at most as TokenRole
+	TokenID, TokenDoc, TokenRole string
 }
 
 // New builds the server; the caller owns pool/blob/redis lifetime.
@@ -206,6 +209,9 @@ func (s *Server) authn(r *http.Request) (*Principal, error) {
 	}
 	if p.IsAI {
 		p.IsAdmin = false // an AI actor is never an application admin
+		if c.DocScope != "" && c.Issuer == "drawio-mcp" {
+			p.TokenID, p.TokenDoc, p.TokenRole = c.TokenID, c.DocScope, c.DocRole
+		}
 	}
 	// remember the principal for the share picker (at most once a minute per user)
 	if t, ok := s.seen.Load(p.Sub); !ok || time.Since(t.(time.Time)) > time.Minute {

@@ -1,5 +1,6 @@
-// Command mcp-server is the MCP edge of drawio-custom-service (ADR-0008): AI agents connect with an OAuth 2.1 bearer token
-// from Keycloak and work on diagrams through the same platform API and authorisation as people.
+// Command mcp-server is the MCP edge of drawio-custom-service (ADR-0008): AI agents connect with a per-diagram access token
+// ("dsp_…", ADR-0016) or, when MCP_OAUTH_ENABLED=true, an OAuth 2.1 bearer token from Keycloak, and work on diagrams
+// through the same platform API and authorisation as people.
 package main
 
 import (
@@ -45,12 +46,19 @@ func need(k string) (string, error) {
 func run(log *slog.Logger) error {
 	var errs []error
 	get := func(k string) string { v, err := need(k); errs = append(errs, err); return v }
-	publicURL, issuer, platform := strings.TrimRight(get("PUBLIC_URL"), "/"), strings.TrimRight(get("ISSUER_URL"), "/"), get("PLATFORM_UPSTREAM")
-	audience, appClient, seedB64 := get("MCP_AUDIENCE"), get("APP_CLIENT_ID"), get("INTERNAL_KEY_SEED")
+	oauth := strings.EqualFold(os.Getenv("MCP_OAUTH_ENABLED"), "true") // off by default: per-diagram tokens only (ADR-0016)
+	publicURL, platform, seedB64 := strings.TrimRight(get("PUBLIC_URL"), "/"), get("PLATFORM_UPSTREAM"), get("INTERNAL_KEY_SEED")
+	var issuer, audience, appClient string
+	if oauth {
+		issuer, audience, appClient = strings.TrimRight(get("ISSUER_URL"), "/"), get("MCP_AUDIENCE"), get("APP_CLIENT_ID")
+	}
 	if err := errors.Join(errs...); err != nil {
 		return fmt.Errorf("configuration: %w", err)
 	}
 	for _, u := range []string{publicURL, issuer} {
+		if u == "" {
+			continue
+		}
 		if pu, err := url.Parse(u); err != nil || pu.Scheme != "https" {
 			return fmt.Errorf("%q must be an https URL", u)
 		}
@@ -80,9 +88,12 @@ func run(log *slog.Logger) error {
 	if role == "" {
 		role = "user"
 	}
-	srv := mcpsrv.New(mcpsrv.Config{PublicURL: publicURL, IssuerURL: issuer, PlatformURL: platform, RequiredRole: role, Log: log,
-		Verifier: mcpsrv.NewKeycloakVerifier(issuer, audience, appClient, pool, tls.VersionTLS12),
-		Signer:   identity.NewSigner(ed25519.NewKeyFromSeed(seed), kid, "drawio-mcp")})
+	cfg := mcpsrv.Config{PublicURL: publicURL, IssuerURL: issuer, PlatformURL: platform, RequiredRole: role, Log: log,
+		Signer: identity.NewSigner(ed25519.NewKeyFromSeed(seed), kid, "drawio-mcp")}
+	if oauth {
+		cfg.Verifier = mcpsrv.NewKeycloakVerifier(issuer, audience, appClient, pool, tls.VersionTLS12)
+	}
+	srv := mcpsrv.New(cfg)
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8080"

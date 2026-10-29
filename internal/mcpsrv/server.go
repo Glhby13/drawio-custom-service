@@ -1,7 +1,8 @@
 // Package mcpsrv is the MCP server of drawio-custom-service (ADR-0008/0009): a second edge, next to the gateway, that lets
 // AI agents work on diagrams through the same platform API and authorisation as people. It speaks MCP over Streamable
-// HTTP (JSON-RPC 2.0 on POST /mcp), authenticates agents with OAuth 2.1 bearer tokens issued by Keycloak, and calls the
-// platform with a short-lived internal token whose actor is an AI delegated by the signed-in user.
+// HTTP (JSON-RPC 2.0 on POST /mcp), authenticates agents with a per-diagram access token ("dsp_…", ADR-0016) or, when
+// enabled, an OAuth 2.1 bearer token issued by Keycloak, and calls the platform with a short-lived internal token whose
+// actor is an AI delegated by the diagram's owner (token) or by the signed-in user (OAuth).
 package mcpsrv
 
 import (
@@ -41,7 +42,7 @@ type Config struct {
 	PlatformURL  string
 	RequiredRole string
 	Log          *slog.Logger
-	Verifier     Verifier
+	Verifier     Verifier // nil = OAuth is off: only per-diagram tokens are accepted
 	Signer       *identity.Signer
 	HTTP         *http.Client
 }
@@ -63,8 +64,10 @@ func New(cfg Config) *Server {
 	s := &Server{cfg: cfg, mux: http.NewServeMux()}
 	s.mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte("ok")) })
 	s.mux.HandleFunc("GET /readyz", func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte("ready")) })
-	s.mux.HandleFunc("GET /.well-known/oauth-protected-resource", s.metadata)
-	s.mux.HandleFunc("GET /.well-known/oauth-protected-resource/mcp", s.metadata)
+	if cfg.Verifier != nil {
+		s.mux.HandleFunc("GET /.well-known/oauth-protected-resource", s.metadata)
+		s.mux.HandleFunc("GET /.well-known/oauth-protected-resource/mcp", s.metadata)
+	}
 	s.mux.HandleFunc("POST /mcp", s.rpc)
 	s.mux.HandleFunc("GET /mcp", func(w http.ResponseWriter, _ *http.Request) {
 		http.Error(w, "this server does not offer a server-initiated stream", http.StatusMethodNotAllowed)
@@ -90,6 +93,11 @@ func (s *Server) metadata(w http.ResponseWriter, _ *http.Request) {
 }
 
 func (s *Server) unauthorized(w http.ResponseWriter, why string) {
+	if s.cfg.Verifier == nil {
+		w.Header().Set("WWW-Authenticate", `Bearer error="invalid_token"`)
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
 	w.Header().Set("WWW-Authenticate", fmt.Sprintf(`Bearer resource_metadata="%s/.well-known/oauth-protected-resource", error="invalid_token", error_description=%q`, s.cfg.PublicURL, why))
 	http.Error(w, "unauthorized", http.StatusUnauthorized)
 }
@@ -133,20 +141,40 @@ func (s *Server) rpc(w http.ResponseWriter, r *http.Request) {
 		s.unauthorized(w, "bearer token required")
 		return
 	}
-	p, err := s.cfg.Verifier.Verify(r.Context(), tok)
-	if err != nil {
-		s.cfg.Log.Info("mcp token rejected", "err", err.Error())
-		s.unauthorized(w, "token not accepted")
-		return
-	}
-	hasRole := false
-	for _, role := range p.Roles {
-		if role == s.cfg.RequiredRole || role == "admin" {
-			hasRole = true
+	var ac actor
+	if strings.HasPrefix(tok, tokenPrefix) {
+		ti, err := s.resolveToken(r.Context(), tok)
+		switch {
+		case errors.Is(err, errTokenRejected):
+			s.cfg.Log.Info("mcp token rejected")
+			s.unauthorized(w, "token not accepted")
+			return
+		case err != nil:
+			s.cfg.Log.Error("mcp token lookup failed", "err", err.Error())
+			http.Error(w, "token check unavailable, retry shortly", http.StatusServiceUnavailable)
+			return
 		}
-	}
-	if !hasRole {
-		http.Error(w, "the signed-in user has no access to Diagrams", http.StatusForbidden)
+		ac = s.actorForToken(ti, r)
+	} else if s.cfg.Verifier != nil {
+		p, err := s.cfg.Verifier.Verify(r.Context(), tok)
+		if err != nil {
+			s.cfg.Log.Info("mcp token rejected", "err", err.Error())
+			s.unauthorized(w, "token not accepted")
+			return
+		}
+		hasRole := false
+		for _, role := range p.Roles {
+			if role == s.cfg.RequiredRole || role == "admin" {
+				hasRole = true
+			}
+		}
+		if !hasRole {
+			http.Error(w, "the signed-in user has no access to Diagrams", http.StatusForbidden)
+			return
+		}
+		ac = s.actorFor(p, r)
+	} else {
+		s.unauthorized(w, "token not accepted")
 		return
 	}
 	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 4<<20))
@@ -168,8 +196,7 @@ func (s *Server) rpc(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusAccepted)
 		return
 	}
-	actor := s.actorFor(p, r)
-	res, rerr := s.dispatch(r.Context(), actor, req)
+	res, rerr := s.dispatch(r.Context(), ac, req)
 	resp := rpcResp{JSONRPC: "2.0", ID: req.ID, Result: res, Error: rerr}
 	if rerr != nil {
 		resp.Result = nil
@@ -185,6 +212,8 @@ func writeRPC(w http.ResponseWriter, resp rpcResp) {
 // actor is the AI identity a request acts as.
 type actor struct {
 	Name, Display, OnBehalfOf, Agent, Model string
+	// per-diagram token scope (empty for OAuth callers)
+	TokenID, DocScope, DocRole string
 }
 
 func (s *Server) actorFor(p *Principal, r *http.Request) actor {
@@ -218,7 +247,7 @@ func (s *Server) dispatch(ctx context.Context, a actor, req rpcReq) (any, *rpcEr
 	case "ping":
 		return map[string]any{}, nil
 	case "tools/list":
-		return map[string]any{"tools": toolDefs()}, nil
+		return map[string]any{"tools": toolDefsFor(a)}, nil
 	case "tools/call":
 		var in struct {
 			Name      string          `json:"name"`

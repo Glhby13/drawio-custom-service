@@ -18,7 +18,7 @@ import (
 var migFS embed.FS
 
 // SchemaVersion is the schema the code needs; the platform refuses to start on an older schema (ADR-0007).
-const SchemaVersion = 2
+const SchemaVersion = 3
 
 // OpenPG opens the pool.
 func OpenPG(ctx context.Context, cfg config.Platform) (*pgxpool.Pool, error) {

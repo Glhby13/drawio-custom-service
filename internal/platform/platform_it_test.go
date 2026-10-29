@@ -33,6 +33,7 @@ type itEnv struct {
 	ts     *httptest.Server
 	signer *identity.Signer
 	gw     *identity.Signer // same key, issuer "drawio-gateway": what the real gateway signs (service tokens, local sign-ins)
+	mcp    *identity.Signer // same key, issuer "drawio-mcp": what the MCP server signs (token resolver, token-scoped AI actors)
 }
 
 func newIT(t *testing.T) *itEnv {
@@ -44,7 +45,7 @@ func newIT(t *testing.T) *itEnv {
 	cfg := config.Platform{Port: "0", PGHost: hp[0], PGPort: hp[1], PGDB: "drawio_test", PGUser: "lab_worker", PGPassword: os.Getenv("DRAWIO_IT_PG_PASSWORD"), PGSSLMode: "disable",
 		S3Endpoint: os.Getenv("DRAWIO_IT_S3"), S3Bucket: "drawio-documents", S3AccessKey: "drawio", S3SecretKey: os.Getenv("DRAWIO_IT_S3_SECRET"), S3Region: "us-east-1",
 		RedisAddr: os.Getenv("DRAWIO_IT_REDIS"), RedisUser: "drawio", RedisPassword: os.Getenv("DRAWIO_IT_REDIS_PASSWORD"),
-		Trusted: []config.TrustedKey{{Kid: "t-1", Pub: pub, Issuer: "it-edge"}, {Kid: "gw-1", Pub: pub, Issuer: "drawio-gateway"}}, SnapshotEvery: 10, AdminRole: "admin", UserRole: "user", AIDefaultMaxOpsPerMin: 300, AIDefaultMaxDelete: 20}
+		Trusted: []config.TrustedKey{{Kid: "t-1", Pub: pub, Issuer: "it-edge"}, {Kid: "gw-1", Pub: pub, Issuer: "drawio-gateway"}, {Kid: "mcp-1", Pub: pub, Issuer: "drawio-mcp"}}, SnapshotEvery: 10, AdminRole: "admin", UserRole: "user", AIDefaultMaxOpsPerMin: 300, AIDefaultMaxDelete: 20}
 	ctx := context.Background()
 	pool, err := OpenPG(ctx, cfg)
 	if err != nil {
@@ -69,7 +70,7 @@ func newIT(t *testing.T) *itEnv {
 	srv.Start(cctx)
 	ts := httptest.NewServer(srv.Handler())
 	t.Cleanup(ts.Close)
-	return &itEnv{t: t, srv: srv, ts: ts, signer: identity.NewSigner(priv, "t-1", "it-edge"), gw: identity.NewSigner(priv, "gw-1", "drawio-gateway")}
+	return &itEnv{t: t, srv: srv, ts: ts, signer: identity.NewSigner(priv, "t-1", "it-edge"), gw: identity.NewSigner(priv, "gw-1", "drawio-gateway"), mcp: identity.NewSigner(priv, "mcp-1", "drawio-mcp")}
 }
 
 type who struct {

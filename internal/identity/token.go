@@ -39,9 +39,13 @@ type Claims struct {
 	Agent      string   `json:"agent,omitempty"`
 	Idp        string   `json:"idp,omitempty"` // where the human signed in: "local" (DrawSpace account) or "sso"
 	Model      string   `json:"model,omitempty"`
-	IssuedAt   int64    `json:"iat"`
-	ExpiresAt  int64    `json:"exp"`
-	JTI        string   `json:"jti"`
+	// Per-diagram MCP token scope (ADR-0016): set by the MCP server after it resolved a token; the platform never widens it.
+	TokenID   string `json:"tokenId,omitempty"`
+	DocScope  string `json:"docScope,omitempty"`
+	DocRole   string `json:"docRole,omitempty"`
+	IssuedAt  int64  `json:"iat"`
+	ExpiresAt int64  `json:"exp"`
+	JTI       string `json:"jti"`
 }
 
 type header struct {

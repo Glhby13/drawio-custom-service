@@ -34,6 +34,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/v1/documents/{id}/permissions", s.api(s.getPerms))
 	mux.HandleFunc("PUT /api/v1/documents/{id}/permissions", s.api(s.putPerm))
 	mux.HandleFunc("PUT /api/v1/documents/{id}/ai-policy", s.api(s.putAIPolicy))
+	mux.HandleFunc("GET /api/v1/documents/{id}/mcp-tokens", s.api(s.listTokens))
+	mux.HandleFunc("POST /api/v1/documents/{id}/mcp-tokens", s.api(s.issueToken))
+	mux.HandleFunc("DELETE /api/v1/documents/{id}/mcp-tokens/{tid}", s.api(s.revokeToken))
 	mux.HandleFunc("GET /api/v1/documents/{id}/content", s.api(s.getContent))
 	mux.HandleFunc("POST /api/v1/documents/{id}/operations", s.api(s.postOperations))
 	mux.HandleFunc("POST /api/v1/documents/{id}/layout", s.api(s.postLayout))
@@ -48,7 +51,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/v1/documents/{id}/comments", s.api(s.postComment))
 	mux.HandleFunc("GET /api/v1/documents/{id}/audit", s.api(s.getAudit))
 	mux.HandleFunc("GET /api/v1/users", s.api(s.searchUsers))
-	mux.HandleFunc("POST /api/v1/internal/auth/local", s.localVerify) // gateway service token only (not reachable from browsers)
+	mux.HandleFunc("POST /api/v1/internal/auth/local", s.localVerify)          // gateway service token only (not reachable from browsers)
+	mux.HandleFunc("POST /api/v1/internal/mcp-tokens/resolve", s.resolveToken) // MCP server service token only
 	mux.HandleFunc("GET /api/v1/admin/local-users", s.api(s.listLocalUsers))
 	mux.HandleFunc("POST /api/v1/admin/local-users", s.api(s.createLocalUser))
 	mux.HandleFunc("PATCH /api/v1/admin/local-users/{username}", s.api(s.patchLocalUser))
@@ -178,6 +182,17 @@ func (s *Server) access(w http.ResponseWriter, r *http.Request, p *Principal, ac
 // ---- documents ---------------------------------------------------------------------------------------------------
 
 func (s *Server) listDocs(w http.ResponseWriter, r *http.Request, p *Principal) {
+	if p.TokenDoc != "" { // a per-diagram MCP token sees exactly its diagram
+		d, err := s.store.GetDocument(r.Context(), p.TokenDoc)
+		items := []DocListItem{}
+		if err == nil {
+			if role, rerr := s.docRole(r.Context(), p, d); rerr == nil && rank(role) > 0 {
+				items = append(items, DocListItem{DocMeta: *d, Role: role})
+			}
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"documents": items})
+		return
+	}
 	items, err := s.store.ListDocuments(r.Context(), p.Username, p.IsAdmin)
 	if err != nil {
 		s.log.Error("list documents", "err", err.Error())
@@ -205,6 +220,10 @@ type createReq struct {
 }
 
 func (s *Server) createDoc(w http.ResponseWriter, r *http.Request, p *Principal) {
+	if p.TokenDoc != "" {
+		writeErr(w, http.StatusForbidden, "forbidden", "an MCP token is bound to one diagram and cannot create new ones")
+		return
+	}
 	var in createReq
 	if !readJSON(w, r, &in, 12<<20) {
 		return

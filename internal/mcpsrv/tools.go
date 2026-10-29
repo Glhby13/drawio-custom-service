@@ -37,7 +37,8 @@ func newID(prefix string) string {
 // call performs one platform request as the AI actor (a fresh 1-minute internal token per call, ADR-0004/0009).
 func (s *Server) call(ctx context.Context, a actor, method, path string, body any) (int, []byte, error) {
 	tok, err := s.cfg.Signer.Sign(identity.Claims{Subject: a.Name, Username: a.Name, Name: a.Display, Audience: "platform", ActorType: identity.ActorAI,
-		OnBehalfOf: a.OnBehalfOf, Agent: a.Agent, Model: a.Model, Roles: []string{s.cfg.RequiredRole}, SessionID: newID("m")}, time.Minute)
+		OnBehalfOf: a.OnBehalfOf, Agent: a.Agent, Model: a.Model, Roles: []string{s.cfg.RequiredRole}, SessionID: newID("m"),
+		TokenID: a.TokenID, DocScope: a.DocScope, DocRole: a.DocRole}, time.Minute)
 	if err != nil {
 		return 0, nil, err
 	}
@@ -129,6 +130,49 @@ var (
 	pNum  = func(d string) map[string]any { return map[string]any{"type": "number", "description": d} }
 	docID = pStr("Diagram id (from list_diagrams)")
 )
+
+// toolDefsFor is the catalogue an actor sees: a per-diagram token cannot create diagrams and need not name the diagram.
+func toolDefsFor(ac actor) []map[string]any {
+	defs := toolDefs()
+	if ac.DocScope == "" {
+		return defs
+	}
+	out := make([]map[string]any, 0, len(defs))
+	for _, d := range defs {
+		if d["name"] == "create_diagram" {
+			continue
+		}
+		schema, _ := d["inputSchema"].(map[string]any)
+		props, _ := schema["properties"].(map[string]any)
+		req, _ := schema["required"].([]string)
+		if _, has := props["document"]; has {
+			np := map[string]any{}
+			for k, v := range props {
+				np[k] = v
+			}
+			np["document"] = pStr("Diagram id (optional: this token opens exactly one diagram, " + ac.DocScope + ")")
+			nreq := []string{}
+			for _, r := range req {
+				if r != "document" {
+					nreq = append(nreq, r)
+				}
+			}
+			ns := map[string]any{}
+			for k, v := range schema {
+				ns[k] = v
+			}
+			ns["properties"], ns["required"] = np, nreq
+			nd := map[string]any{}
+			for k, v := range d {
+				nd[k] = v
+			}
+			nd["inputSchema"] = ns
+			d = nd
+		}
+		out = append(out, d)
+	}
+	return out
+}
 
 func toolDefs() []map[string]any {
 	t := func(name, desc string, schema map[string]any, readOnly bool) map[string]any {
@@ -254,6 +298,15 @@ func (s *Server) callTool(ctx context.Context, ac actor, name string, raw json.R
 		if err := json.Unmarshal(raw, &a); err != nil {
 			return "", terr("arguments must be a JSON object")
 		}
+	}
+	if ac.DocScope != "" { // a per-diagram token: this diagram only, "document" may be left out
+		if name == "create_diagram" {
+			return "", terr("this token is bound to one diagram and cannot create new ones")
+		}
+		if d := a.str("document"); d != "" && d != ac.DocScope {
+			return "", terr("this token only gives access to diagram %s", ac.DocScope)
+		}
+		a["document"] = ac.DocScope
 	}
 	doc := a.str("document")
 	needDoc := func() error {

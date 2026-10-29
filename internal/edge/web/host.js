@@ -1334,6 +1334,76 @@
     });
   });
 
+  // ---- MCP access (ADR-0016): per-diagram tokens an AI agent presents to /mcp; only the owner sees and manages them ----------------------------
+  function buildMcpAccess(id) {
+    var sec = el('section', { id: 'mcp-access', class: 'mcp-access', hidden: true, 'aria-labelledby': 'mcp-h' }, []);
+    var mcpUrl = location.origin + '/mcp';
+    var listBox = el('div', { id: 'mcp-list', class: 'mcp-list' }, []);
+    var created = el('div', { id: 'mcp-created', class: 'mcp-created', hidden: true, role: 'status' }, []);
+    var nameIn = el('input', { class: 'field', id: 'mcp-name', type: 'text', maxlength: '60', name: 'mcp-token-name', placeholder: 'Token name, e.g. Claude Desktop…', autocomplete: 'off', spellcheck: 'false', 'aria-label': 'Token name' });
+    var roleSel = el('select', { class: 'field mcp-select', id: 'mcp-role', name: 'mcp-token-role', 'aria-label': 'Token access level' }, [
+      el('option', { value: 'editor', text: 'Can edit' }), el('option', { value: 'commenter', text: 'Can comment' }), el('option', { value: 'viewer', text: 'Can view' })]);
+    var expSel = el('select', { class: 'field mcp-select', id: 'mcp-exp', name: 'mcp-token-expiry', 'aria-label': 'Token expiry' }, [
+      el('option', { value: '30', text: 'Expires in 30 days' }), el('option', { value: '90', text: 'Expires in 90 days' }),
+      el('option', { value: '365', text: 'Expires in 1 year' }), el('option', { value: '0', text: 'Never expires' })]);
+    var dateFmt = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+    function fmt(t) { return t ? dateFmt.format(new Date(t)) : '—'; }
+    function copyBtn(label, text) {
+      return el('button', { class: 'btn', type: 'button', text: label, onclick: function (ev) {
+        var b = ev.currentTarget;
+        navigator.clipboard.writeText(text).then(function () { b.textContent = 'Copied'; setTimeout(function () { b.textContent = label; }, 1500); }, function () { toast('error', 'Copy failed: select the text and copy it manually'); });
+      } });
+    }
+    function drawList(tokens) {
+      listBox.textContent = '';
+      if (!tokens.length) { listBox.appendChild(el('p', { class: 'mcp-empty', text: 'No tokens yet.' })); return; }
+      tokens.forEach(function (t) {
+        var dead = t.revokedAt || (t.expiresAt && new Date(t.expiresAt) < new Date());
+        var state = t.revokedAt ? 'revoked' : (dead ? 'expired' : t.role);
+        listBox.appendChild(el('div', { class: 'share-row mcp-row' + (dead ? ' dead' : ''), 'data-token': t.id }, [
+          el('span', { class: 'grow' }, [el('strong', { text: t.name }), el('small', { class: 'mcp-meta', text: ' …' + t.hint + ' · created ' + fmt(t.createdAt) + ' · last used ' + fmt(t.lastUsedAt) + (t.expiresAt ? ' · expires ' + fmt(t.expiresAt) : ' · never expires') })]),
+          el('span', { class: 'chip', text: state }),
+          dead ? el('span') : el('button', { class: 'btn danger', type: 'button', text: 'Revoke', 'data-revoke': t.id, onclick: function (ev) {
+            var b = ev.currentTarget; // revoking cannot be undone: ask once, inline
+            if (!b.dataset.armed) {
+              b.dataset.armed = '1'; b.textContent = 'Confirm revoke';
+              setTimeout(function () { delete b.dataset.armed; b.textContent = 'Revoke'; }, 4000);
+              return;
+            }
+            b.disabled = true; b.textContent = 'Revoking…';
+            api('DELETE', '/documents/' + id + '/mcp-tokens/' + t.id).then(load).catch(function (e) { b.disabled = false; b.textContent = 'Revoke'; toast('error', e.message); });
+          } })
+        ]));
+      });
+    }
+    function load() {
+      return api('GET', '/documents/' + id + '/mcp-tokens').then(function (r) { sec.hidden = false; drawList(r.tokens || []); }).catch(function () { sec.hidden = true; /* not the owner */ });
+    }
+    var createBtn = el('button', { class: 'btn primary', type: 'button', id: 'mcp-create', text: 'Create token', onclick: function () {
+      var name = nameIn.value.trim();
+      if (!name) { nameIn.focus(); toast('error', 'Give the token a name'); return; }
+      createBtn.disabled = true; createBtn.textContent = 'Creating…';
+      api('POST', '/documents/' + id + '/mcp-tokens', { name: name, role: roleSel.value, expiresInDays: parseInt(expSel.value, 10), enableAI: true }).then(function (r) {
+        nameIn.value = '';
+        var cmd = 'claude mcp add --transport http drawspace ' + mcpUrl + ' --header "Authorization: Bearer ' + r.token + '"';
+        created.textContent = '';
+        created.appendChild(el('p', { class: 'mcp-warn', text: 'Copy this token now. It is shown only once.' }));
+        created.appendChild(el('input', { class: 'field mcp-token', id: 'mcp-token', type: 'text', name: 'mcp-new-token', autocomplete: 'off', spellcheck: 'false', readonly: 'readonly', value: r.token, 'aria-label': 'New token', onfocus: function (ev) { ev.target.select(); } }));
+        created.appendChild(el('div', { class: 'mcp-actions' }, [copyBtn('Copy token', r.token), copyBtn('Copy Claude command', cmd)]));
+        created.appendChild(el('p', { class: 'mcp-meta', text: 'Endpoint: ' + mcpUrl + ' · header Authorization: Bearer <token>' }));
+        created.hidden = false;
+        return load();
+      }).catch(function (e) { toast('error', e.message); }).then(function () { createBtn.disabled = false; createBtn.textContent = 'Create token'; });
+    } });
+    sec.appendChild(el('h3', { id: 'mcp-h', class: 'mcp-h', text: 'MCP access for AI agents' }));
+    sec.appendChild(el('p', { class: 'mcp-meta', text: 'A token opens only this diagram. Creating one allows AI agents on this diagram.' }));
+    sec.appendChild(listBox);
+    sec.appendChild(created);
+    sec.appendChild(el('div', { class: 'mcp-form' }, [nameIn, roleSel, expSel, createBtn]));
+    load();
+    return sec;
+  }
+
   function openShare(id) {
     api('GET', '/documents/' + id + '/permissions').then(function (r) {
       var wrap = el('div', null, []);
@@ -1396,6 +1466,7 @@
       wrap.appendChild(list);
       wrap.appendChild(addTrigger);
       wrap.appendChild(addBox);
+      wrap.appendChild(buildMcpAccess(id));
       q.addEventListener('keydown', function (e) { if (e.key === 'Enter') e.preventDefault(); }); // Enter in the search box must not close the dialog
       var actions = [{ label: 'Done', cls: 'primary' }];
       dialog('Share "' + (doc ? doc.document.title : '') + '"', wrap, actions);

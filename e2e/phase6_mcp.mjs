@@ -1,5 +1,7 @@
 // Phases 6-7 E2E against the lab: MCP server (OAuth bearer from Keycloak, Streamable HTTP) and the AI collaborator
 // (delegated identity, owner policy, explicit share, quotas, attribution, revert, realtime visibility to people).
+// OAuth path only: needs the mcp-server started with MCP_OAUTH_ENABLED=true (off by default since ADR-0016; per-diagram tokens are
+// covered by phase10_mcp_token.mjs).
 // Run: node e2e/phase6_mcp.mjs
 import { BASE, check, finish, launch, newPage, keycloakLogin, agentToken, password } from './lib.mjs';
 

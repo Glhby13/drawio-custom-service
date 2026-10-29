@@ -75,6 +75,12 @@ func (s *Server) docRole(ctx context.Context, p *Principal, d *DocMeta) (string,
 		if !d.AI.Allowed {
 			return RoleNone, nil
 		}
+		if p.TokenDoc != "" { // a per-diagram MCP token: this one document, at most the token's role, only while its creator still owns it
+			if d.ID != p.TokenDoc || d.Owner != p.Actor.OnBehalfOf {
+				return RoleNone, nil
+			}
+			return minRole(minRole(p.TokenRole, RoleEditor), RoleOwner), nil
+		}
 		own, err := s.sharedRole(ctx, d, p.Username, false)
 		if err != nil {
 			return RoleNone, err
