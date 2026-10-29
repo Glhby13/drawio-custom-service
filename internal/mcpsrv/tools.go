@@ -121,8 +121,14 @@ func (s *Server) post(ctx context.Context, a actor, path string, in, out any) er
 
 // ---- tool catalogue ------------------------------------------------------------------------------------------------
 
+// obj builds a JSON Schema object. "required" is left out when empty: a nil slice would be sent as null, which strict MCP
+// clients (the official SDK validates tools/list with zod) reject, and they then drop the whole tool list.
 func obj(props map[string]any, required ...string) map[string]any {
-	return map[string]any{"type": "object", "properties": props, "required": required, "additionalProperties": false}
+	s := map[string]any{"type": "object", "properties": props, "additionalProperties": false}
+	if len(required) > 0 {
+		s["required"] = required
+	}
+	return s
 }
 
 var (
@@ -161,7 +167,12 @@ func toolDefsFor(ac actor) []map[string]any {
 			for k, v := range schema {
 				ns[k] = v
 			}
-			ns["properties"], ns["required"] = np, nreq
+			ns["properties"] = np
+			if len(nreq) > 0 {
+				ns["required"] = nreq
+			} else {
+				delete(ns, "required")
+			}
 			nd := map[string]any{}
 			for k, v := range d {
 				nd[k] = v

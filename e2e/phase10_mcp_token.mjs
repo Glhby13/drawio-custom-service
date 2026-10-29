@@ -77,7 +77,9 @@ check('an OAuth-style (JWT) bearer token is not accepted any more', (await mcp(c
 check('OAuth protected-resource metadata is gone', (await ctx.request.get(BASE + '/.well-known/oauth-protected-resource', { failOnStatusCode: false })).status() !== 200);
 const init = await mcp(ctx, tok, 'initialize', { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'e2e', version: '1' } });
 check('initialize with the token', init.status === 200 && init.json?.result?.capabilities?.tools, JSON.stringify(init.json?.result?.serverInfo));
-const names = ((await mcp(ctx, tok, 'tools/list', {})).json?.result?.tools || []).map(t => t.name);
+const toolList = (await mcp(ctx, tok, 'tools/list', {})).json?.result?.tools || [];
+const names = toolList.map(t => t.name);
+check('every tool schema is strict-client safe (required is absent or a non-empty array, never null)', toolList.length > 0 && toolList.every(t => t.inputSchema?.type === 'object' && (!('required' in t.inputSchema) || (Array.isArray(t.inputSchema.required) && t.inputSchema.required.length > 0))), JSON.stringify(toolList.filter(t => 'required' in t.inputSchema && !Array.isArray(t.inputSchema.required)).map(t => t.name)));
 check('catalogue: working tools, no create_diagram', names.includes('add_shape') && names.includes('get_diagram') && !names.includes('create_diagram'), names.join());
 
 // ---- scope: exactly one diagram ----------------------------------------------------------------------------------------------------------

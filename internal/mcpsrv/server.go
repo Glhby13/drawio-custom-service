@@ -227,6 +227,14 @@ func (s *Server) actorFor(p *Principal, r *http.Request) actor {
 
 const protocolVersion = "2025-06-18"
 
+// instructionsFor is the hint shown to the agent when it connects.
+func instructionsFor(a actor) string {
+	if a.DocScope != "" {
+		return "Tools to read and edit one draw.io diagram (" + a.DocScope + "). Your access token opens only this diagram, so the document argument can be left out. Your edits are attributed to this token, rate-limited by the diagram owner and revertible."
+	}
+	return "Tools to read and edit shared draw.io diagrams. You act as an AI collaborator on behalf of the signed-in user: you only see diagrams that allow AI and that were shared with you, and your edits are attributed, rate-limited and revertible."
+}
+
 func (s *Server) dispatch(ctx context.Context, a actor, req rpcReq) (any, *rpcErr) {
 	switch req.Method {
 	case "initialize":
@@ -242,7 +250,7 @@ func (s *Server) dispatch(ctx context.Context, a actor, req rpcReq) (any, *rpcEr
 			"protocolVersion": v,
 			"capabilities":    map[string]any{"tools": map[string]any{"listChanged": false}, "resources": map[string]any{"listChanged": false}},
 			"serverInfo":      map[string]any{"name": "drawio-custom-service", "version": "1.0.0"},
-			"instructions":    "Tools to read and edit shared draw.io diagrams. You act as an AI collaborator on behalf of the signed-in user: you only see diagrams that allow AI and that were shared with you, and your edits are attributed, rate-limited and revertible.",
+			"instructions":    instructionsFor(a),
 		}, nil
 	case "ping":
 		return map[string]any{}, nil

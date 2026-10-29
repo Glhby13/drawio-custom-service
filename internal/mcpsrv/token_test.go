@@ -148,3 +148,32 @@ func TestTokenActorName(t *testing.T) {
 		}
 	}
 }
+
+// Strict MCP clients validate tools/list with a JSON Schema aware parser: one bad schema makes them drop every tool.
+func TestToolSchemasAreStrictClientSafe(t *testing.T) {
+	for _, scope := range []string{"", "dOne"} {
+		for _, d := range toolDefsFor(actor{DocScope: scope}) {
+			raw, _ := json.Marshal(d["inputSchema"])
+			var s map[string]any
+			_ = json.Unmarshal(raw, &s)
+			if s["type"] != "object" {
+				t.Errorf("%v: inputSchema.type = %v", d["name"], s["type"])
+			}
+			props, ok := s["properties"].(map[string]any)
+			if !ok {
+				t.Errorf("%v: properties missing", d["name"])
+			}
+			if r, present := s["required"]; present {
+				arr, isArr := r.([]any)
+				if !isArr || len(arr) == 0 {
+					t.Errorf("%v: required must be a non-empty array or absent, got %v", d["name"], r)
+				}
+				for _, n := range arr {
+					if _, known := props[n.(string)]; !known {
+						t.Errorf("%v: required %v is not a property", d["name"], n)
+					}
+				}
+			}
+		}
+	}
+}
