@@ -27,8 +27,8 @@ penting: token berlaku untuk **satu diagram**, bukan seluruh akun, dan hanya **p
   sebelum menyentuh platform. `list_diagrams` hanya memuat diagram token.
 - **OAuth Keycloak untuk MCP dimatikan** secara default (`MCP_OAUTH_ENABLED=true` menyalakannya kembali; env `ISSUER_URL`, `MCP_AUDIENCE`, `APP_CLIENT_ID` hanya
   dibaca bila menyala). Metadata RFC 9728 tidak lagi disajikan saat mati. Keycloak tetap dipakai untuk login **manusia** ke DrawSpace.
-- **UI**: bagian "MCP access for AI agents" di dialog Share (hanya pemilik): daftar token, buat (nama, peran, kedaluwarsa), salin token dan perintah
-  `claude mcp add --transport http …`, cabut dengan konfirmasi satu kali.
+- **UI**: menu **AI → "MCP access…"** (hanya pemilik; bukan di dialog Share) membuka dialog: daftar token, buat (nama, peran, kedaluwarsa), "Copy token" dan
+  "Copy MCP config" (JSON generik `mcpServers`, tanpa menyebut merk agen), cabut dengan konfirmasi satu kali. Menu AI menampilkan jumlah token aktif.
 - **Audit**: `mcp-token-create`, `mcp-token-revoke`, penolakan (`denied`) pembuatan/pencabutan, dan `mcp-token-use` `denied` untuk token yang ditolak;
   perubahan isi tercatat di op log dengan aktor `ai-<nama>` dan agen `token:<id>`.
 

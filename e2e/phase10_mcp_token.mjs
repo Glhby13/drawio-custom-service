@@ -55,12 +55,12 @@ r = await api(other, 'GET', '/documents/' + id + '/mcp-tokens');
 check('an editor cannot list the tokens either', r.status === 403, String(r.status));
 
 // ---- creation: owner only, AI must be on, secret shown once, only a hint is kept ---------------------------------------------------------------
-r = await api(owner, 'POST', '/documents/' + id + '/mcp-tokens', { name: 'Claude Desktop', role: 'editor', expiresInDays: 30 });
+r = await api(owner, 'POST', '/documents/' + id + '/mcp-tokens', { name: 'Reporting Agent', role: 'editor', expiresInDays: 30 });
 check('creating a token while AI is off asks for enableAI (409)', r.status === 409 && r.json?.error?.code === 'ai_disabled', r.status + ' ' + r.text.slice(0, 100));
 check('bad input is refused (name, role, expiry)', (await api(owner, 'POST', '/documents/' + id + '/mcp-tokens', { name: '', role: 'editor', enableAI: true })).status === 400
   && (await api(owner, 'POST', '/documents/' + id + '/mcp-tokens', { name: 'a', role: 'owner', enableAI: true })).status === 400
   && (await api(owner, 'POST', '/documents/' + id + '/mcp-tokens', { name: 'a', role: 'editor', expiresInDays: 9999, enableAI: true })).status === 400);
-r = await api(owner, 'POST', '/documents/' + id + '/mcp-tokens', { name: 'Claude Desktop', role: 'editor', expiresInDays: 30, enableAI: true });
+r = await api(owner, 'POST', '/documents/' + id + '/mcp-tokens', { name: 'Reporting Agent', role: 'editor', expiresInDays: 30, enableAI: true });
 const tok = r.json?.token;
 check('owner creates a token (dsp_ prefix, returned once)', r.status === 201 && /^dsp_[A-Za-z0-9_-]{40,}$/.test(tok || ''), r.status + ' ' + r.text.slice(0, 60));
 const tokId = r.json?.tokenInfo?.id;
@@ -93,7 +93,7 @@ r = await tool(ctx, tok, 'add_shape', { label: 'From token', x: 80, y: 80 });
 check('add_shape without naming the diagram works', r.ok, r.text.slice(0, 100));
 check('the shape appears live in the owner\'s open editor', await waitLabels(owner, ['From token']));
 r = await api(owner, 'GET', '/documents/' + id + '/history');
-check('history attributes the change to the token\'s AI actor on behalf of the owner', /ai-claude-desktop/.test(r.text) && /e2e-team1/.test(r.text), r.text.slice(0, 200));
+check('history attributes the change to the token\'s AI actor on behalf of the owner', /ai-reporting-agent/.test(r.text) && /e2e-team1/.test(r.text), r.text.slice(0, 200));
 r = await api(owner, 'GET', '/documents/' + id + '/audit');
 check('audit records the token creation', /mcp-token-create/.test(r.text), r.text.slice(0, 120));
 
@@ -119,28 +119,37 @@ const aiOff = (await api(owner, 'GET', '/documents/' + id + '/permissions')).jso
 await api(owner, 'PUT', '/documents/' + id + '/ai-policy', { allowed: false, maxOpsPerMin: aiOff.maxOpsPerMin, maxDelete: aiOff.maxDelete });
 check('switching "allow AI" off stops the remaining token at once', (await mcp(ctx, viewerTok, 'ping', {})).status === 401);
 
-// ---- UI: the Share dialog ------------------------------------------------------------------------------------------------------------
+// ---- UI: "MCP access" lives in the AI menu (not in Share) -------------------------------------------------------------------------------
+const openAiMenu = async s => { await s.page.frameLocator('#editor').locator('[data-drawspace-menu="ai"]').click(); await s.page.waitForSelector('#ai-pop', { timeout: 10000 }); };
 await owner.page.reload({ waitUntil: 'domcontentloaded' });
 await owner.page.waitForFunction(() => window.__adapter && window.__adapter.state().joined && document.getElementById('status')?.dataset.state === 'ready', null, { timeout: 90000 });
 await owner.page.click('#btn-share');
-await owner.page.waitForSelector('#mcp-access:not([hidden])', { timeout: 15000 }).catch(() => {});
-check('owner sees "MCP access" in the Share dialog', await owner.page.locator('#mcp-access').isVisible());
+await owner.page.waitForSelector('#dlg[open] #btn-add-user', { timeout: 10000 });
+check('the Share dialog no longer holds MCP tokens', (await owner.page.locator('#mcp-access').count()) === 0);
+await owner.page.click('#dlg-actions .primary');
+await openAiMenu(owner);
+check('owner sees "MCP access…" in the AI menu', await owner.page.locator('#ai-mcp').isVisible());
+await owner.page.click('#ai-mcp');
+await owner.page.waitForSelector('#dlg[open] #mcp-access', { timeout: 10000 });
+check('the dialog is titled MCP access and names no vendor', (await owner.page.textContent('#dlg-title')) === 'MCP access' && !/claude|anthropic|openai|gpt/i.test(await owner.page.textContent('#dlg')));
 await owner.page.fill('#mcp-name', 'UI token');
 await owner.page.click('#mcp-create');
 await owner.page.waitForSelector('#mcp-token', { timeout: 15000 }).catch(() => {});
 const shown = await owner.page.inputValue('#mcp-token').catch(() => '');
 check('the UI shows the new token once and lists it', /^dsp_/.test(shown) && await owner.page.locator('.mcp-row[data-token]').count() >= 1, shown.slice(0, 8));
+check('the UI offers "Copy token" and "Copy MCP config" (no vendor-specific command)', (await owner.page.locator('.mcp-actions button').allTextContents()).join('|') === 'Copy token|Copy MCP config' && !/claude mcp add/i.test(await owner.page.textContent('#mcp-created')));
 r = await mcp(ctx, shown, 'ping', {});
 check('the token created in the UI works', r.status === 200, String(r.status));
+await owner.page.click('#dlg-actions .primary');
+await openAiMenu(owner);
+check('the AI menu shows how many tokens are active', /active/.test(await owner.page.textContent('#ai-mcp')), await owner.page.textContent('#ai-mcp'));
 await owner.page.keyboard.press('Escape');
 
 await other.page.goto(BASE + '/d/' + id, { waitUntil: 'domcontentloaded' });
 await other.page.waitForFunction(() => window.__adapter && window.__adapter.state().joined && document.getElementById('status')?.dataset.state === 'ready', null, { timeout: 90000 });
-if (await other.page.locator('#btn-share').isVisible()) {
-  await other.page.click('#btn-share');
-  await other.page.waitForTimeout(1500);
-}
-check('a non-owner does not see "MCP access"', !(await other.page.locator('#mcp-access').isVisible()));
+await other.page.frameLocator('#editor').locator('[data-drawspace-menu="ai"]').click();
+await other.page.waitForTimeout(1500); // an editor is not allowed to open the AI settings at all
+check('a non-owner does not get "MCP access…" in the AI menu', (await other.page.locator('#ai-mcp').count()) === 0 && (await other.page.locator('#mcp-access').count()) === 0);
 
 await browser.close();
 finish();

@@ -1334,13 +1334,16 @@
     });
   });
 
-  // ---- MCP access (ADR-0016): per-diagram tokens an AI agent presents to /mcp; only the owner sees and manages them ----------------------------
-  function buildMcpAccess(id) {
-    var sec = el('section', { id: 'mcp-access', class: 'mcp-access', hidden: true, 'aria-labelledby': 'mcp-h' }, []);
+  // ---- MCP access (ADR-0016): per-diagram tokens an AI agent presents to /mcp; opened from the AI menu, owner only ------------------------------------
+  function openMcpAccess(id) {
+    dialog('MCP access', buildMcpPanel(id), [{ label: 'Done', cls: 'primary' }], { wide: true });
+  }
+  function buildMcpPanel(id) {
+    var sec = el('section', { id: 'mcp-access', class: 'mcp-access' }, []);
     var mcpUrl = location.origin + '/mcp';
     var listBox = el('div', { id: 'mcp-list', class: 'mcp-list' }, []);
     var created = el('div', { id: 'mcp-created', class: 'mcp-created', hidden: true, role: 'status' }, []);
-    var nameIn = el('input', { class: 'field', id: 'mcp-name', type: 'text', maxlength: '60', name: 'mcp-token-name', placeholder: 'Token name, e.g. Claude Desktop…', autocomplete: 'off', spellcheck: 'false', 'aria-label': 'Token name' });
+    var nameIn = el('input', { class: 'field mcp-name', id: 'mcp-name', name: 'mcp-token-name', type: 'text', maxlength: '60', placeholder: 'Token name, e.g. Reporting agent…', autocomplete: 'off', spellcheck: 'false', 'aria-label': 'Token name' });
     var roleSel = el('select', { class: 'field mcp-select', id: 'mcp-role', name: 'mcp-token-role', 'aria-label': 'Token access level' }, [
       el('option', { value: 'editor', text: 'Can edit' }), el('option', { value: 'commenter', text: 'Can comment' }), el('option', { value: 'viewer', text: 'Can view' })]);
     var expSel = el('select', { class: 'field mcp-select', id: 'mcp-exp', name: 'mcp-token-expiry', 'aria-label': 'Token expiry' }, [
@@ -1377,26 +1380,26 @@
       });
     }
     function load() {
-      return api('GET', '/documents/' + id + '/mcp-tokens').then(function (r) { sec.hidden = false; drawList(r.tokens || []); }).catch(function () { sec.hidden = true; /* not the owner */ });
+      return api('GET', '/documents/' + id + '/mcp-tokens').then(function (r) { drawList(r.tokens || []); })
+        .catch(function () { listBox.textContent = ''; listBox.appendChild(el('p', { class: 'mcp-empty', text: 'Only the owner of this diagram can manage MCP tokens.' })); sec.classList.add('mcp-locked'); });
     }
-    var createBtn = el('button', { class: 'btn primary', type: 'button', id: 'mcp-create', text: 'Create token', onclick: function () {
+    var createBtn = el('button', { class: 'btn primary mcp-create', type: 'button', id: 'mcp-create', text: 'Create token', onclick: function () {
       var name = nameIn.value.trim();
       if (!name) { nameIn.focus(); toast('error', 'Give the token a name'); return; }
       createBtn.disabled = true; createBtn.textContent = 'Creating…';
       api('POST', '/documents/' + id + '/mcp-tokens', { name: name, role: roleSel.value, expiresInDays: parseInt(expSel.value, 10), enableAI: true }).then(function (r) {
         nameIn.value = '';
-        var cmd = 'claude mcp add --transport http drawspace ' + mcpUrl + ' --header "Authorization: Bearer ' + r.token + '"';
+        var cfg = JSON.stringify({ mcpServers: { drawspace: { type: 'http', url: mcpUrl, headers: { Authorization: 'Bearer ' + r.token } } } }, null, 2);
         created.textContent = '';
         created.appendChild(el('p', { class: 'mcp-warn', text: 'Copy this token now. It is shown only once.' }));
         created.appendChild(el('input', { class: 'field mcp-token', id: 'mcp-token', type: 'text', name: 'mcp-new-token', autocomplete: 'off', spellcheck: 'false', readonly: 'readonly', value: r.token, 'aria-label': 'New token', onfocus: function (ev) { ev.target.select(); } }));
-        created.appendChild(el('div', { class: 'mcp-actions' }, [copyBtn('Copy token', r.token), copyBtn('Copy Claude command', cmd)]));
-        created.appendChild(el('p', { class: 'mcp-meta', text: 'Endpoint: ' + mcpUrl + ' · header Authorization: Bearer <token>' }));
+        created.appendChild(el('div', { class: 'mcp-actions' }, [copyBtn('Copy token', r.token), copyBtn('Copy MCP config', cfg)]));
+        created.appendChild(el('p', { class: 'mcp-meta', text: 'Endpoint ' + mcpUrl + ' · send the token as “Authorization: Bearer <token>”.' }));
         created.hidden = false;
         return load();
       }).catch(function (e) { toast('error', e.message); }).then(function () { createBtn.disabled = false; createBtn.textContent = 'Create token'; });
     } });
-    sec.appendChild(el('h3', { id: 'mcp-h', class: 'mcp-h', text: 'MCP access for AI agents' }));
-    sec.appendChild(el('p', { class: 'mcp-meta', text: 'A token opens only this diagram. Creating one allows AI agents on this diagram.' }));
+    sec.appendChild(el('p', { class: 'mcp-meta mcp-intro', text: 'A token lets an AI agent or integration work on this diagram through MCP. It opens only this diagram and can be revoked at any time. Creating one allows AI agents on this diagram.' }));
     sec.appendChild(listBox);
     sec.appendChild(created);
     sec.appendChild(el('div', { class: 'mcp-form' }, [nameIn, roleSel, expSel, createBtn]));
@@ -1466,7 +1469,6 @@
       wrap.appendChild(list);
       wrap.appendChild(addTrigger);
       wrap.appendChild(addBox);
-      wrap.appendChild(buildMcpAccess(id));
       q.addEventListener('keydown', function (e) { if (e.key === 'Enter') e.preventDefault(); }); // Enter in the search box must not close the dialog
       var actions = [{ label: 'Done', cls: 'primary' }];
       dialog('Share "' + (doc ? doc.document.title : '') + '"', wrap, actions);
@@ -1481,7 +1483,8 @@
   }
   function openAiSettings(id, anchor) {
     if ($('ai-pop')) { closeAiPop(); return; }
-    api('GET', '/documents/' + id + '/permissions').then(function (r) {
+    Promise.all([api('GET', '/documents/' + id + '/permissions'), api('GET', '/documents/' + id + '/mcp-tokens').catch(function () { return null; })]).then(function (res) {
+      var r = res[0], tk = res[1]; // tk is null unless the caller is the owner
       var ai = r.aiPolicy || { allowed: false, maxOpsPerMin: 120, maxDelete: 20 };
       var allowed = el('input', { type: 'checkbox', id: 'ai-allowed' }); allowed.checked = !!ai.allowed;
       var rate = el('input', { class: 'ai-num', id: 'ai-rate', type: 'number', min: '1', max: '5000', value: String(ai.maxOpsPerMin), 'aria-label': 'Max AI operations per minute' }); rate.value = String(ai.maxOpsPerMin);
@@ -1489,7 +1492,7 @@
       var canPolicy = doc && doc.can && doc.can.policy;
       [allowed, rate, del].forEach(function (x) { x.disabled = !canPolicy; });
       var pop = el('div', { id: 'ai-pop', class: 'ai-pop', role: 'dialog', 'aria-label': 'AI collaborators' }, [
-        el('label', { class: 'ai-pop-row ai-pop-check', title: 'Izinkan agen AI (misal Claude / MCP) yang telah diberi akses pada menu Share untuk membaca dan mengedit diagram ini secara langsung.' }, [allowed, 'Allow AI agents']),
+        el('label', { class: 'ai-pop-row ai-pop-check', title: 'Let AI agents read and edit this diagram through MCP. Agents connect with a token created under MCP access.' }, [allowed, 'Allow AI agents']),
         el('label', { class: 'ai-pop-row', title: 'Batas jumlah operasi perubahan sel/bentuk dari agen AI per menit (rate limit).' }, [el('span', { class: 'ai-pop-label', text: 'Operations / minute' }), rate]),
         el('label', { class: 'ai-pop-row', title: 'Batas jumlah elemen yang boleh dihapus agen AI dalam satu perubahan; lebih besar perlu konfirmasi.' }, [el('span', { class: 'ai-pop-label', text: 'Deletions / change' }), del]),
       ]);
@@ -1504,6 +1507,12 @@
       } else {
         pop.appendChild(el('div', { class: 'ai-pop-sep' }));
         pop.appendChild(el('div', { class: 'ai-pop-note', text: 'Only the owner or an administrator can change these.' }));
+      }
+      if (tk) {
+        var live = (tk.tokens || []).filter(function (t) { return !t.revokedAt && !(t.expiresAt && new Date(t.expiresAt) < new Date()); }).length;
+        pop.appendChild(el('div', { class: 'ai-pop-sep' }));
+        pop.appendChild(el('button', { class: 'ai-pop-row ai-pop-mcp', type: 'button', id: 'ai-mcp', onclick: function () { closeAiPop(); openMcpAccess(id); } }, [
+          el('span', { class: 'ai-pop-label', text: 'MCP access…' }), el('span', { class: 'ai-pop-count', text: live ? live + ' active' : '' })]));
       }
       document.body.appendChild(pop);
       // anchor under the "AI" item (the editor lives in an iframe, so add the frame offset)
