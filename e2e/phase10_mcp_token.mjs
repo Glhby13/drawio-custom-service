@@ -159,6 +159,7 @@ await owner.page.keyboard.press('Escape');
 await openAiMenu(owner);
 await owner.page.click('#ai-mcp');
 await owner.page.waitForSelector('#dlg[open] #mcp-access', { timeout: 10000 });
+await owner.page.waitForSelector('.mcp-row .btn', { timeout: 10000 }); // the list loads after the dialog opens
 check('revoked tokens offer Delete, live ones offer Revoke', (await owner.page.locator('.mcp-row.dead [data-delete]').count()) >= 1 && (await owner.page.locator('.mcp-row:not(.dead) [data-revoke]').count()) >= 1);
 const before = await owner.page.locator('.mcp-row').count();
 const del = owner.page.locator('.mcp-row.dead [data-delete]').first();
