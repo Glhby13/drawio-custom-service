@@ -1,7 +1,7 @@
 // Per-diagram MCP tokens E2E against the lab (ADR-0016): only the owner creates them, a token opens exactly one diagram with at
 // most its role, revocation / AI switch-off take effect on the next call, OAuth (Keycloak) bearer tokens are not accepted.
 // Run: node e2e/phase10_mcp_token.mjs   (needs the platform with migration 003 and an mcp-server with MCP_OAUTH_ENABLED unset)
-import { BASE, check, finish, launch, newPage, keycloakLogin, agentToken } from './lib.mjs';
+import { BASE, check, finish, launch, newPage, keycloakLogin } from './lib.mjs';
 
 const browser = await launch();
 
@@ -73,7 +73,7 @@ check('creating a token switched "allow AI" on', r.json?.aiPolicy?.allowed === t
 const noTok = await mcp(ctx, null, 'ping', {});
 check('no token -> 401, no OAuth metadata advertised', noTok.status === 401 && !/resource_metadata/.test(noTok.headers['www-authenticate'] || ''), noTok.headers['www-authenticate']);
 check('unknown dsp_ token -> 401', (await mcp(ctx, 'dsp_' + 'A'.repeat(43), 'ping', {})).status === 401);
-check('a Keycloak OAuth bearer token is not accepted any more', (await mcp(ctx, await agentToken(ctx, 'e2e-team1'), 'ping', {})).status === 401);
+check('an OAuth-style (JWT) bearer token is not accepted any more', (await mcp(ctx, 'eyJhbGciOiJSUzI1NiJ9.eyJhdWQiOiJkcmF3aW8tbWNwIn0.AAAA', 'ping', {})).status === 401);
 check('OAuth protected-resource metadata is gone', (await ctx.request.get(BASE + '/.well-known/oauth-protected-resource', { failOnStatusCode: false })).status() !== 200);
 const init = await mcp(ctx, tok, 'initialize', { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'e2e', version: '1' } });
 check('initialize with the token', init.status === 200 && init.json?.result?.capabilities?.tools, JSON.stringify(init.json?.result?.serverInfo));

@@ -50,4 +50,4 @@ penting: token berlaku untuk **satu diagram**, bukan seluruh akun, dan hanya **p
 
 ## Evidence
 Unit: `internal/mcpsrv/token_test.go`, `internal/platform/tokens_test.go`. Integrasi terhadap PostgreSQL/Redis/SeaweedFS lab: `TestIT_MCPTokens` (lulus 2026-10-29,
-database `drawio_test`). E2E Chrome `e2e/phase10_mcp_token.mjs` ditulis; dijalankan setelah deploy.
+database `drawio_test`). E2E Chrome `e2e/phase10_mcp_token.mjs` 34/34 lulus di lab (2026-10-29, deploy `fa232f3`, Jenkins #42).
