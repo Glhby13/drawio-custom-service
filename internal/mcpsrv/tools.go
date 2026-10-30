@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/Glhby13/drawio-custom-service/internal/identity"
+	"github.com/Glhby13/drawio-custom-service/internal/model"
 )
 
 var errUnknownTool = errors.New("unknown tool")
@@ -135,6 +136,13 @@ var (
 	pStr  = func(d string) map[string]any { return map[string]any{"type": "string", "description": d} }
 	pNum  = func(d string) map[string]any { return map[string]any{"type": "number", "description": d} }
 	docID = pStr("Diagram id (from list_diagrams)")
+	pBool = func(d string) map[string]any { return map[string]any{"type": "boolean", "description": d} }
+	pEnum = func(d string, vals ...string) map[string]any {
+		return map[string]any{"type": "string", "enum": vals, "description": d}
+	}
+	pArr = func(d string, item map[string]any) map[string]any {
+		return map[string]any{"type": "array", "description": d, "items": item}
+	}
 )
 
 // toolDefsFor is the catalogue an actor sees: a per-diagram token cannot create diagrams and need not name the diagram.
@@ -195,10 +203,10 @@ func toolDefs() []map[string]any {
 			obj(map[string]any{"document": docID, "format": map[string]any{"type": "string", "enum": []string{"summary", "svg", "xml"}, "description": "default summary"}}, "document"), true),
 		t("create_diagram", "Create a new diagram owned by the signed-in user and open to AI collaboration. Optionally start from draw.io XML.",
 			obj(map[string]any{"title": pStr("Title"), "xml": pStr("Optional .drawio / mxGraph XML")}, "title"), false),
-		t("add_shape", "Add a shape (vertex) to a diagram. Returns its cell id.",
+		t("add_shape", "Add ONE shape to a diagram. Returns its cell id. For more than a few shapes use build_diagram instead (it lays everything out for you). Without a style the shape gets a readable default; x/y are only needed to place it next to existing shapes (see get_diagram for positions).",
 			obj(map[string]any{"document": docID, "label": pStr("Text shown in the shape"), "x": pNum("x position"), "y": pNum("y position"), "width": pNum("default 120"), "height": pNum("default 60"),
 				"style": pStr("draw.io style string, e.g. rounded=1;fillColor=#dae8fc;strokeColor=#6c8ebf;"), "page": pStr("Page id (default: first page)"), "cell": pStr("Optional cell id to use")}, "document", "label"), false),
-		t("connect", "Connect two existing cells with an edge. Returns the edge id.",
+		t("connect", "Connect two existing cells with an edge. Returns the edge id. Both cells must exist. Without a style the edge is an orthogonal arrow; run layout (algo=hierarchical) afterwards to route it around shapes.",
 			obj(map[string]any{"document": docID, "source": pStr("Source cell id"), "target": pStr("Target cell id"), "label": pStr("Edge label"), "style": pStr("draw.io style"), "page": pStr("Page id")}, "document", "source", "target"), false),
 		t("update_cell", "Change the label, style or geometry of an existing cell.",
 			obj(map[string]any{"document": docID, "cell": pStr("Cell id"), "label": pStr("New label"), "style": pStr("Style keys to set, e.g. fillColor=#f8cecc;rounded=1"), "x": pNum("New x"), "y": pNum("New y"), "width": pNum("New width"), "height": pNum("New height"), "page": pStr("Page id")}, "document", "cell"), false),
@@ -206,8 +214,20 @@ func toolDefs() []map[string]any {
 			obj(map[string]any{"document": docID, "cells": map[string]any{"type": "array", "items": map[string]any{"type": "string"}}, "page": pStr("Page id")}, "document", "cells"), false),
 		t("apply_operations", "Low-level: apply semantic operations (addCell, deleteCell, setProp, setPos, connect, reparent, reorder, addPage, deletePage, renamePage, reorderPage, setPageAttrs) atomically. Operation ids are generated when omitted.",
 			obj(map[string]any{"document": docID, "operations": map[string]any{"type": "array", "items": map[string]any{"type": "object"}}}, "document", "operations"), false),
-		t("layout", "Arrange the top-level shapes of a page automatically (layered by edges, or grid).",
-			obj(map[string]any{"document": docID, "algo": map[string]any{"type": "string", "enum": []string{"layered", "grid"}}, "page": pStr("Page id")}, "document"), false),
+		t("build_diagram", "Create shapes, containers and connections from a declarative description and let the server do ALL the geometry: shapes are sized from their labels, containers are fitted around their members, shapes never overlap, and edges are routed through the gaps. Preferred way to draw anything beyond 3 shapes. Everything is added in one atomic step (all or nothing) to the page; ids must be new. Returns what was created plus a lint report. Up to 480 groups+nodes+edges per call.",
+			obj(map[string]any{"document": docID, "page": pStr("Page id (default: first page)"),
+				"direction": pEnum("Flow direction: TB top-to-bottom (default), LR left-to-right", "TB", "LR"),
+				"groups": pArr("Containers (a boundary, tier, namespace). May nest via parent.", obj(map[string]any{"id": pStr("Unique id: letters, digits, _ . : -"), "label": pStr("Title shown at the top"),
+					"parent": pStr("Id of an enclosing group"), "color": pEnum("Tint", model.Colors()...)}, "id", "label")),
+				"nodes": pArr("Shapes.", obj(map[string]any{"id": pStr("Unique id: letters, digits, _ . : -"), "label": pStr("Text (2-4 words; \\n for a second line)"),
+					"group": pStr("Id of the group that contains it"), "kind": pEnum("Shape kind (default box)", model.Kinds()...), "color": pEnum("Fill color (default blue)", model.Colors()...),
+					"width": pNum("Optional; default follows the label"), "height": pNum("Optional; default follows the label")}, "id", "label")),
+				"edges": pArr("Connections between node or group ids.", obj(map[string]any{"from": pStr("Source id"), "to": pStr("Target id"), "label": pStr("Optional, short"), "dashed": pBool("Dashed line for async/optional")}, "from", "to"))},
+				"document", "nodes"), false),
+		t("lint_diagram", "Check a diagram the way a person would look at it: overlapping shapes, shapes sticking out of their container, labels that do not fit, edges running through shapes or labels, edge crossings, dangling edges. Each finding names the cells and a fix. Read-only; call it after building or editing.",
+			obj(map[string]any{"document": docID, "page": pStr("Page id (default: first page)")}, "document"), true),
+		t("layout", "Re-arrange a whole page automatically. algo=hierarchical (default): layers by edges, containers fitted around their members, edges routed around shapes, fewer crossings; hierarchical-lr flows left to right; layered/grid only move top-level shapes. Fixes most lint findings. Only values that change cost an operation.",
+			obj(map[string]any{"document": docID, "algo": pEnum("Algorithm (default hierarchical)", "hierarchical", "hierarchical-lr", "layered", "grid"), "page": pStr("Page id")}, "document"), false),
 		t("export", "Export a diagram as svg (first page) or xml (.drawio).", obj(map[string]any{"document": docID, "format": map[string]any{"type": "string", "enum": []string{"svg", "xml"}}}, "document", "format"), true),
 		t("get_history", "Recent changes with who made them (people and AI agents).", obj(map[string]any{"document": docID, "limit": pNum("default 20")}, "document"), true),
 		t("list_versions", "Named versions of a diagram.", obj(map[string]any{"document": docID}, "document"), true),
@@ -384,26 +404,44 @@ func (s *Server) callTool(ctx context.Context, ac actor, name string, raw json.R
 		if id == "" {
 			id = newID("s")
 		}
-		props := parseStyle(a.str("style"))
-		props["v"], props["gx"], props["gy"], props["gw"], props["gh"] = a.str("label"), num(a.f("x", 40)), num(a.f("y", 40)), num(a.f("width", 120)), num(a.f("height", 60))
+		style, label := a.str("style"), a.str("label")
+		if style == "" { // a readable default: the label is shown literally, so it must be escaped for html=1
+			style = "rounded=1;arcSize=12;whiteSpace=wrap;html=1;fontSize=12;fontColor=#1f2937;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=1.5"
+			label = model.HTMLLabel(label)
+		}
+		props := parseStyle(style)
+		props["v"], props["gx"], props["gy"], props["gw"], props["gh"] = label, num(clamp(a.f("x", 40), -1e5, 1e5)), num(clamp(a.f("y", 40), -1e5, 1e5)), num(clamp(a.f("width", 120), 10, 2000)), num(clamp(a.f("height", 60), 10, 2000))
 		if _, err := s.applyOps(ctx, ac, doc, []map[string]any{{"t": "addCell", "page": page, "cell": id, "kind": "v", "parent": layer, "props": props}}); err != nil {
 			return "", err
 		}
-		return "Added shape " + id, nil
+		return "Added shape " + id + ". Tip: for several shapes use build_diagram, then lint_diagram.", nil
 	case "connect":
 		if err := needDoc(); err != nil {
 			return "", err
 		}
-		page, layer, _, err := s.pageAndLayer(ctx, ac, doc, a.str("page"))
+		page, layer, st, err := s.pageAndLayer(ctx, ac, doc, a.str("page"))
 		if err != nil {
 			return "", err
 		}
+		var missing []string
+		for _, end := range []string{a.str("source"), a.str("target")} {
+			if !st.hasCell(page, end) {
+				missing = append(missing, fmt.Sprintf("%q", end))
+			}
+		}
+		if len(missing) > 0 { // never create an edge that points at nothing (it would be silently invisible)
+			return "", terr("cell %s not found on page %s: read the diagram (get_diagram) for the real ids", strings.Join(missing, " and "), page)
+		}
 		id := newID("e")
-		props := parseStyle(a.str("style"))
+		style := a.str("style")
+		if style == "" {
+			style = "edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeWidth=1.5;strokeColor=#6b7280;fontSize=11;fontColor=#374151;labelBackgroundColor=default"
+		}
+		props := parseStyle(style)
 		props["src"], props["tgt"] = a.str("source"), a.str("target")
 		props["gx"], props["gy"], props["gw"], props["gh"], props["grel"] = "0", "0", "0", "0", "1"
 		if l := a.str("label"); l != "" {
-			props["v"] = l
+			props["v"] = model.HTMLLabel(l)
 		}
 		if _, err := s.applyOps(ctx, ac, doc, []map[string]any{{"t": "addCell", "page": page, "cell": id, "kind": "e", "parent": layer, "props": props}}); err != nil {
 			return "", err
@@ -497,7 +535,40 @@ func (s *Server) callTool(ctx context.Context, ac actor, name string, raw json.R
 		if err := s.post(ctx, ac, "/documents/"+url.PathEscape(doc)+"/layout", map[string]any{"page": a.str("page"), "algo": a.str("algo")}, &r); err != nil {
 			return "", err
 		}
-		return fmt.Sprintf("Arranged %d shape(s)", r.Moved), nil
+		return fmt.Sprintf("Layout changed %d value(s). Run lint_diagram to confirm the result.", r.Moved), nil
+	case "build_diagram":
+		if err := needDoc(); err != nil {
+			return "", err
+		}
+		body := map[string]any{}
+		for _, k := range []string{"page", "direction", "groups", "nodes", "edges"} {
+			if v, ok := a[k]; ok {
+				body[k] = v
+			}
+		}
+		var r struct {
+			Page string            `json:"page"`
+			Lint *model.LintReport `json:"lint"`
+			G    int               `json:"groups"`
+			N    int               `json:"nodes"`
+			E    int               `json:"edges"`
+			W    float64           `json:"width"`
+			H    float64           `json:"height"`
+		}
+		if err := s.post(ctx, ac, "/documents/"+url.PathEscape(doc)+"/build", body, &r); err != nil {
+			return "", err
+		}
+		out := fmt.Sprintf("Built %d shape(s), %d edge(s), %d group(s) on page %s, about %.0f x %.0f px (one revertible step).\n", r.N, r.E, r.G, r.Page, r.W, r.H)
+		return out + formatLint(r.Lint), nil
+	case "lint_diagram":
+		if err := needDoc(); err != nil {
+			return "", err
+		}
+		var rep model.LintReport
+		if err := s.get(ctx, ac, "/documents/"+url.PathEscape(doc)+"/lint?page="+url.QueryEscape(a.str("page")), &rep); err != nil {
+			return "", err
+		}
+		return formatLint(&rep), nil
 	case "get_history":
 		if err := needDoc(); err != nil {
 			return "", err
@@ -588,4 +659,62 @@ func (s *Server) readResource(ctx context.Context, a actor, params json.RawMessa
 		return nil, &rpcErr{Code: -32002, Message: err.Error()}
 	}
 	return map[string]any{"contents": []map[string]any{{"uri": in.URI, "mimeType": "application/json", "text": pretty(r)}}}, nil
+}
+
+func clamp(f, lo, hi float64) float64 {
+	if f < lo {
+		return lo
+	}
+	if f > hi {
+		return hi
+	}
+	return f
+}
+
+// hasCell reports whether the page of the state read from the platform has a cell with this id.
+func (d *docState) hasCell(page, id string) bool {
+	if d == nil || id == "" {
+		return false
+	}
+	for _, p := range d.State {
+		if p.ID != page {
+			continue
+		}
+		for _, c := range p.Cells {
+			if c.ID == id {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// formatLint renders a lint report for an agent: a verdict first, then every finding with its fix.
+func formatLint(r *model.LintReport) string {
+	if r == nil {
+		return "Lint unavailable."
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "Lint: %d shape(s), %d edge(s), %d edge crossing(s). ", r.Shapes, r.Edges, r.Crossings)
+	if len(r.Issues) == 0 {
+		b.WriteString("No problems found.")
+		return b.String()
+	}
+	if r.Clean() {
+		b.WriteString("No problems, only notes:\n")
+	} else {
+		b.WriteString("Problems to fix:\n")
+	}
+	for i, is := range r.Issues {
+		if i >= 25 {
+			fmt.Fprintf(&b, "... and %d more\n", len(r.Issues)-i)
+			break
+		}
+		fmt.Fprintf(&b, "- [%s] %s: %s", is.Severity, is.Code, is.Msg)
+		if is.Fix != "" {
+			b.WriteString(" -> " + is.Fix)
+		}
+		b.WriteString("\n")
+	}
+	return b.String()
 }

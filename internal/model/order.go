@@ -91,6 +91,20 @@ func Spread(n int) []string {
 	return keys
 }
 
+// appendKey is the next key after last for API callers that add cell after cell: it steps the last digit instead of bisecting
+// towards the end the way Between does, which grew the key by a character every ~5 appends and reached the 256-character limit
+// after ~1,300 siblings (a build_diagram on top of a large page failed with bad_order_key). It is not part of the browser contract:
+// browsers send their own keys, and Between(a, b) works between any two valid keys whatever generated them.
+func appendKey(last string) string {
+	if last == "" {
+		return Between("", "")
+	}
+	if i := strings.IndexByte(digits, last[len(last)-1]); i < len(digits)-1 {
+		return last[:len(last)-1] + string(digits[i+1])
+	}
+	return last + "1"
+}
+
 // FillOrders gives every addCell / addPage in ops that has no order key the next key after the current last sibling
 // (top of the z-order / last page), counting siblings added earlier in the same batch. It is for API callers (MCP, AI,
 // automation) that do not hold the live sibling list; browsers always send explicit keys. ops is modified in place.
@@ -105,7 +119,7 @@ func (d *Doc) FillOrders(ops []Op) {
 		switch o.T {
 		case OpAddPage:
 			if o.Order == "" {
-				o.Order = Between(lastPage, "")
+				o.Order = appendKey(lastPage)
 			}
 			lastPage = o.Order
 		case OpAddCell:
@@ -121,7 +135,7 @@ func (d *Doc) FillOrders(ops []Op) {
 					}
 				}
 			}
-			o.Order = Between(last, "")
+			o.Order = appendKey(last)
 			lastCell[k] = o.Order
 		}
 	}

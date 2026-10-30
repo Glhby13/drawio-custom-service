@@ -227,12 +227,24 @@ func (s *Server) actorFor(p *Principal, r *http.Request) actor {
 
 const protocolVersion = "2025-06-18"
 
+// styleGuide is what an agent needs to know to produce a tidy diagram. It is part of the instructions every client receives on
+// connect, because a model that cannot see the canvas draws well only if it lets the server do the geometry.
+const styleGuide = `
+
+How to draw a clean diagram (you cannot see the canvas, so let the server lay it out and check the result):
+1. For anything beyond 3 shapes use build_diagram: describe nodes, edges and groups (containers) by id and label. The server sizes shapes from their text, arranges them (no overlaps, containers fitted, edges routed in the gaps) and returns a lint report. Do NOT choose x/y coordinates yourself.
+2. Afterwards call lint_diagram. If it reports problems, fix the cause and call layout (algo=hierarchical, or hierarchical-lr to flow left to right) instead of nudging shapes by hand.
+3. Keep one topic per diagram page and at most ~25 shapes per page: split big systems into several diagrams or pages (overview, then one page per area). Use groups for real boundaries only (a namespace, a tier, a network zone), not for decoration.
+4. Short labels (2-4 words); put detail in a second line or a comment. Edge labels only where they carry meaning, kept short. Choose kind (service, database, queue, actor, external, cloud, decision, note, document) and color (blue, green, orange, red, purple, gray, yellow, teal) consistently: same kind = same meaning, one legend of colors per diagram.
+5. Direction: top-to-bottom (TB) for hierarchies and request flows, left-to-right (LR) for pipelines and timelines. Edges point from caller to callee / from cause to effect.
+6. Writes are rate-limited per minute by the diagram owner: one build_diagram call costs one operation per shape and edge, so build in parts when it reports the quota is exceeded.`
+
 // instructionsFor is the hint shown to the agent when it connects.
 func instructionsFor(a actor) string {
 	if a.DocScope != "" {
-		return "Tools to read and edit one draw.io diagram (" + a.DocScope + "). Your access token opens only this diagram, so the document argument can be left out. Your edits are attributed to this token, rate-limited by the diagram owner and revertible."
+		return "Tools to read and edit one draw.io diagram (" + a.DocScope + "). Your access token opens only this diagram, so the document argument can be left out. Your edits are attributed to this token, rate-limited by the diagram owner and revertible." + styleGuide
 	}
-	return "Tools to read and edit shared draw.io diagrams. You act as an AI collaborator on behalf of the signed-in user: you only see diagrams that allow AI and that were shared with you, and your edits are attributed, rate-limited and revertible."
+	return "Tools to read and edit shared draw.io diagrams. You act as an AI collaborator on behalf of the signed-in user: you only see diagrams that allow AI and that were shared with you, and your edits are attributed, rate-limited and revertible." + styleGuide
 }
 
 func (s *Server) dispatch(ctx context.Context, a actor, req rpcReq) (any, *rpcErr) {

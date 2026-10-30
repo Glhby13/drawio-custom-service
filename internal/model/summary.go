@@ -254,6 +254,12 @@ func (d *Doc) LayoutOps(pageID, algo string, idPrefix string) ([]Op, error) {
 	if pg == nil || pg.Dead != 0 {
 		return nil, errPage
 	}
+	switch algo {
+	case "", AlgoHierarchical:
+		return d.hierarchicalOps(pg, pageID, idPrefix, false)
+	case AlgoHierarchicalLR:
+		return d.hierarchicalOps(pg, pageID, idPrefix, true)
+	}
 	var layer string
 	for _, c := range pg.Children("0") {
 		layer = c.ID

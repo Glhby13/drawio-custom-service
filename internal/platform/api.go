@@ -40,6 +40,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/v1/documents/{id}/content", s.api(s.getContent))
 	mux.HandleFunc("POST /api/v1/documents/{id}/operations", s.api(s.postOperations))
 	mux.HandleFunc("POST /api/v1/documents/{id}/layout", s.api(s.postLayout))
+	mux.HandleFunc("POST /api/v1/documents/{id}/build", s.api(s.postBuild))
+	mux.HandleFunc("GET /api/v1/documents/{id}/lint", s.api(s.getLint))
 	mux.HandleFunc("GET /api/v1/documents/{id}/history", s.api(s.getHistory))
 	mux.HandleFunc("GET /api/v1/documents/{id}/history/{batch}", s.api(s.getHistoryBatch))
 	mux.HandleFunc("POST /api/v1/documents/{id}/revert", s.api(s.postRevert))
@@ -524,7 +526,7 @@ func (s *Server) postOperations(w http.ResponseWriter, r *http.Request, p *Princ
 	writeJSON(w, http.StatusOK, map[string]any{"batch": in.Batch, "seqs": seqs, "duplicate": res.Duplicate, "overridden": res.Overridden})
 }
 
-// postLayout arranges the top-level vertices of one page ("layered" or "grid") as ordinary setPos operations, so the result
+// postLayout arranges one page ("hierarchical" by default, "hierarchical-lr", or the simple "layered" / "grid" for top-level shapes) as ordinary operations, so the result
 // is attributed, authorised, versioned and revertible like any other edit.
 func (s *Server) postLayout(w http.ResponseWriter, r *http.Request, p *Principal) {
 	d, _, ok := s.access(w, r, p, ActEdit)
@@ -538,11 +540,8 @@ func (s *Server) postLayout(w http.ResponseWriter, r *http.Request, p *Principal
 	if !readJSON(w, r, &in, 4096) {
 		return
 	}
-	if in.Algo == "" {
-		in.Algo = "layered"
-	}
-	if in.Algo != "layered" && in.Algo != "grid" {
-		writeErr(w, http.StatusBadRequest, "bad_request", "algo must be layered or grid")
+	if !model.ValidAlgo(in.Algo) { // empty = hierarchical: containers, crossing reduction and routed edges
+		writeErr(w, http.StatusBadRequest, "bad_request", "algo must be hierarchical, hierarchical-lr, layered or grid")
 		return
 	}
 	var ops []model.Op
