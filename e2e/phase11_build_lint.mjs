@@ -69,10 +69,9 @@ const spec = {
 r = await tool(tok, 'build_diagram', spec);
 check('build_diagram creates 13 shapes, 17 edges, 4 groups in one call', r.ok && /Built 13 shape\(s\), 17 edge\(s\), 4 group\(s\)/.test(r.text), r.text.slice(0, 200));
 check('the build result already carries the lint verdict with nothing at error level', r.ok && /Lint: 17 shape\(s\)|Lint: 13 shape\(s\)|Lint:/.test(r.text) && !/\[error\]/.test(r.text), r.text.slice(0, 400));
-const cells = await owner.page.waitForFunction(() => {
-  const m = window.__adapter.editorUi().editor.graph.getModel();
-  return Object.values(m.cells).filter(c => c.vertex || c.edge).length;
-}, null, { timeout: 30000 }).then(h => h.jsonValue()).catch(() => 0);
+const countCells = () => owner.page.evaluate(() => Object.values(window.__adapter.editorUi().editor.graph.getModel().cells).filter(c => c.vertex || c.edge).length);
+let cells = 0;
+for (let i = 0; i < 60 && cells < 13 + 4 + 17; i++) { cells = await countCells(); if (cells < 13 + 4 + 17) await owner.page.waitForTimeout(500); }
 check('the live editor shows every shape, container and edge', cells === 13 + 4 + 17, String(cells));
 
 // ---- lint: independent verdict, then break it and see it caught -----------------------------------------------------------------------------
