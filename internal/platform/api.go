@@ -31,6 +31,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/v1/documents/{id}", s.api(s.getDoc))
 	mux.HandleFunc("PATCH /api/v1/documents/{id}", s.api(s.patchDoc))
 	mux.HandleFunc("DELETE /api/v1/documents/{id}", s.api(s.deleteDoc))
+	mux.HandleFunc("GET /api/v1/trash", s.api(s.listTrash))
+	mux.HandleFunc("POST /api/v1/documents/{id}/undelete", s.api(s.undeleteDoc))
 	mux.HandleFunc("GET /api/v1/documents/{id}/permissions", s.api(s.getPerms))
 	mux.HandleFunc("PUT /api/v1/documents/{id}/permissions", s.api(s.putPerm))
 	mux.HandleFunc("PUT /api/v1/documents/{id}/ai-policy", s.api(s.putAIPolicy))
@@ -328,6 +330,61 @@ func (s *Server) deleteDoc(w http.ResponseWriter, r *http.Request, p *Principal)
 	_ = s.store.Audit(r.Context(), p.Actor, d.ID, "delete", "ok", map[string]string{"title": d.Title})
 	s.notifyPerm(d.ID)
 	writeJSON(w, http.StatusOK, map[string]bool{"deleted": true})
+}
+
+// listTrash lists the soft-deleted diagrams the caller may bring back (their own; an application admin sees all).
+// AI actors never see the trash.
+func (s *Server) listTrash(w http.ResponseWriter, r *http.Request, p *Principal) {
+	if p.IsAI {
+		writeErr(w, http.StatusForbidden, "forbidden", "not allowed")
+		return
+	}
+	items, err := s.store.ListTrash(r.Context(), p.Username, p.IsAdmin)
+	if err != nil {
+		s.log.Error("list trash", "err", err.Error())
+		writeErr(w, http.StatusInternalServerError, "internal", "")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"documents": items})
+}
+
+// undeleteDoc brings a soft-deleted diagram back. Same rule as deleting it (ActDelete: the owner or an application
+// admin, never an AI actor); anybody else is told "not found" so the trash is no existence oracle.
+func (s *Server) undeleteDoc(w http.ResponseWriter, r *http.Request, p *Principal) {
+	if p.IsAI {
+		writeErr(w, http.StatusForbidden, "forbidden", "not allowed")
+		return
+	}
+	d, err := s.store.GetDeletedDocument(r.Context(), r.PathValue("id"))
+	if err != nil {
+		if errors.Is(err, errNotFound) {
+			writeErr(w, http.StatusNotFound, "not_found", "document not found")
+		} else {
+			writeErr(w, http.StatusInternalServerError, "internal", "")
+		}
+		return
+	}
+	role := RoleNone
+	if d.Owner == p.Username {
+		role = RoleOwner
+	}
+	if !s.can(p, role, ActDelete) {
+		_ = s.store.Audit(r.Context(), p.Actor, d.ID, "undelete", "denied", map[string]string{"role": role})
+		writeErr(w, http.StatusNotFound, "not_found", "document not found")
+		return
+	}
+	found, err := s.store.Undelete(r.Context(), d.ID)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, "internal", "")
+		return
+	}
+	if !found {
+		writeErr(w, http.StatusNotFound, "not_found", "document not found")
+		return
+	}
+	_ = s.store.Audit(r.Context(), p.Actor, d.ID, "undelete", "ok", map[string]string{"title": d.Title})
+	s.notifyPerm(d.ID)
+	writeJSON(w, http.StatusOK, map[string]any{"restored": true, "document": d})
 }
 
 // notifyPerm makes every session on every replica re-evaluate its role.

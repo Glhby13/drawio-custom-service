@@ -165,6 +165,55 @@ func (s *Store) SoftDelete(ctx context.Context, id string) error {
 	return err
 }
 
+// TrashItem is one soft-deleted document.
+type TrashItem struct {
+	DocMeta
+	DeletedAt time.Time `json:"deletedAt"`
+}
+
+// GetDeletedDocument returns a soft-deleted document (and only a deleted one: GetDocument is its counterpart).
+func (s *Store) GetDeletedDocument(ctx context.Context, id string) (*DocMeta, error) {
+	return scanDoc(s.pool.QueryRow(ctx, `SELECT `+docCols+` FROM documents WHERE id=$1 AND deleted_at IS NOT NULL`, id))
+}
+
+// ListTrash returns the soft-deleted documents the caller may bring back: the ones they own; an application admin sees all.
+func (s *Store) ListTrash(ctx context.Context, username string, admin bool) ([]TrashItem, error) {
+	q := `SELECT ` + docCols + `, deleted_at FROM documents WHERE deleted_at IS NOT NULL`
+	if !admin {
+		q += ` AND owner=$1`
+	}
+	q += ` ORDER BY deleted_at DESC LIMIT 500`
+	args := []any{}
+	if !admin {
+		args = append(args, username)
+	}
+	rows, err := s.pool.Query(ctx, q, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []TrashItem{}
+	for rows.Next() {
+		var it TrashItem
+		var ai []byte
+		if err := rows.Scan(&it.ID, &it.Title, &it.Owner, &it.CreatedAt, &it.UpdatedAt, &it.HeadSeq, &it.SnapshotSeq, &ai, &it.DeletedAt); err != nil {
+			return nil, err
+		}
+		_ = json.Unmarshal(ai, &it.AI)
+		out = append(out, it)
+	}
+	return out, rows.Err()
+}
+
+// Undelete brings a soft-deleted document back; it reports whether a deleted document was found.
+func (s *Store) Undelete(ctx context.Context, id string) (bool, error) {
+	tag, err := s.pool.Exec(ctx, `UPDATE documents SET deleted_at=NULL WHERE id=$1 AND deleted_at IS NOT NULL`, id)
+	if err != nil {
+		return false, err
+	}
+	return tag.RowsAffected() == 1, nil
+}
+
 // SetAIPolicy stores the policy.
 func (s *Store) SetAIPolicy(ctx context.Context, id string, p AIPolicy) error {
 	b, _ := json.Marshal(p)

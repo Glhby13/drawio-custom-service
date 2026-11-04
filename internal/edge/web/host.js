@@ -165,11 +165,39 @@
   }
 
   // ---- list view -------------------------------------------------------------------------------------------------------
-  var allDocs = [];
+  var allDocs = [], trashDocs = [], loadedTrash = false;
+  // the application admin may move any diagram to the Trash and bring it back; everybody else only their own
+  function isAppAdmin() { var r = (me && me.roles) || []; return r.indexOf('admin') >= 0 || r.indexOf('drawio-admin') >= 0; }
+  // the filter lives in the URL (?scope=trash) so a reload or a shared link keeps the view
+  function scopeFromUrl() { var s = new URLSearchParams(location.search).get('scope'); return ['all', 'mine', 'shared', 'trash'].indexOf(s) >= 0 ? s : 'all'; }
+  function loadDocs() {
+    var trash = $('scope').value === 'trash';
+    return api('GET', trash ? '/trash' : '/documents').then(function (r) {
+      if (trash) trashDocs = r.documents || []; else allDocs = r.documents || [];
+      loadedTrash = trash;
+      renderList();
+    }).catch(function (e) { setStatus('error', 'Could not load diagrams'); toast('error', e.message); });
+  }
+  // moves one diagram to the Trash after a confirmation dialog; the Trash is the undo
+  function trashDoc(d) {
+    return ask('Move to Trash', '“' + d.title + '” leaves your list. You can bring it back from the Trash.', 'Move to Trash').then(function (ok) {
+      if (!ok) return false;
+      return api('DELETE', '/documents/' + encodeURIComponent(d.id)).then(function () { toast('info', 'Moved to Trash: ' + d.title); return true; })
+        .catch(function (e) { toast('error', e.message); return false; });
+    });
+  }
+  function trashIcon() {
+    var s = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    s.setAttribute('viewBox', '0 0 24 24'); s.setAttribute('width', '16'); s.setAttribute('height', '16'); s.setAttribute('fill', 'none');
+    s.setAttribute('stroke', 'currentColor'); s.setAttribute('stroke-width', '2'); s.setAttribute('stroke-linecap', 'round'); s.setAttribute('stroke-linejoin', 'round'); s.setAttribute('aria-hidden', 'true');
+    s.innerHTML = '<path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/>';
+    return s;
+  }
   function showList() {
     $('list-view').hidden = false;
     setStatus('auth', 'Signed in');
-    api('GET', '/documents').then(function (r) { allDocs = r.documents || []; renderList(); }).catch(function (e) { setStatus('error', 'Could not load diagrams'); toast('error', e.message); });
+    $('scope').value = scopeFromUrl();
+    loadDocs();
     $('new').onclick = function () {
       prompt2('New diagram', 'Title', 'Untitled diagram').then(function (t) {
         if (t === null) return;
@@ -187,11 +215,19 @@
       };
       reader.readAsText(f);
     };
-    $('filter').oninput = renderList; $('scope').onchange = renderList;
+    $('filter').oninput = renderList;
+    $('scope').onchange = function () {
+      var u = new URL(location.href);
+      if (this.value === 'all') u.searchParams.delete('scope'); else u.searchParams.set('scope', this.value);
+      history.replaceState(null, '', u);
+      if ((this.value === 'trash') !== loadedTrash) loadDocs(); else renderList();
+    };
   }
   function renderList() {
     var q = $('filter').value.trim().toLowerCase(), scope = $('scope').value, box = $('docs');
     box.textContent = '';
+    if (scope === 'trash') { renderTrash(q, box); return; }
+    $('empty').textContent = 'No diagrams yet. Create one or import a .drawio file.';
     var rows = allDocs.filter(function (d) {
       if (q && d.title.toLowerCase().indexOf(q) < 0) return false;
       if (scope === 'mine') return d.owner === me.username;
@@ -201,10 +237,39 @@
     rows.forEach(function (d) {
       var chips = [el('span', { class: 'chip', text: d.role })];
       if (d.aiPolicy && d.aiPolicy.allowed) chips.push(el('span', { class: 'chip ai', text: 'AI allowed' }));
-      box.appendChild(el('a', { class: 'doc', href: '/d/' + d.id, role: 'listitem' }, [
+      var kids = [el('a', { class: 'doc', href: '/d/' + d.id }, [
         el('span', { class: 'doc-title', text: d.title }),
         el('span', null, chips),
         el('span', { class: 'doc-meta', text: 'Owner ' + d.owner + ' · updated ' + ago(d.updatedAt) + ' · revision ' + d.headSeq }),
+      ])];
+      if (d.role === 'owner' || isAppAdmin()) {
+        var del = el('button', { class: 'btn icon doc-act', type: 'button', title: 'Move to Trash', 'aria-label': 'Move “' + d.title + '” to Trash', onclick: function () {
+          del.disabled = true;
+          trashDoc(d).then(function (done) { if (done) loadDocs(); else del.disabled = false; });
+        } }, [trashIcon()]);
+        kids.push(del);
+      }
+      box.appendChild(el('div', { class: 'doc-row', role: 'listitem' }, kids));
+    });
+    $('empty').hidden = rows.length > 0;
+  }
+  // the Trash lists what the caller may bring back (their own diagrams; the application admin sees all)
+  function renderTrash(q, box) {
+    $('empty').textContent = 'The Trash is empty. Diagrams you delete stay here until you restore them.';
+    var rows = trashDocs.filter(function (d) { return !q || d.title.toLowerCase().indexOf(q) >= 0; });
+    rows.forEach(function (d) {
+      var btn = el('button', { class: 'btn sm doc-act', type: 'button', text: 'Restore Diagram', 'aria-label': 'Restore “' + d.title + '”', onclick: function () {
+        btn.disabled = true; btn.textContent = 'Restoring…';
+        api('POST', '/documents/' + encodeURIComponent(d.id) + '/undelete').then(function () { toast('info', 'Restored: ' + d.title); loadDocs(); })
+          .catch(function (e) { btn.disabled = false; btn.textContent = 'Restore Diagram'; toast('error', e.message); });
+      } });
+      box.appendChild(el('div', { class: 'doc-row', role: 'listitem' }, [
+        el('div', { class: 'doc doc-trash' }, [
+          el('span', { class: 'doc-title', text: d.title }),
+          el('span', null, [el('span', { class: 'chip off', text: 'In Trash' })]),
+          el('span', { class: 'doc-meta', text: 'Owner ' + d.owner + ' · deleted ' + ago(d.deletedAt) + ' · revision ' + d.headSeq }),
+        ]),
+        btn,
       ]));
     });
     $('empty').hidden = rows.length > 0;
@@ -333,6 +398,21 @@
     };
     var edit = ui.menus.get('edit'), origEdit = edit.funct;
     edit.funct = function (menu, parent) { origEdit.apply(this, arguments); addCopyAs(menu, parent); };
+    // File > Move to Trash… for the owner / application admin (the server decides: doc.can.delete); the Trash is the undo
+    var fileMenu = ui.menus.get('file');
+    if (fileMenu && !fileMenu.drawspaceTrash) {
+      var origFile = fileMenu.funct;
+      fileMenu.drawspaceTrash = true;
+      fileMenu.funct = function (menu, parent) {
+        origFile.apply(this, arguments);
+        if (doc && doc.can && doc.can['delete']) {
+          menu.addSeparator(parent);
+          menu.addItem('Move to Trash…', null, function () {
+            trashDoc({ id: id, title: (doc.document && doc.document.title) || 'this diagram' }).then(function (done) { if (done) location.href = '/?scope=trash'; });
+          }, parent);
+        }
+      };
+    }
   }
 
   function saveVersionDialog(id) {
