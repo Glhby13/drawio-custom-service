@@ -119,19 +119,29 @@ select.field, .select { appearance: none; -webkit-appearance: none; padding: 0 3
 .btn[disabled] { opacity: .5; cursor: not-allowed; }
 
 .docs { display: grid; gap: 8px; }
-.doc { display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; align-items: center; padding: 12px 16px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; text-decoration: none; color: inherit; }
-.doc:hover { border-color: var(--blue); box-shadow: 0 1px 6px rgba(24, 104, 219, .15); }
-.doc-row { display: flex; align-items: stretch; gap: 8px; }
-.doc-row .doc { flex: 1; min-width: 0; }
+.doc { position: relative; display: flex; align-items: center; gap: 12px; padding: 12px 16px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; color: inherit; }
+.doc:hover, .doc:focus-within { border-color: var(--blue); box-shadow: 0 1px 6px rgba(24, 104, 219, .15); }
 .doc.doc-trash:hover { border-color: var(--border); box-shadow: none; }
-.doc-act { align-self: center; flex: none; touch-action: manipulation; }
+.doc-main { flex: 1; min-width: 0; display: grid; gap: 4px; justify-items: start; }
+.doc-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+/* the title link stretches over the whole card; the chips and the delete button sit above it and keep their own clicks */
+.doc-link { text-decoration: none; max-width: 100%; }
+.doc-link::after { content: ''; position: absolute; inset: 0; border-radius: 10px; }
+.doc-link:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+.doc-act, .chip.shared { position: relative; z-index: 1; }
+.doc-act { flex: none; touch-action: manipulation; }
 .btn.icon { width: 34px; padding: 0; justify-content: center; color: var(--muted); }
 .btn.icon:hover { color: #ef4444; border-color: rgba(239, 68, 68, .45); background: rgba(239, 68, 68, .08); }
 .doc-title { font-size: 15px; font-weight: 600; color: var(--text-strong); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.doc-meta { font-size: 12px; color: var(--muted); grid-column: 1; }
+.doc-meta { font-size: 12px; color: var(--muted); }
 .chip { display: inline-block; padding: 2px 8px; border-radius: 999px; background: #e0ecff; color: #0b3d91; font-size: 11px; font-weight: 600; text-transform: capitalize; }
 .chip.ai { background: #f3e8ff; color: #6b21a8; }
 .chip.off { background: #fee2e2; color: #991b1b; }
+.chip.shared { background: #fef3c7; color: #92400e; border: 0; font-family: inherit; cursor: pointer; text-transform: none; }
+.chip.shared:hover { background: #fde68a; }
+.chip.shared:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+.share-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; max-height: 50vh; overflow: auto; }
+.share-list li { display: flex; justify-content: space-between; gap: 12px; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--border); }
 .chip.on { background: #dcfce7; color: #166534; }
 .empty { color: var(--muted); text-align: center; margin-top: 48px; }
 

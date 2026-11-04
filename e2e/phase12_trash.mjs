@@ -1,5 +1,5 @@
 // Trash / Restore E2E against the lab (ADR-0018): the list icon, the confirmation dialog, the Trash filter (?scope=trash), Restore,
-// who may delete (owner / app admin only), and that a deleted diagram is gone for everybody else.
+// who may delete (the owner only, ADR-0019), the yellow Shared chip, the filters, and that a deleted diagram is gone for everybody else.
 // Run: node e2e/phase12_trash.mjs   (needs the platform + gateway with the ADR-0018 change; lab test users from lab/SECRETS.md)
 import { BASE, check, finish, launch, newPage, keycloakLogin } from './lib.mjs';
 
@@ -20,7 +20,7 @@ const api = (s, method, path, body) => s.page.evaluate(async ({ method, path, bo
   return { status: r.status, json: j };
 }, { method, path, body, csrf: s.csrf });
 const inList = (r, id) => (r.json && r.json.documents || []).some(d => d.id === id);
-const row = (s, title) => s.page.locator('.doc-row', { hasText: title });
+const row = (s, title) => s.page.locator('.doc', { hasText: title });
 
 const owner = await login('e2e-team1');
 const editor = await login('lab-test');
@@ -37,14 +37,34 @@ await api(owner, 'PUT', '/documents/' + id + '/permissions', { subject: 'e2e-use
 
 // ---- UI: the owner sees the trash icon, the editor and the viewer do not
 await owner.page.goto(BASE + '/', { waitUntil: 'domcontentloaded' });
-await owner.page.waitForSelector('#docs .doc-row');
+await owner.page.waitForSelector('#docs .doc');
 const ownerBtn = row(owner, title).locator('button.doc-act');
 check('owner sees the Move-to-Trash icon button with an accessible name', (await ownerBtn.count()) === 1 && /Move .* to Trash/.test((await ownerBtn.getAttribute('aria-label')) || ''), await ownerBtn.getAttribute('aria-label'));
 for (const [name, s] of [['editor', editor], ['viewer', viewer]]) {
   await s.page.goto(BASE + '/', { waitUntil: 'domcontentloaded' });
-  await s.page.waitForSelector('#docs .doc-row');
+  await s.page.waitForSelector('#docs .doc');
   check(name + ' sees the diagram but NO trash icon', (await row(s, title).count()) === 1 && (await row(s, title).locator('button.doc-act').count()) === 0);
 }
+// ---- ADR-0019: the button lives inside the card; the owner sees a yellow Shared chip that lists who has access; sharees do not
+check('the Move-to-Trash button is inside the same card as the title', (await row(owner, title).locator('.doc-title').count()) === 1 && (await ownerBtn.count()) === 1);
+const chip = row(owner, title).locator('button.chip.shared');
+check('the owner sees a yellow "Shared · 2" chip', (await chip.count()) === 1 && /Shared · 2/.test(await chip.innerText()), await chip.allInnerTexts());
+await chip.click();
+await owner.page.waitForSelector('#dlg[open]');
+const shareTxt = await owner.page.locator('#dlg-body .share-list').innerText();
+check('clicking it lists the people and roles', /lab-test/.test(shareTxt) && /e2e-user2/.test(shareTxt) && /editor/.test(shareTxt) && /viewer/.test(shareTxt), shareTxt);
+check('opening the chip did not navigate away', owner.page.url() === BASE + '/');
+await owner.page.locator('#dlg-actions .btn', { hasText: 'Close' }).click();
+await owner.page.waitForFunction(() => !document.getElementById('dlg').open);
+check('a sharee sees no Shared chip (and no share list in the API)', (await row(editor, title).locator('button.chip.shared').count()) === 0 && !(((await api(editor, 'GET', '/documents')).json.documents.find(d => d.id === id) || {}).sharedWith));
+await owner.page.selectOption('#scope', 'mine');
+check('"Owned by me" keeps it, "Shared with me" hides it for the owner', (await row(owner, title).count()) === 1);
+await owner.page.selectOption('#scope', 'shared');
+check('the owner does not find it under "Shared with me"', (await row(owner, title).count()) === 0);
+await editor.page.selectOption('#scope', 'shared');
+check('the editor finds it under "Shared with me"', (await row(editor, title).count()) === 1);
+await owner.page.selectOption('#scope', 'all');
+await row(owner, title).waitFor();
 check('an editor cannot delete through the API (403)', (await api(editor, 'DELETE', '/documents/' + id)).status === 403);
 check('a viewer cannot delete through the API (403)', (await api(viewer, 'DELETE', '/documents/' + id)).status === 403);
 
@@ -58,8 +78,9 @@ check('Cancel keeps the diagram', (await row(owner, title).count()) === 1 && (aw
 await ownerBtn.click();
 await owner.page.waitForSelector('#dlg[open]');
 await owner.page.locator('#dlg-actions .btn.primary').click();
-await owner.page.waitForFunction(t => ![...document.querySelectorAll('.doc-row')].some(r => r.textContent.includes(t)), title, { timeout: 15000 });
+await owner.page.waitForFunction(t => ![...document.querySelectorAll('.doc')].some(r => r.textContent.includes(t)), title, { timeout: 15000 });
 check('confirming moves it out of the normal list', (await row(owner, title).count()) === 0);
+check('the sharee list drops it entirely (not "trashed" for them)', !inList(await api(editor, 'GET', '/documents'), id) && !inList(await api(editor, 'GET', '/trash'), id));
 check('the deleted diagram is gone for the owner (404) and for the editor (404)', (await api(owner, 'GET', '/documents/' + id)).status === 404 && (await api(editor, 'GET', '/documents/' + id)).status === 404);
 
 // ---- UI: the Trash filter (state in the URL) lists it with a Restore button
@@ -69,13 +90,13 @@ check('the filter is reflected in the URL (?scope=trash)', owner.page.url().incl
 check('the Trash lists the deleted diagram with Restore Diagram', (await row(owner, title).locator('button', { hasText: 'Restore Diagram' }).count()) === 1);
 check('the editor does not see it in their Trash, the AI/other users have none of it', !inList(await api(editor, 'GET', '/trash'), id) && !inList(await api(viewer, 'GET', '/trash'), id));
 await owner.page.reload({ waitUntil: 'domcontentloaded' });
-await owner.page.waitForSelector('#docs .doc-row');
+await owner.page.waitForSelector('#docs .doc');
 check('reload keeps the Trash view (deep link)', (await owner.page.locator('#scope').inputValue()) === 'trash' && (await row(owner, title).count()) === 1);
 check('an editor cannot restore (404) and a stranger gets no existence oracle (404)', (await api(editor, 'POST', '/documents/' + id + '/undelete')).status === 404 && (await api(stranger, 'POST', '/documents/' + id + '/undelete')).status === 404 && !inList(await api(stranger, 'GET', '/trash'), id));
 
 // ---- UI: Restore brings it back, shares included
 await row(owner, title).locator('button', { hasText: 'Restore Diagram' }).click();
-await owner.page.waitForFunction(t => ![...document.querySelectorAll('.doc-row')].some(r => r.textContent.includes(t)), title, { timeout: 15000 });
+await owner.page.waitForFunction(t => ![...document.querySelectorAll('.doc')].some(r => r.textContent.includes(t)), title, { timeout: 15000 });
 check('Restore removes it from the Trash view', (await row(owner, title).count()) === 0);
 check('the restored diagram opens again for owner and editor (shares survived)', (await api(owner, 'GET', '/documents/' + id)).status === 200 && (await api(editor, 'GET', '/documents/' + id)).status === 200);
 await owner.page.selectOption('#scope', 'all');

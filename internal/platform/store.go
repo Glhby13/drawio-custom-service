@@ -84,9 +84,17 @@ func (s *Store) CreateDocument(ctx context.Context, id, title, owner string, ai 
 type DocListItem struct {
 	DocMeta
 	Role string `json:"role"`
+	// SharedWith lists who the diagram is shared with ("*" = everyone); only filled in for the owner and an admin.
+	SharedWith []ShareRef `json:"sharedWith,omitempty"`
 }
 
-// ListDocuments returns documents the subjects can see (owner or shared); admins see all.
+// ShareRef is one share as the diagram list shows it.
+type ShareRef struct {
+	Subject string `json:"subject"`
+	Role    string `json:"role"`
+}
+
+// ListDocuments returns documents the subject can see: owned or shared with them (or with everyone); admins see all.
 func (s *Store) ListDocuments(ctx context.Context, username string, admin bool) ([]DocListItem, error) {
 	q := `SELECT d.id, d.title, d.owner, d.created_at, d.updated_at, d.head_seq, d.snapshot_seq, d.ai_policy,
 	        CASE WHEN d.owner=$1 THEN 'owner' ELSE COALESCE((SELECT p.role FROM permissions p WHERE p.document_id=d.id AND p.subject=$1),
@@ -111,7 +119,39 @@ func (s *Store) ListDocuments(ctx context.Context, username string, admin bool) 
 		_ = json.Unmarshal(ai, &it.AI)
 		out = append(out, it)
 	}
-	return out, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return out, s.attachShares(ctx, out, username, admin)
+}
+
+// attachShares fills SharedWith for the diagrams the caller owns (an admin: every diagram) with one query for the page.
+func (s *Store) attachShares(ctx context.Context, items []DocListItem, username string, admin bool) error {
+	idx := map[string]int{}
+	ids := []string{}
+	for i, it := range items {
+		if admin || it.Owner == username {
+			idx[it.ID] = i
+			ids = append(ids, it.ID)
+		}
+	}
+	if len(ids) == 0 {
+		return nil
+	}
+	rows, err := s.pool.Query(ctx, `SELECT document_id, subject, role FROM permissions WHERE document_id = ANY($1) ORDER BY subject`, ids)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id string
+		var ref ShareRef
+		if err := rows.Scan(&id, &ref.Subject, &ref.Role); err != nil {
+			return err
+		}
+		items[idx[id]].SharedWith = append(items[idx[id]].SharedWith, ref)
+	}
+	return rows.Err()
 }
 
 // RoleOf returns the stored role of subject on the document ("" none).
@@ -176,18 +216,9 @@ func (s *Store) GetDeletedDocument(ctx context.Context, id string) (*DocMeta, er
 	return scanDoc(s.pool.QueryRow(ctx, `SELECT `+docCols+` FROM documents WHERE id=$1 AND deleted_at IS NOT NULL`, id))
 }
 
-// ListTrash returns the soft-deleted documents the caller may bring back: the ones they own; an application admin sees all.
-func (s *Store) ListTrash(ctx context.Context, username string, admin bool) ([]TrashItem, error) {
-	q := `SELECT ` + docCols + `, deleted_at FROM documents WHERE deleted_at IS NOT NULL`
-	if !admin {
-		q += ` AND owner=$1`
-	}
-	q += ` ORDER BY deleted_at DESC LIMIT 500`
-	args := []any{}
-	if !admin {
-		args = append(args, username)
-	}
-	rows, err := s.pool.Query(ctx, q, args...)
+// ListTrash returns the soft-deleted documents the caller may bring back: only the ones they own.
+func (s *Store) ListTrash(ctx context.Context, username string) ([]TrashItem, error) {
+	rows, err := s.pool.Query(ctx, `SELECT `+docCols+`, deleted_at FROM documents WHERE deleted_at IS NOT NULL AND owner=$1 ORDER BY deleted_at DESC LIMIT 500`, username)
 	if err != nil {
 		return nil, err
 	}

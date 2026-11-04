@@ -116,8 +116,9 @@ func (s *Server) sharedRole(ctx context.Context, d *DocMeta, subject string, all
 	return role, nil
 }
 
-// can answers the PDP question. An application admin may read, share, delete, restore, export, set policy and audit any
-// document but never edits content (editing needs an editor/owner share like everybody else).
+// can answers the PDP question. An application admin may read, share, export, set policy and audit any document but
+// never edits content (editing needs an editor/owner share like everybody else) and never deletes or restores somebody
+// else's diagram: moving a diagram to the Trash is the owner's decision alone (ADR-0019).
 func (s *Server) can(p *Principal, role string, a Action) bool {
 	switch a {
 	case ActRead, ActExport:
@@ -128,7 +129,9 @@ func (s *Server) can(p *Principal, role string, a Action) bool {
 		return rank(role) >= rank(RoleEditor)
 	case ActVersions, ActRestore, ActRename:
 		return rank(role) >= rank(RoleEditor) || (p.IsAdmin && a != ActVersions)
-	case ActShare, ActDelete, ActPolicy, ActAudit:
+	case ActDelete:
+		return role == RoleOwner && !p.IsAI
+	case ActShare, ActPolicy, ActAudit:
 		return (role == RoleOwner && !p.IsAI) || p.IsAdmin
 	}
 	return false

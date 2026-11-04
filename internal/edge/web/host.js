@@ -166,8 +166,6 @@
 
   // ---- list view -------------------------------------------------------------------------------------------------------
   var allDocs = [], trashDocs = [], loadedTrash = false;
-  // the application admin may move any diagram to the Trash and bring it back; everybody else only their own
-  function isAppAdmin() { var r = (me && me.roles) || []; return r.indexOf('admin') >= 0 || r.indexOf('drawio-admin') >= 0; }
   // the filter lives in the URL (?scope=trash) so a reload or a shared link keeps the view
   function scopeFromUrl() { var s = new URLSearchParams(location.search).get('scope'); return ['all', 'mine', 'shared', 'trash'].indexOf(s) >= 0 ? s : 'all'; }
   function loadDocs() {
@@ -228,32 +226,42 @@
     box.textContent = '';
     if (scope === 'trash') { renderTrash(q, box); return; }
     $('empty').textContent = 'No diagrams yet. Create one or import a .drawio file.';
+    // "All" = what I own plus what is shared with me (an application admin also sees the rest); the Trash is its own filter
     var rows = allDocs.filter(function (d) {
       if (q && d.title.toLowerCase().indexOf(q) < 0) return false;
       if (scope === 'mine') return d.owner === me.username;
-      if (scope === 'shared') return d.owner !== me.username;
+      if (scope === 'shared') return d.owner !== me.username && !!d.role;
       return true;
     });
     rows.forEach(function (d) {
       var chips = [el('span', { class: 'chip', text: d.role })];
       if (d.aiPolicy && d.aiPolicy.allowed) chips.push(el('span', { class: 'chip ai', text: 'AI allowed' }));
-      var kids = [el('a', { class: 'doc', href: '/d/' + d.id }, [
-        el('span', { class: 'doc-title', text: d.title }),
-        el('span', null, chips),
+      var n = (d.sharedWith || []).length;
+      if (n) chips.push(el('button', { class: 'chip shared', type: 'button', text: 'Shared · ' + n, title: 'Who has access', 'aria-label': 'Shared with ' + n + ' — show who', onclick: function () { showShares(d); } }));
+      var kids = [el('div', { class: 'doc-main' }, [
+        el('a', { class: 'doc-title doc-link', href: '/d/' + d.id, text: d.title }),
+        el('span', { class: 'doc-chips' }, chips),
         el('span', { class: 'doc-meta', text: 'Owner ' + d.owner + ' · updated ' + ago(d.updatedAt) + ' · revision ' + d.headSeq }),
       ])];
-      if (d.role === 'owner' || isAppAdmin()) {
+      if (d.owner === me.username) { // only the owner moves a diagram to the Trash
         var del = el('button', { class: 'btn icon doc-act', type: 'button', title: 'Move to Trash', 'aria-label': 'Move “' + d.title + '” to Trash', onclick: function () {
           del.disabled = true;
           trashDoc(d).then(function (done) { if (done) loadDocs(); else del.disabled = false; });
         } }, [trashIcon()]);
         kids.push(del);
       }
-      box.appendChild(el('div', { class: 'doc-row', role: 'listitem' }, kids));
+      box.appendChild(el('div', { class: 'doc', role: 'listitem' }, kids));
     });
     $('empty').hidden = rows.length > 0;
   }
-  // the Trash lists what the caller may bring back (their own diagrams; the application admin sees all)
+  // the people a diagram is shared with ("*" = everyone), from the list response (owner / admin only)
+  function showShares(d) {
+    var list = el('ul', { class: 'share-list' }, (d.sharedWith || []).map(function (p) {
+      return el('li', null, [el('span', { text: p.subject === '*' ? 'Everyone' : p.subject }), el('span', { class: 'chip', text: p.role })]);
+    }));
+    dialog('Shared “' + d.title + '”', list, [{ label: 'Close', cls: 'primary' }]);
+  }
+  // the Trash lists what the caller may bring back: only their own diagrams
   function renderTrash(q, box) {
     $('empty').textContent = 'The Trash is empty. Diagrams you delete stay here until you restore them.';
     var rows = trashDocs.filter(function (d) { return !q || d.title.toLowerCase().indexOf(q) >= 0; });
@@ -263,10 +271,10 @@
         api('POST', '/documents/' + encodeURIComponent(d.id) + '/undelete').then(function () { toast('info', 'Restored: ' + d.title); loadDocs(); })
           .catch(function (e) { btn.disabled = false; btn.textContent = 'Restore Diagram'; toast('error', e.message); });
       } });
-      box.appendChild(el('div', { class: 'doc-row', role: 'listitem' }, [
-        el('div', { class: 'doc doc-trash' }, [
+      box.appendChild(el('div', { class: 'doc doc-trash', role: 'listitem' }, [
+        el('div', { class: 'doc-main' }, [
           el('span', { class: 'doc-title', text: d.title }),
-          el('span', null, [el('span', { class: 'chip off', text: 'In Trash' })]),
+          el('span', { class: 'doc-chips' }, [el('span', { class: 'chip off', text: 'In Trash' })]),
           el('span', { class: 'doc-meta', text: 'Owner ' + d.owner + ' · deleted ' + ago(d.deletedAt) + ' · revision ' + d.headSeq }),
         ]),
         btn,
