@@ -1,5 +1,5 @@
 // Trash / Restore E2E against the lab (ADR-0018): the list icon, the confirmation dialog, the Trash filter (?scope=trash), Restore,
-// who may delete (the owner only, ADR-0019), the yellow Shared chip, the filters, and that a deleted diagram is gone for everybody else.
+// who may delete (owner / app admin, ADR-0019), the yellow Shared chip, the filters, and that a deleted diagram is gone for everybody else.
 // Run: node e2e/phase12_trash.mjs   (needs the platform + gateway with the ADR-0018 change; lab test users from lab/SECRETS.md)
 import { BASE, check, finish, launch, newPage, keycloakLogin } from './lib.mjs';
 

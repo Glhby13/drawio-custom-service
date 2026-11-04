@@ -37,12 +37,9 @@ func TestIT_TrashAndRestore(t *testing.T) {
 		t.Fatalf("share: %d %v", c, o)
 	}
 
-	// only the owner may delete: an editor and an application admin are refused, a stranger sees nothing
+	// only the owner (or an application admin) may delete: an editor is refused, a stranger sees nothing
 	if c, _ := e.call(bob, "DELETE", "/api/v1/documents/"+id, nil); c != 403 {
 		t.Fatalf("an editor must not delete: %d", c)
-	}
-	if c, _ := e.call(admin, "DELETE", "/api/v1/documents/"+id, nil); c != 403 {
-		t.Fatalf("an application admin must not delete somebody else's diagram: %d", c)
 	}
 	if c, _ := e.call(carol, "DELETE", "/api/v1/documents/"+id, nil); c != 404 {
 		t.Fatalf("a stranger must get 404: %d", c)
@@ -57,12 +54,12 @@ func TestIT_TrashAndRestore(t *testing.T) {
 		t.Fatal("a deleted diagram must leave the normal list")
 	}
 
-	// the trash: only the owner sees it (not an admin, editor or stranger); AI actors are refused
+	// the trash: the owner and an admin see it; an editor / stranger do not; AI actors are refused
 	if _, tr := e.call(alice, "GET", "/api/v1/trash", nil); !inList(tr, id) {
 		t.Fatalf("owner trash must list it: %v", tr)
 	}
-	if _, tr := e.call(admin, "GET", "/api/v1/trash", nil); inList(tr, id) {
-		t.Fatal("an admin's trash must not list somebody else's diagram")
+	if _, tr := e.call(admin, "GET", "/api/v1/trash", nil); !inList(tr, id) {
+		t.Fatal("admin trash must list it")
 	}
 	// the sharee's list no longer shows it at all (it is not "trashed" for them, it is gone)
 	if _, l := e.call(bob, "GET", "/api/v1/documents", nil); inList(l, id) {
@@ -76,7 +73,7 @@ func TestIT_TrashAndRestore(t *testing.T) {
 	}
 
 	// restore: not for the editor, not for a stranger (both 404, no existence oracle), not for an AI actor
-	for _, w := range []who{bob, carol, admin} {
+	for _, w := range []who{bob, carol} {
 		if c, _ := e.call(w, "POST", "/api/v1/documents/"+id+"/undelete", nil); c != 404 {
 			t.Fatalf("%s must not restore: %d", w.user, c)
 		}
@@ -108,6 +105,14 @@ func TestIT_TrashAndRestore(t *testing.T) {
 	_, l = e.call(bob, "GET", "/api/v1/documents", nil)
 	if sw := sharedWithOf(l, id); len(sw) != 0 || !inList(l, id) {
 		t.Fatalf("a sharee must see the diagram but not who else has it: %v", sw)
+	}
+
+	// an application admin can delete and restore any diagram
+	if c, _ := e.call(admin, "DELETE", "/api/v1/documents/"+id, nil); c != 200 {
+		t.Fatalf("admin delete: %d", c)
+	}
+	if c, o := e.call(admin, "POST", "/api/v1/documents/"+id+"/undelete", nil); c != 200 {
+		t.Fatalf("admin restore: %d %v", c, o)
 	}
 }
 

@@ -177,6 +177,8 @@
     }).catch(function (e) { setStatus('error', 'Could not load diagrams'); toast('error', e.message); });
   }
   // moves one diagram to the Trash after a confirmation dialog; the Trash is the undo
+  // the application admin may move any diagram to the Trash and bring it back; everybody else only their own
+  function isAppAdmin() { var r = (me && me.roles) || []; return r.indexOf('admin') >= 0 || r.indexOf('drawio-admin') >= 0; }
   function trashDoc(d) {
     return ask('Move to Trash', '“' + d.title + '” leaves your list. You can bring it back from the Trash.', 'Move to Trash').then(function (ok) {
       if (!ok) return false;
@@ -243,7 +245,7 @@
         el('span', { class: 'doc-chips' }, chips),
         el('span', { class: 'doc-meta', text: 'Owner ' + d.owner + ' · updated ' + ago(d.updatedAt) + ' · revision ' + d.headSeq }),
       ])];
-      if (d.owner === me.username) { // only the owner moves a diagram to the Trash
+      if (d.owner === me.username || isAppAdmin()) { // the owner (or an application admin) moves a diagram to the Trash
         var del = el('button', { class: 'btn icon doc-act', type: 'button', title: 'Move to Trash', 'aria-label': 'Move “' + d.title + '” to Trash', onclick: function () {
           del.disabled = true;
           trashDoc(d).then(function (done) { if (done) loadDocs(); else del.disabled = false; });
@@ -261,7 +263,7 @@
     }));
     dialog('Shared “' + d.title + '”', list, [{ label: 'Close', cls: 'primary' }]);
   }
-  // the Trash lists what the caller may bring back: only their own diagrams
+  // the Trash lists what the caller may bring back (their own diagrams; the application admin sees all)
   function renderTrash(q, box) {
     $('empty').textContent = 'The Trash is empty. Diagrams you delete stay here until you restore them.';
     var rows = trashDocs.filter(function (d) { return !q || d.title.toLowerCase().indexOf(q) >= 0; });

@@ -332,14 +332,15 @@ func (s *Server) deleteDoc(w http.ResponseWriter, r *http.Request, p *Principal)
 	writeJSON(w, http.StatusOK, map[string]bool{"deleted": true})
 }
 
-// listTrash lists the soft-deleted diagrams the caller may bring back: only their own.
+// listTrash lists the soft-deleted diagrams the caller may bring back (their own; an application admin sees all).
+
 // AI actors never see the trash.
 func (s *Server) listTrash(w http.ResponseWriter, r *http.Request, p *Principal) {
 	if p.IsAI {
 		writeErr(w, http.StatusForbidden, "forbidden", "not allowed")
 		return
 	}
-	items, err := s.store.ListTrash(r.Context(), p.Username)
+	items, err := s.store.ListTrash(r.Context(), p.Username, p.IsAdmin)
 	if err != nil {
 		s.log.Error("list trash", "err", err.Error())
 		writeErr(w, http.StatusInternalServerError, "internal", "")
@@ -348,8 +349,8 @@ func (s *Server) listTrash(w http.ResponseWriter, r *http.Request, p *Principal)
 	writeJSON(w, http.StatusOK, map[string]any{"documents": items})
 }
 
-// undeleteDoc brings a soft-deleted diagram back. Same rule as deleting it (ActDelete: the owner only, never an AI actor or an application
-// admin); anybody else is told "not found" so the trash is no existence oracle.
+// undeleteDoc brings a soft-deleted diagram back. Same rule as deleting it (ActDelete: the owner or an application admin, never an AI
+// actor); anybody else is told "not found" so the trash is no existence oracle.
 func (s *Server) undeleteDoc(w http.ResponseWriter, r *http.Request, p *Principal) {
 	if p.IsAI {
 		writeErr(w, http.StatusForbidden, "forbidden", "not allowed")

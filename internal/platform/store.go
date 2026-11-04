@@ -216,9 +216,15 @@ func (s *Store) GetDeletedDocument(ctx context.Context, id string) (*DocMeta, er
 	return scanDoc(s.pool.QueryRow(ctx, `SELECT `+docCols+` FROM documents WHERE id=$1 AND deleted_at IS NOT NULL`, id))
 }
 
-// ListTrash returns the soft-deleted documents the caller may bring back: only the ones they own.
-func (s *Store) ListTrash(ctx context.Context, username string) ([]TrashItem, error) {
-	rows, err := s.pool.Query(ctx, `SELECT `+docCols+`, deleted_at FROM documents WHERE deleted_at IS NOT NULL AND owner=$1 ORDER BY deleted_at DESC LIMIT 500`, username)
+// ListTrash returns the soft-deleted documents the caller may bring back: the ones they own; an application admin sees all.
+func (s *Store) ListTrash(ctx context.Context, username string, admin bool) ([]TrashItem, error) {
+	q := `SELECT ` + docCols + `, deleted_at FROM documents WHERE deleted_at IS NOT NULL`
+	args := []any{}
+	if !admin {
+		q += ` AND owner=$1`
+		args = append(args, username)
+	}
+	rows, err := s.pool.Query(ctx, q+` ORDER BY deleted_at DESC LIMIT 500`, args...)
 	if err != nil {
 		return nil, err
 	}
