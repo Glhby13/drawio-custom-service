@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""Keycloak browser login flow for the Diagrams (draw.io) client, same pattern as ArgoCD/n8n/CloudBeaver (lab realm `lab`).
+"""
+SUPERSEDED 2026-11-04 (structure only): the lab/office access model is now "everybody signs in, only drawio-admin needs TOTP"; after running this
+script also run scripts/setup_keycloak_open_access.py --apply, otherwise the old role gate (drawio-access) and groups come back.
+Keycloak browser login flow for the Diagrams (draw.io) client, same pattern as ArgoCD/n8n/CloudBeaver (lab realm `lab`).
 Idempotent. Lab only: uses scripts/e2e/kc.py (admin password read from lab/SECRETS.md at run time; nothing is written anywhere).
 
   client role   drawio-lab / drawio-access        who may sign in to Diagrams at all
