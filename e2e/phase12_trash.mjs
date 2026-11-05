@@ -38,12 +38,12 @@ await api(owner, 'PUT', '/documents/' + id + '/permissions', { subject: 'e2e-use
 // ---- UI: the owner sees the trash icon, the editor and the viewer do not
 await owner.page.goto(BASE + '/', { waitUntil: 'domcontentloaded' });
 await owner.page.waitForSelector('#docs .doc');
-const ownerBtn = row(owner, title).locator('button.doc-act');
+const ownerBtn = row(owner, title).locator('button[title="Move to Trash"]');
 check('owner sees the Move-to-Trash icon button with an accessible name', (await ownerBtn.count()) === 1 && /Move .* to Trash/.test((await ownerBtn.getAttribute('aria-label')) || ''), await ownerBtn.getAttribute('aria-label'));
 for (const [name, s] of [['editor', editor], ['viewer', viewer]]) {
-  await s.page.goto(BASE + '/', { waitUntil: 'domcontentloaded' });
+  await s.page.goto(BASE + '/?folder=shared', { waitUntil: 'domcontentloaded' }); // shared diagrams sit in the virtual "Shared with me" folder (ADR-0020)
   await s.page.waitForSelector('#docs .doc');
-  check(name + ' sees the diagram but NO trash icon', (await row(s, title).count()) === 1 && (await row(s, title).locator('button.doc-act').count()) === 0);
+  check(name + ' sees the diagram but NO trash icon', (await row(s, title).count()) === 1 && (await row(s, title).locator('button[title="Move to Trash"]').count()) === 0);
 }
 // ---- ADR-0019: the button lives inside the card; the owner sees a yellow Shared chip that lists who has access; sharees do not
 check('the Move-to-Trash button is inside the same card as the title', (await row(owner, title).locator('.doc-title').count()) === 1 && (await ownerBtn.count()) === 1);
@@ -52,7 +52,7 @@ check('the owner sees a yellow "Shared · 2" chip', (await chip.count()) === 1 &
 await chip.click();
 await owner.page.waitForSelector('#dlg[open]');
 const shareTxt = await owner.page.locator('#dlg-body .share-list').innerText();
-check('clicking it lists the people and roles', /lab-test/.test(shareTxt) && /e2e-user2/.test(shareTxt) && /editor/.test(shareTxt) && /viewer/.test(shareTxt), shareTxt);
+check('clicking it lists the people and roles', /lab-test/.test(shareTxt) && /e2e-user2/.test(shareTxt) && /editor/i.test(shareTxt) && /viewer/i.test(shareTxt), shareTxt);
 check('opening the chip did not navigate away', owner.page.url() === BASE + '/');
 await owner.page.locator('#dlg-actions .btn', { hasText: 'Close' }).click();
 await owner.page.waitForFunction(() => !document.getElementById('dlg').open);

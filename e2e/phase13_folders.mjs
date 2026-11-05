@@ -53,6 +53,7 @@ await row(owner, title).locator('button[title="Move to folder…"]').click();
 await owner.page.waitForSelector('#dlg[open] .move-tree');
 await owner.page.locator('#dlg .move-item', { hasText: sub }).click();
 await owner.page.waitForFunction(() => !document.getElementById('dlg').open);
+await row(owner, title).waitFor({ state: 'detached', timeout: 10000 }); // the PUT finished and the list re-rendered
 check('after moving, the diagram leaves the root', (await row(owner, title).count()) === 0);
 await reload(owner, '?folder=' + id2);
 check('a reload on the subfolder URL shows the diagram there', (await row(owner, title).count()) === 1);
@@ -70,10 +71,13 @@ await row(peer, 'Shared with me').locator('a.doc-link').click();
 await row(peer, title).waitFor();
 check('the diagram is inside "Shared with me"', (await row(peer, title).count()) === 1);
 const pf = await api(peer, 'POST', '/folders', { name: 'Dari ' + tag });
+await reload(peer, '?folder=shared'); // the folder was made through the API: reload so the page knows it
+await row(peer, title).waitFor();
 await row(peer, title).locator('button[title="Move to folder…"]').click();
 await peer.page.waitForSelector('#dlg[open] .move-tree');
 await peer.page.locator('#dlg .move-item', { hasText: 'Dari ' + tag }).click();
 await peer.page.waitForFunction(() => !document.getElementById('dlg').open);
+await row(peer, title).waitFor({ state: 'detached', timeout: 10000 });
 await reload(peer, '?folder=' + pf.json.folder.id);
 check('the peer filed the shared diagram in their own folder', (await row(peer, title).count()) === 1);
 check("the owner's view is untouched", ((await api(owner, 'GET', '/documents')).json.documents.find(d => d.id === doc) || {}).folderId === id1);
