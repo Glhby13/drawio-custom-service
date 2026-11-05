@@ -94,9 +94,26 @@ func (s *Server) publish(docID string, m ctlMsg) {
 
 func (s *Server) subscribeLoop(ctx context.Context) {
 	for ctx.Err() == nil {
-		ps := s.rdb.PSubscribe(ctx, "drawio:doc:*")
+		// Redis ACLs match a PSUBSCRIBE pattern literally against the allowed channel patterns, and the `drawio` user is allowed
+		// `&drawio:*`: subscribing to the narrower `drawio:doc:*` is refused with NOPERM (every replica silently stopped hearing
+		// the others, 2026-11-05). Subscribe with the ACL's own pattern and keep only the document channels here.
+		ps := s.rdb.PSubscribe(ctx, "drawio:*")
+		if _, err := ps.Receive(ctx); err != nil { // the subscription confirmation, or the refusal
+			if ctx.Err() == nil {
+				s.log.Error("redis subscribe failed: replicas will not see each other's edits", "err", err.Error())
+			}
+			_ = ps.Close()
+			select {
+			case <-ctx.Done():
+			case <-time.After(5 * time.Second):
+			}
+			continue
+		}
 		ch := ps.Channel()
 		for msg := range ch {
+			if !strings.HasPrefix(msg.Channel, "drawio:doc:") {
+				continue
+			}
 			docID := strings.TrimPrefix(msg.Channel, "drawio:doc:")
 			var m ctlMsg
 			if json.Unmarshal([]byte(msg.Payload), &m) != nil || m.Origin == s.replica {
