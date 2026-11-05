@@ -84,6 +84,9 @@ func (s *Store) CreateDocument(ctx context.Context, id, title, owner string, ai 
 type DocListItem struct {
 	DocMeta
 	Role string `json:"role"`
+	// FolderID/Placed are the CALLER's own view (ADR-0020): Placed=false means the default spot (root / "Shared with me").
+	FolderID *string `json:"folderId"`
+	Placed   bool    `json:"placed"`
 	// SharedWith lists who the diagram is shared with ("*" = everyone); only filled in for the owner and an admin.
 	SharedWith []ShareRef `json:"sharedWith,omitempty"`
 }
@@ -99,7 +102,8 @@ func (s *Store) ListDocuments(ctx context.Context, username string, admin bool) 
 	q := `SELECT d.id, d.title, d.owner, d.created_at, d.updated_at, d.head_seq, d.snapshot_seq, d.ai_policy,
 	        CASE WHEN d.owner=$1 THEN 'owner' ELSE COALESCE((SELECT p.role FROM permissions p WHERE p.document_id=d.id AND p.subject=$1),
 	             (SELECT p.role FROM permissions p WHERE p.document_id=d.id AND p.subject='*'), '') END AS role
-	      FROM documents d WHERE d.deleted_at IS NULL`
+	        , pl.folder_id, (pl.document_id IS NOT NULL) AS placed
+	      FROM documents d LEFT JOIN doc_placement pl ON pl.document_id=d.id AND pl.owner=$1 WHERE d.deleted_at IS NULL`
 	if !admin {
 		q += ` AND (d.owner=$1 OR EXISTS (SELECT 1 FROM permissions p WHERE p.document_id=d.id AND p.subject IN ($1,'*')))`
 	}
@@ -113,7 +117,7 @@ func (s *Store) ListDocuments(ctx context.Context, username string, admin bool) 
 	for rows.Next() {
 		var it DocListItem
 		var ai []byte
-		if err := rows.Scan(&it.ID, &it.Title, &it.Owner, &it.CreatedAt, &it.UpdatedAt, &it.HeadSeq, &it.SnapshotSeq, &ai, &it.Role); err != nil {
+		if err := rows.Scan(&it.ID, &it.Title, &it.Owner, &it.CreatedAt, &it.UpdatedAt, &it.HeadSeq, &it.SnapshotSeq, &ai, &it.Role, &it.FolderID, &it.Placed); err != nil {
 			return nil, err
 		}
 		_ = json.Unmarshal(ai, &it.AI)

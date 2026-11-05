@@ -13,6 +13,9 @@ Author / Agent: Claude Code · Timestamp: 2026-10-25 10:00
 
 - Dev loop: `LOCAL_WEB=1 node e2e/phase5_collab.mjs` memakai aset `internal/edge/web/` dari disk (aset dibenamkan di image gateway; tanpa flag = versi ter-deploy). Jenkins: Go checks dijalankan berurutan (tiga build Go paralel di satu container → OOM cgroup di node lab kecil → build `ABORTED` "Agent was removed").
 
+## Catatan terbaru (2026-11-05) — folder pribadi (ADR-0020)
+- **Folder pribadi + penataan diagram per pengguna** (Claude Code; docs oleh Antigravity flash, review diff oleh Antigravity argon: 3 temuan, semua diperbaiki). Tabel `folders` + `doc_placement` (DDL `004_folders.sql`, `SchemaVersion` 4): murni *view* per pengguna, bukan ACL. Tanpa baris placement = root (milik sendiri) atau folder virtual "Shared with me"; penerima boleh menata diagram share ke foldernya sendiri. Hapus folder memindahkan isi ke induk. Batas: kedalaman 8, 500 folder, nama 1..100 tanpa `/` `\`. Khusus manusia (AI/MCP 403). UI di `internal/edge/web/host.js` (breadcrumb, `?folder=`, Move to folder…, drag/drop; CSP: tanpa inline style). Uji: `folders_test.go`, `TestIT_Folders`, E2E `e2e/phase13_folders.mjs`. Kantor 🟡: DDL 004 wajib sebelum image (`lab/docs/office-sync/DRAWIO-FOLDERS-OFFICE-STEPS.md`, ledger #51).
+
 ## Catatan terbaru (2026-11-04) — DrawSpace
 - **DrawSpace LIVE di kantor** (https://drawspace.dev.btn.co.id, ns `platform-dev`, 4 app ArgoCD Healthy); detail kantor hanya di `~/.claude/notes/portal-platform-surrounding-office-vs-lab.md` §11 (bukan di `lab/`). Lab menjalankan `17c3debb` (ADR-0017).
 - **ADR-0018 Trash + Restore**: kode + tes (`TestIT_TrashAndRestore` lulus di lab) commit lokal `53fdba0`; **di lab: di-push, Jenkins #47 SUCCESS, image `53fdba0d`, E2E `phase12_trash.mjs` 20/20 (2026-11-04)**. Ledger `docs/office-sync/PENDING-LAB-CHANGES.md` #47-#48. Akses kantor: semua user realm bisa login, hanya `drawio-admin` kena TOTP (diatur di Keycloak, tanpa perubahan kode).

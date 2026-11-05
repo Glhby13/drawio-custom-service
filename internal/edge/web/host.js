@@ -168,10 +168,12 @@
   var allDocs = [], trashDocs = [], loadedTrash = false;
   // the filter lives in the URL (?scope=trash) so a reload or a shared link keeps the view
   function scopeFromUrl() { var s = new URLSearchParams(location.search).get('scope'); return ['all', 'mine', 'shared', 'trash'].indexOf(s) >= 0 ? s : 'all'; }
+  var folders = [];
   function loadDocs() {
     var trash = $('scope').value === 'trash';
-    return api('GET', trash ? '/trash' : '/documents').then(function (r) {
-      if (trash) trashDocs = r.documents || []; else allDocs = r.documents || [];
+    var reqs = trash ? [api('GET', '/trash')] : [api('GET', '/documents'), api('GET', '/folders')];
+    return Promise.all(reqs).then(function (rs) {
+      if (trash) trashDocs = rs[0].documents || []; else { allDocs = rs[0].documents || []; folders = rs[1].folders || []; }
       loadedTrash = trash;
       renderList();
     }).catch(function (e) { setStatus('error', 'Could not load diagrams'); toast('error', e.message); });
@@ -216,45 +218,220 @@
       reader.readAsText(f);
     };
     $('filter').oninput = renderList;
+    $('new-folder').onclick = function () {
+      var cur = currentFolder();
+      var parent = cur && cur.real ? cur.id : null;
+      prompt2('New folder', 'Name', '').then(function (n) {
+        if (!n) return;
+        api('POST', '/folders', { name: n, parentId: parent }).then(function (r) { folders.push(r.folder); renderList(); })
+          .catch(function (e) { toast('error', e.message); });
+      });
+    };
+    window.addEventListener('popstate', function () { $('scope').value = scopeFromUrl(); if ((scopeFromUrl() === 'trash') !== loadedTrash) loadDocs(); else renderList(); });
     $('scope').onchange = function () {
       var u = new URL(location.href);
       if (this.value === 'all') u.searchParams.delete('scope'); else u.searchParams.set('scope', this.value);
+      u.searchParams.delete('folder');
       history.replaceState(null, '', u);
       if ((this.value === 'trash') !== loadedTrash) loadDocs(); else renderList();
     };
   }
+  // ---- folders (personal view, ADR-0020) -------------------------------------------------------------------------------
+  // Where a diagram sits for ME: 'root', a folder id, 'shared' (the virtual "Shared with me") or 'others' (admin only: not mine, not shared).
+  function locOf(d) {
+    if (d.placed) {
+      if (!d.folderId) return 'root';
+      if (folders.some(function (f) { return f.id === d.folderId; })) return d.folderId;
+    }
+    if (d.owner === me.username) return 'root';
+    return d.role ? 'shared' : 'others';
+  }
+  function folderById(id) { for (var i = 0; i < folders.length; i++) if (folders[i].id === id) return folders[i]; return null; }
+  function childrenOf(pid) {
+    return folders.filter(function (f) { return (f.parentId || null) === (pid || null); })
+      .sort(function (a, b) { return a.name.toLowerCase() < b.name.toLowerCase() ? -1 : 1; });
+  }
+  // the folder named in the URL: {id, name, real, parentId}; null = the root
+  function currentFolder() {
+    var id = new URLSearchParams(location.search).get('folder');
+    if (id === 'shared') return { id: 'shared', name: 'Shared with me', real: false, parentId: null };
+    if (id === 'others' && isAppAdmin()) return { id: 'others', name: 'Other users’ diagrams', real: false, parentId: null };
+    var f = id && folderById(id);
+    return f ? { id: f.id, name: f.name, real: true, parentId: f.parentId } : null;
+  }
+  function folderPath(id) { // "A › B" for a real folder id
+    var names = [];
+    for (var f = folderById(id), n = 0; f && n < 12; f = f.parentId ? folderById(f.parentId) : null, n++) names.unshift(f.name);
+    return names.join(' › ');
+  }
+  function locLabel(l) { return l === 'root' ? 'Diagrams' : l === 'shared' ? 'Shared with me' : l === 'others' ? 'Other users’ diagrams' : folderPath(l); }
+  function goFolder(id) {
+    var u = new URL(location.href);
+    if (id) u.searchParams.set('folder', id); else u.searchParams.delete('folder');
+    history.pushState(null, '', u);
+    renderList();
+  }
+  function svgIcon(inner) {
+    var s = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    s.setAttribute('viewBox', '0 0 24 24'); s.setAttribute('width', '16'); s.setAttribute('height', '16'); s.setAttribute('fill', 'none');
+    s.setAttribute('stroke', 'currentColor'); s.setAttribute('stroke-width', '2'); s.setAttribute('stroke-linecap', 'round'); s.setAttribute('stroke-linejoin', 'round'); s.setAttribute('aria-hidden', 'true');
+    s.innerHTML = inner;
+    return s;
+  }
+  function folderIcon() { return svgIcon('<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>'); }
+  function moveIcon() { return svgIcon('<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M9 13h6M13 10l3 3-3 3"/>'); }
+  function pencilIcon() { return svgIcon('<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/>'); }
+
+  function canInbox(d) { return d.owner !== me.username && !!d.role; } // the default spot of a diagram shared with me
+  function placeDoc(d, target) { // target: folder id | 'root' | 'inbox'
+    var body = target === 'inbox' ? { inbox: true } : { folderId: target === 'root' ? null : target };
+    return api('PUT', '/documents/' + encodeURIComponent(d.id) + '/placement', body).then(function () {
+      d.placed = target !== 'inbox'; d.folderId = (target === 'inbox' || target === 'root') ? null : target;
+      toast('info', 'Moved “' + d.title + '” to ' + (target === 'inbox' ? locLabel(d.role ? 'shared' : 'others') : locLabel(target)));
+      renderList();
+    }).catch(function (e) { toast('error', e.message); });
+  }
+  // "Move to…": the folder tree as a list of buttons (also the keyboard / touch alternative to dragging)
+  function moveDialog(d) {
+    var here = locOf(d), own = d.owner === me.username;
+    var box = el('div', { class: 'move-tree', role: 'list' });
+    function item(label, depth, target, id) {
+      var btn = el('button', { class: 'btn ghost move-item' + (here === id ? ' current' : ''), type: 'button', role: 'listitem',
+        disabled: here === id, onclick: function () { $('dlg').close(); placeDoc(d, target); } }, [folderIcon(), el('span', { text: label })]);
+      btn.style.paddingLeft = (12 + depth * 18) + 'px'; // CSSOM, not an inline style attribute (CSP style-src)
+      box.appendChild(btn);
+    }
+    item('Diagrams (top level)', 0, 'root', 'root');
+    (function walk(pid, depth) { childrenOf(pid).forEach(function (f) { item(f.name, depth, f.id, f.id); walk(f.id, depth + 1); }); })(null, 1);
+    if (canInbox(d)) item('Shared with me', 0, 'inbox', 'shared');
+    else if (!own && !d.role) item('Other users’ diagrams', 0, 'inbox', 'others'); // administrator view of an unshared diagram
+    if (!folders.length) box.appendChild(el('p', { class: 'doc-meta', text: 'You have no folders yet. Use “New folder” to create one.' }));
+    dialog('Move “' + d.title + '”', box, [{ label: 'Cancel' }]);
+  }
+  function renameFolder(f) {
+    prompt2('Rename folder', 'Name', f.name).then(function (n) {
+      if (!n || n === f.name) return;
+      api('PATCH', '/folders/' + encodeURIComponent(f.id), { name: n }).then(function (r) { f.name = r.folder.name; renderList(); })
+        .catch(function (e) { toast('error', e.message); });
+    });
+  }
+  function deleteFolder(f) {
+    var parent = f.parentId ? folderById(f.parentId) : null;
+    ask('Delete folder', '“' + f.name + '” is removed. Its diagrams and subfolders move up to ' + (parent ? '“' + parent.name + '”' : 'the top level') + '; nothing is deleted.', 'Delete folder').then(function (ok) {
+      if (!ok) return;
+      api('DELETE', '/folders/' + encodeURIComponent(f.id)).then(function () {
+        if ((currentFolder() || {}).id === f.id) { var u = new URL(location.href); if (f.parentId) u.searchParams.set('folder', f.parentId); else u.searchParams.delete('folder'); history.replaceState(null, '', u); }
+        loadDocs();
+      }).catch(function (e) { toast('error', e.message); });
+    });
+  }
+  // drag a diagram card onto a folder card / breadcrumb; the drop target decides the placement
+  var dragDoc = null;
+  function dropTarget(node, target) { // target: folder id | 'root' | 'inbox'; inbox only for diagrams that are not mine
+    node.addEventListener('dragover', function (e) {
+      if (!dragDoc) return;
+      if (target === 'inbox' && !canInbox(dragDoc)) return;
+      e.preventDefault(); node.classList.add('drop-over');
+    });
+    node.addEventListener('dragleave', function () { node.classList.remove('drop-over'); });
+    node.addEventListener('drop', function (e) {
+      node.classList.remove('drop-over');
+      if (!dragDoc) return;
+      e.preventDefault();
+      var d = dragDoc; dragDoc = null;
+      placeDoc(d, target);
+    });
+  }
+  function folderRow(name, meta, id, real, f) {
+    var link = el('a', { class: 'doc-title doc-link', href: '?folder=' + encodeURIComponent(id), text: name, onclick: function (e) {
+      if (e.metaKey || e.ctrlKey || e.shiftKey || e.button) return;
+      e.preventDefault(); goFolder(id);
+    } });
+    var kids = [el('span', { class: 'folder-ico' }, [folderIcon()]), el('div', { class: 'doc-main' }, [link, el('span', { class: 'doc-meta', text: meta })])];
+    if (real) {
+      kids.push(el('button', { class: 'btn icon neutral doc-act', type: 'button', title: 'Rename folder', 'aria-label': 'Rename folder ' + name, onclick: function () { renameFolder(f); } }, [pencilIcon()]));
+      kids.push(el('button', { class: 'btn icon doc-act', type: 'button', title: 'Delete folder', 'aria-label': 'Delete folder ' + name, onclick: function () { deleteFolder(f); } }, [trashIcon()]));
+    }
+    var row = el('div', { class: 'doc doc-folder', role: 'listitem' }, kids);
+    if (real) dropTarget(row, id); else if (id === 'shared') dropTarget(row, 'inbox');
+    return row;
+  }
+  function docRow(d, loc) {
+    var chips = [el('span', { class: 'chip', text: d.role })];
+    if (loc) chips.push(el('span', { class: 'chip loc', text: locLabel(loc), title: 'Location' }));
+    if (d.aiPolicy && d.aiPolicy.allowed) chips.push(el('span', { class: 'chip ai', text: 'AI allowed' }));
+    var n = (d.sharedWith || []).length;
+    if (n) chips.push(el('button', { class: 'chip shared', type: 'button', text: 'Shared · ' + n, title: 'Who has access', 'aria-label': 'Shared with ' + n + ' — show who', onclick: function () { showShares(d); } }));
+    var kids = [el('div', { class: 'doc-main' }, [
+      el('a', { class: 'doc-title doc-link', href: '/d/' + d.id, text: d.title }),
+      el('span', { class: 'doc-chips' }, chips),
+      el('span', { class: 'doc-meta', text: 'Owner ' + d.owner + ' · updated ' + ago(d.updatedAt) + ' · revision ' + d.headSeq }),
+    ])];
+    kids.push(el('button', { class: 'btn icon neutral doc-act', type: 'button', title: 'Move to folder…', 'aria-label': 'Move “' + d.title + '” to a folder', onclick: function () { moveDialog(d); } }, [moveIcon()]));
+    if (d.owner === me.username || isAppAdmin()) { // the owner (or an application admin) moves a diagram to the Trash
+      var del = el('button', { class: 'btn icon doc-act', type: 'button', title: 'Move to Trash', 'aria-label': 'Move “' + d.title + '” to Trash', onclick: function () {
+        del.disabled = true;
+        trashDoc(d).then(function (done) { if (done) loadDocs(); else del.disabled = false; });
+      } }, [trashIcon()]);
+      kids.push(del);
+    }
+    var row = el('div', { class: 'doc', role: 'listitem', draggable: 'true' }, kids);
+    row.addEventListener('dragstart', function (e) { dragDoc = d; row.classList.add('dragging'); e.dataTransfer.effectAllowed = 'move'; try { e.dataTransfer.setData('text/plain', d.title); } catch (x) { /* ignore */ } });
+    row.addEventListener('dragend', function () { dragDoc = null; row.classList.remove('dragging'); });
+    return row;
+  }
+  function renderCrumbs(cur, box) {
+    var nav = $('crumbs');
+    nav.textContent = '';
+    var parts = [];
+    if (cur && cur.real) { for (var f = folderById(cur.id), n = 0; f && n < 12; f = f.parentId ? folderById(f.parentId) : null, n++) parts.unshift(f); }
+    function crumb(label, id, last) {
+      if (last) return el('span', { class: 'crumb current', 'aria-current': 'page', text: label });
+      var a = el('a', { class: 'crumb', href: id ? '?folder=' + encodeURIComponent(id) : location.pathname, text: label, onclick: function (e) {
+        if (e.metaKey || e.ctrlKey || e.shiftKey || e.button) return; e.preventDefault(); goFolder(id);
+      } });
+      dropTarget(a, id || 'root');
+      return a;
+    }
+    var items = [crumb('Diagrams', null, !cur)];
+    if (cur && !cur.real) items.push(crumb(cur.name, cur.id, true));
+    parts.forEach(function (f, i) { items.push(crumb(f.name, f.id, i === parts.length - 1)); });
+    items.forEach(function (c, i) { if (i) nav.appendChild(el('span', { class: 'crumb-sep', 'aria-hidden': 'true', text: '›' })); nav.appendChild(c); });
+  }
   function renderList() {
     var q = $('filter').value.trim().toLowerCase(), scope = $('scope').value, box = $('docs');
     box.textContent = '';
-    if (scope === 'trash') { renderTrash(q, box); return; }
+    var inTrash = scope === 'trash';
+    // folder navigation only in the plain "All" view without a search; a filter or a search lists flat and shows each diagram's location
+    var tree = scope === 'all' && !q;
+    $('crumbs').hidden = !tree; $('new-folder').hidden = inTrash;
+    if (inTrash) { renderTrash(q, box); return; }
     $('empty').textContent = 'No diagrams yet. Create one or import a .drawio file.';
-    // "All" = what I own plus what is shared with me (an application admin also sees the rest); the Trash is its own filter
-    var rows = allDocs.filter(function (d) {
-      if (q && d.title.toLowerCase().indexOf(q) < 0) return false;
-      if (scope === 'mine') return d.owner === me.username;
-      if (scope === 'shared') return d.owner !== me.username && !!d.role;
-      return true;
-    });
-    rows.forEach(function (d) {
-      var chips = [el('span', { class: 'chip', text: d.role })];
-      if (d.aiPolicy && d.aiPolicy.allowed) chips.push(el('span', { class: 'chip ai', text: 'AI allowed' }));
-      var n = (d.sharedWith || []).length;
-      if (n) chips.push(el('button', { class: 'chip shared', type: 'button', text: 'Shared · ' + n, title: 'Who has access', 'aria-label': 'Shared with ' + n + ' — show who', onclick: function () { showShares(d); } }));
-      var kids = [el('div', { class: 'doc-main' }, [
-        el('a', { class: 'doc-title doc-link', href: '/d/' + d.id, text: d.title }),
-        el('span', { class: 'doc-chips' }, chips),
-        el('span', { class: 'doc-meta', text: 'Owner ' + d.owner + ' · updated ' + ago(d.updatedAt) + ' · revision ' + d.headSeq }),
-      ])];
-      if (d.owner === me.username || isAppAdmin()) { // the owner (or an application admin) moves a diagram to the Trash
-        var del = el('button', { class: 'btn icon doc-act', type: 'button', title: 'Move to Trash', 'aria-label': 'Move “' + d.title + '” to Trash', onclick: function () {
-          del.disabled = true;
-          trashDoc(d).then(function (done) { if (done) loadDocs(); else del.disabled = false; });
-        } }, [trashIcon()]);
-        kids.push(del);
-      }
-      box.appendChild(el('div', { class: 'doc', role: 'listitem' }, kids));
-    });
-    $('empty').hidden = rows.length > 0;
+    if (!tree) {
+      var flat = allDocs.filter(function (d) {
+        if (q && d.title.toLowerCase().indexOf(q) < 0) return false;
+        if (scope === 'mine') return d.owner === me.username;
+        if (scope === 'shared') return d.owner !== me.username && !!d.role;
+        return true;
+      });
+      flat.forEach(function (d) { box.appendChild(docRow(d, locOf(d))); });
+      $('empty').textContent = q ? 'No diagram matches your search.' : 'No diagrams yet. Create one or import a .drawio file.';
+      $('empty').hidden = flat.length > 0;
+      return;
+    }
+    var cur = currentFolder(), here = cur ? cur.id : 'root', shown = 0;
+    renderCrumbs(cur, box);
+    var count = function (id) { return allDocs.filter(function (d) { return locOf(d) === id; }).length + childrenOf(id).length; };
+    if (!cur || cur.real) childrenOf(cur ? cur.id : null).forEach(function (f) { box.appendChild(folderRow(f.name, count(f.id) + ' item' + (count(f.id) === 1 ? '' : 's'), f.id, true, f)); shown++; });
+    if (!cur) {
+      var ns = allDocs.filter(function (d) { return locOf(d) === 'shared'; }).length;
+      if (ns) { box.appendChild(folderRow('Shared with me', ns + ' diagram' + (ns === 1 ? '' : 's') + ' shared with you', 'shared', false)); shown++; }
+      var no = allDocs.filter(function (d) { return locOf(d) === 'others'; }).length;
+      if (no && isAppAdmin()) { box.appendChild(folderRow('Other users’ diagrams', no + ' diagram' + (no === 1 ? '' : 's') + ' (administrator view)', 'others', false)); shown++; }
+    }
+    allDocs.filter(function (d) { return locOf(d) === here; }).forEach(function (d) { box.appendChild(docRow(d, null)); shown++; });
+    $('empty').textContent = cur ? 'This folder is empty. Drag a diagram here or use “Move to folder…”.' : 'No diagrams yet. Create one or import a .drawio file.';
+    $('empty').hidden = shown > 0;
   }
   // the people a diagram is shared with ("*" = everyone), from the list response (owner / admin only)
   function showShares(d) {

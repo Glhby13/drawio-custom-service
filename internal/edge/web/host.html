@@ -67,10 +67,12 @@
     <select id="scope" class="field select" aria-label="Filter">
       <option value="all">All</option><option value="mine">Owned by me</option><option value="shared">Shared with me</option><option value="trash">Trash</option>
     </select>
+    <button id="new-folder" class="btn" type="button">New folder</button>
     <button id="import" class="btn" type="button">Import…</button>
     <button id="new" class="btn primary" type="button">New diagram</button>
     <input id="import-file" type="file" accept=".drawio,.xml,text/xml,application/xml" hidden>
   </div>
+  <nav id="crumbs" class="crumbs" aria-label="Folder path"></nav>
   <div id="docs" class="docs" role="list"></div>
   <p id="empty" class="empty" hidden>No diagrams yet. Create one or import a .drawio file.</p>
 </main>
