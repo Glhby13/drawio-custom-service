@@ -132,7 +132,7 @@ func (e *itEnv) dial(w who, docID string, since int64) (*wsConn, int) {
 		}
 		return nil, code
 	}
-	c.SetReadLimit(16 << 20)
+	c.SetReadLimit(40 << 20)
 	wc := &wsConn{c: c, in: make(chan Out, 4096), e: e, name: w.user}
 	go func() {
 		for {

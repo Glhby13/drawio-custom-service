@@ -234,7 +234,7 @@ func (s *Server) createDoc(w http.ResponseWriter, r *http.Request, p *Principal)
 		return
 	}
 	var in createReq
-	if !readJSON(w, r, &in, 12<<20) {
+	if !readJSON(w, r, &in, 32<<20) {
 		return
 	}
 	title := strings.TrimSpace(in.Title)
@@ -548,7 +548,7 @@ func (s *Server) postOperations(w http.ResponseWriter, r *http.Request, p *Princ
 		Base  int64      `json:"base"`
 		Ops   []model.Op `json:"ops"`
 	}
-	if !readJSON(w, r, &in, 8<<20) {
+	if !readJSON(w, r, &in, 32<<20) {
 		return
 	}
 	if in.Batch == "" {

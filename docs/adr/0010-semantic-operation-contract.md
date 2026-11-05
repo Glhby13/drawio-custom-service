@@ -63,7 +63,7 @@ MCP tools / AI ─────────────────────�
 ### Aturan kontrak
 - **Idempotensi**: `operationId` unik; server menyimpan hasil ack; duplikat → ack ulang tanpa efek. EVIDENCE pendukung: patch draw.io sendiri idempoten untuk nilai absolut (E4).
 - **Ordering**: total per dokumen oleh server (`serverSequence`); klien menerapkan op remote berurutan; celah → minta op sejak `lastSeq` atau snapshot.
-- **Validasi**: schema (tipe, ukuran: string ≤ 64 KB, style key whitelist karakter, geometry angka hingga), referensi (page/cell/parent ada dan tidak terhapus),
+- **Validasi**: schema (tipe, ukuran: string ≤ 25 MiB (gambar base64 di style; dinaikkan dari 64 KB 2026-11-05), style key whitelist karakter, geometry angka hingga), referensi (page/cell/parent ada dan tidak terhapus),
   invarian (tanpa siklus, edge terminal di page yang sama), batas batch (≤ N op), penolakan = `rejected{code, reason}` ke pengirim saja.
 - **Otorisasi**: per op lewat PDP domain (`apply-operation(type)` + kebijakan AI); tidak ada op yang melewati PDP.
 - **Replay**: state = snapshot(seq s) + op (s, n]; deterministik karena aturan merge murni fungsi dari urutan.

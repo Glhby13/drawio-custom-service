@@ -227,7 +227,7 @@ func (s *Server) wsHandler(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		return
 	}
-	c.SetReadLimit(8 << 20)
+	c.SetReadLimit(32 << 20) // must exceed model.maxValueBytes (25 MiB) plus JSON framing
 	ctx, cancel := context.WithCancel(context.Background())
 	se := &Session{id: newID(6), s: s, conn: c, p: p, send: make(chan []byte, 1024), cancel: cancel, started: time.Now()}
 	se.role.Store(role)

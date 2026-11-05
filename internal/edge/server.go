@@ -162,7 +162,7 @@ func (s *Server) csrfOrigin(next http.Handler) http.Handler {
 				http.Error(w, "forbidden origin", http.StatusForbidden)
 				return
 			}
-			r.Body = http.MaxBytesReader(w, r.Body, 16<<20)
+			r.Body = http.MaxBytesReader(w, r.Body, 32<<20)
 		}
 		next.ServeHTTP(w, r)
 	})

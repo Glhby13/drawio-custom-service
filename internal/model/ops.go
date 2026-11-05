@@ -116,7 +116,7 @@ var (
 )
 
 const (
-	maxValueBytes   = 64 * 1024
+	maxValueBytes   = 25 << 20 // 25 MiB: pasted images arrive as base64 data-URIs inside the style
 	maxPropsPerCell = 400
 	maxCellsPerPage = 20000
 	maxPages        = 100
