@@ -141,18 +141,21 @@ func (s *Server) onRemote(docID string, m ctlMsg) {
 		if dh.doc == nil || len(m.Ops) == 0 {
 			return
 		}
-		first, last := m.Ops[0].Seq, m.Ops[len(m.Ops)-1].Seq
-		if last <= dh.doc.Seq {
-			return
-		}
-		if first != dh.doc.Seq+1 { // gap: reload lazily, tell sessions to resync
-			dh.doc = nil
-			dh.broadcastResync("gap")
-			return
-		}
 		for i := range m.Ops {
-			dh.doc.Apply(&m.Ops[i])
-			dh.doc.Seq = m.Ops[i].Seq
+			o := &m.Ops[i]
+			// Already applied here through a DB catch-up (Sequence/Read of this replica pulled another replica's ops from the log):
+			// the memory is current, but this replica's sessions were never sent those ops, so they still get them below. Clients
+			// ignore a seq they already have.
+			if o.Seq <= dh.doc.Seq {
+				continue
+			}
+			if o.Seq != dh.doc.Seq+1 { // gap: reload lazily, tell sessions to resync
+				dh.doc = nil
+				dh.broadcastResync("gap")
+				return
+			}
+			dh.doc.Apply(o)
+			dh.doc.Seq = o.Seq
 		}
 		dh.broadcastOps(m.Ops, m.Hash, m.Overridden)
 	case "resync":
