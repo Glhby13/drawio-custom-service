@@ -33,8 +33,15 @@ await alice.page.waitForSelector('#dlg[open] #share-q:visible');
 await alice.page.fill('#share-q', 'lab-test2');
 await alice.page.waitForSelector('.hit[data-user="lab-test2"]', { timeout: 8000 });
 await alice.page.click('.hit[data-user="lab-test2"]');
-await alice.page.waitForSelector('[data-remove="lab-test2"]', { timeout: 8000 });
-check('SHARE: picking a person shares immediately, and the row shows the name next to the role and Remove', (await alice.page.textContent('#share-list')).includes('lab-test2'));
+// ADR-0021: picking a person never grants access by itself. "Copy invitation link" makes a pending invitation for that account
+// (works whether or not an e-mail address is known); the person must accept it.
+await alice.page.click('#share-copy-user');
+await alice.page.waitForSelector('#share-new-link', { timeout: 8000 });
+const inviteLink = await alice.page.inputValue('#share-new-link');
+await alice.page.waitForSelector('[data-invitation]', { timeout: 8000 });
+check('SHARE: picking a person only creates a pending invitation (nothing is granted yet): shown with the name and Cancel, no Remove row', (await alice.page.textContent('#share-pending')).includes('lab-test2') && (await alice.page.locator('[data-remove="lab-test2"]').count()) === 0 && (await alice.page.locator('[data-cancel]').count()) === 1);
+const accepted = await api(bob, 'POST', '/invitations/' + inviteLink.split('/invite/')[1] + '/accept');
+check('SHARE: the person accepts the link and gets the diagram', !!accepted && accepted.documentId === id && accepted.role === 'editor', JSON.stringify(accepted));
 await alice.page.click('#btn-add-user');
 await alice.page.fill('#share-q', 'e2e'); await alice.page.keyboard.press('Enter');
 check('SHARE: Enter in the search box does not close the dialog', await alice.page.isVisible('#dlg[open] #share-q'));
