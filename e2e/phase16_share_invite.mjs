@@ -225,6 +225,62 @@ const { id: id2 } = await mk(title2);
   check('(12c) role commenter is refused (400)', c.status === 400, 'status ' + c.status);
 }
 
+// ---- (14) invitation links can be copied again at any time (ADR-0021 amendment)
+{
+  const { id: id3 } = await mk('Invite E2E C ' + tag);
+  const dlgBtn = (label) => owner.page.locator('#dlg button', { hasText: label });
+  await owner.page.goto(BASE + '/d/' + id3, { waitUntil: 'domcontentloaded' });
+  await owner.page.waitForSelector('#btn-share', { timeout: 40000 });
+  await owner.page.click('#btn-share');
+  await owner.page.waitForSelector('#share-make-link');
+  await owner.page.click('#share-make-link');
+  await owner.page.waitForSelector('#share-created:not([hidden])', { timeout: 15000 });
+  const shown = await owner.page.inputValue('#share-new-link');
+  await dlgBtn('Done').click();
+  await owner.page.waitForSelector('#dlg[open]', { state: 'detached', timeout: 5000 }).catch(() => {});
+  await owner.page.click('#btn-share');
+  await owner.page.waitForSelector('#share-links [data-link-input]', { timeout: 15000 }).catch(() => {});
+  const rowInput = owner.page.locator('#share-links input[data-link-input]');
+  const copied = (await rowInput.count()) === 1 ? await rowInput.inputValue() : '';
+  const linkIid = (await rowInput.count()) === 1 ? await rowInput.getAttribute('data-link-input') : '';
+  check('(14a) after closing and reopening the dialog the link row shows the full link in a read-only input and a Copy link button', copied.startsWith(BASE + '/invite/dsi_') && (await owner.page.locator('#share-links [data-copy-link="' + linkIid + '"]').count()) === 1 && (await rowInput.getAttribute('readonly')) !== null, copied.slice(0, 40));
+  check('(14b) the link in the list equals the link shown at creation', !!shown && copied === shown, shown.slice(0, 40) + ' vs ' + copied.slice(0, 40));
+  const tok = copied.slice((BASE + '/invite/').length);
+  if (linkIid) {
+    const g1 = await api(owner, 'GET', '/documents/' + id3 + '/invitations/' + linkIid + '/link');
+    const g2 = await api(owner, 'GET', '/documents/' + id3 + '/invitations/' + linkIid + '/link');
+    check('(14c) GET .../link returns 200 and the same token twice, equal to the one in the list', g1.status === 200 && g2.status === 200 && g1.json && g1.json.token === tok && g2.json && g2.json.token === tok, g1.status + '/' + g2.status);
+  } else check('(14c) GET .../link returns the same token twice', false, 'no link row');
+  // a second person accepts exactly the copied link in a browser
+  await stranger2.page.goto(copied, { waitUntil: 'domcontentloaded' });
+  await stranger2.page.waitForSelector('#invite-accept', { timeout: 20000 }).catch(() => {});
+  await stranger2.page.click('#invite-accept').catch(() => {});
+  await stranger2.page.waitForURL(u => u.pathname === '/d/' + id3, { timeout: 20000 }).catch(() => {});
+  check('(14d) a second user opens the copied link, accepts, and lands on /d/<id>', new URL(stranger2.page.url()).pathname === '/d/' + id3, stranger2.page.url());
+  // an invitation to a person (no e-mail): the pending row also shows its link and Copy
+  const uq = await api(owner, 'POST', '/documents/' + id3 + '/invitations', { kind: 'user', subject: 'lab-test', role: 'viewer', sendEmail: false });
+  const uiid = uq.json && uq.json.invitation && uq.json.invitation.id;
+  await dlgBtn('Done').click();
+  await owner.page.waitForSelector('#dlg[open]', { state: 'detached', timeout: 5000 }).catch(() => {});
+  await owner.page.click('#btn-share');
+  await owner.page.waitForSelector('#share-pending [data-link-input="' + uiid + '"]', { timeout: 15000 }).catch(() => {});
+  const uval = (await owner.page.locator('#share-pending input[data-link-input="' + uiid + '"]').count()) ? await owner.page.locator('#share-pending input[data-link-input="' + uiid + '"]').inputValue() : '';
+  check('(14e) a pending user invitation row shows its link input and a Copy link button', uq.status === 201 && uval === BASE + '/invite/' + uq.json.token && (await owner.page.locator('#share-pending [data-copy-link="' + uiid + '"]').count()) === 1, uq.status + ' ' + uval.slice(0, 40));
+  // revoke the link: the row then has no input
+  if (linkIid) {
+    const revoke = owner.page.locator('[data-revoke-link="' + linkIid + '"]');
+    await revoke.click(); await revoke.click();
+    await owner.page.waitForFunction((i) => { const b = document.querySelector('[data-revoke-link="' + i + '"]'); return !b || /Delete/.test(b.textContent); }, linkIid, { timeout: 15000 }).catch(() => {});
+    await dlgBtn('Done').click();
+    await owner.page.waitForSelector('#dlg[open]', { state: 'detached', timeout: 5000 }).catch(() => {});
+    await owner.page.click('#btn-share');
+    await owner.page.waitForSelector('#share-links [data-link="' + linkIid + '"]', { timeout: 15000 }).catch(() => {});
+    const gone = await api(owner, 'GET', '/documents/' + id3 + '/invitations/' + linkIid + '/link');
+    check('(14f) after revoking, the reopened dialog shows no link input for that row, and GET .../link is 404', (await owner.page.locator('#share-links [data-link="' + linkIid + '"] input').count()) === 0 && (await owner.page.locator('[data-link-input="' + linkIid + '"]').count()) === 0 && gone.status === 404, 'status ' + gone.status);
+  } else check('(14f) after revoking, no link input', false, 'no link row');
+  await dlgBtn('Done').click().catch(() => {});
+}
+
 // ---- (13) cleanup
 for (const d of created) await api(owner, 'DELETE', '/documents/' + d);
 await browser.close();

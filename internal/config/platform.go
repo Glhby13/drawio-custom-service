@@ -30,6 +30,9 @@ type Platform struct {
 	AIDefaultMaxOpsPerMin, AIDefaultMaxDelete                int
 	PublicURL                                                string
 	LocalAdminUser, LocalAdminPassword                       string // optional bootstrap of the first local admin (only when none exists)
+	// InviteTokenKey (INVITE_TOKEN_KEY, base64, >= 32 bytes) lets the platform compute an invitation token again, so a link can be copied
+	// at any time. Empty = tokens are random and shown once (ADR-0021).
+	InviteTokenKey []byte
 }
 
 // LoadPlatform reads and validates the environment.
@@ -57,6 +60,13 @@ func LoadPlatform(getenv func(string) string) (Platform, error) {
 		} else {
 			p.SnapshotEvery = n
 		}
+	}
+	if v := strings.TrimSpace(getenv("INVITE_TOKEN_KEY")); v != "" {
+		k, err := base64.StdEncoding.DecodeString(v)
+		if err != nil || len(k) < 32 {
+			errs = append(errs, errors.New("INVITE_TOKEN_KEY must be base64 of at least 32 bytes"))
+		}
+		p.InviteTokenKey = k
 	}
 	keys, err := ParseTrustedKeys(getenv("INTERNAL_KEYS"))
 	errs = append(errs, err)

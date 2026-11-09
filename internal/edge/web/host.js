@@ -1751,16 +1751,33 @@
         navigator.clipboard.writeText(text).then(function () { b.textContent = 'Copied'; setTimeout(function () { b.textContent = label; }, 1500); }, function () { toast('error', 'Copy failed: select the link and copy it manually'); });
       } });
     }
-    // the link is shown once, right after it is made (only its hash is stored), like an MCP token
+    // a new link is shown right away; pending invitations can be copied again from the list at any time (the server returns the link on request)
     function showCreated(link, who, expiresAt, note) {
       created.textContent = '';
-      created.appendChild(el('p', { class: 'mcp-warn', text: note || 'Copy this link now. It is shown only once.' }));
+      created.appendChild(el('p', { class: 'mcp-warn', text: note || 'Invitation link created. You can copy it again from the list any time.' }));
       created.appendChild(el('input', { class: 'field mcp-token', id: 'share-new-link', type: 'text', name: 'share-new-link', autocomplete: 'off', spellcheck: 'false', readonly: 'readonly', value: link, 'aria-label': 'Invitation link', onfocus: function (ev) { ev.currentTarget.select(); } }));
       created.appendChild(el('div', { class: 'mcp-actions' }, [copyBtn('Copy link', link)]));
       created.appendChild(el('p', { class: 'mcp-meta', text: (who ? 'For ' + who + ' only · ' : 'Anyone signed in to DrawSpace · ') + expiryText(expiresAt) + '. Access starts only after they accept.' }));
       created.hidden = false;
     }
     function linkOf(token) { return location.origin + '/invite/' + token; }
+    var OLD_LINK = 'Older link: it cannot be shown again. Create a new one.';
+    // second line of a pending invitation row: the full link in a readonly input plus Copy link; fetched lazily, only when the server says it is recoverable
+    function linkLine(v) {
+      var line = el('div', { class: 'share-linkline' }, []);
+      function older() { line.textContent = ''; line.appendChild(el('span', { class: 'mcp-meta', text: OLD_LINK })); }
+      if (!v.recoverable) { older(); return line; }
+      line.appendChild(el('input', { class: 'field mcp-token', type: 'text', autocomplete: 'off', spellcheck: 'false', readonly: 'readonly', disabled: 'disabled', value: 'Loading…', 'data-link-loading': v.id, 'aria-label': 'Invitation link' }));
+      api('GET', '/documents/' + id + '/invitations/' + v.id + '/link').then(function (r) {
+        if (!r || !r.token) throw new Error('no token');
+        var link = linkOf(r.token);
+        line.textContent = '';
+        line.appendChild(el('input', { class: 'field mcp-token', type: 'text', autocomplete: 'off', spellcheck: 'false', readonly: 'readonly', value: link, 'data-link-input': v.id, 'aria-label': 'Invitation link', onfocus: function (ev) { ev.currentTarget.select(); } }));
+        var b = copyBtn('Copy link', link); b.setAttribute('data-copy-link', v.id);
+        line.appendChild(b);
+      }).catch(older);
+      return line;
+    }
     function armed(label, busy, attrs, fn) { // asks once, inline, before an irreversible action
       return el('button', Object.assign({ class: 'btn danger', type: 'button', text: label, onclick: function (ev) {
         var b = ev.currentTarget;
@@ -1796,7 +1813,8 @@
         pendingBox.appendChild(el('div', { class: 'share-row mcp-row' + (dead ? ' dead' : ''), 'data-invitation': v.id }, [
           el('span', { class: 'grow' }, [el('strong', { text: v.subject }), el('small', { class: 'mcp-meta', text: ' · ' + v.role + ' · ' + (v.emailSentAt ? 'e-mailed' : 'link only') + ' · ' + expiryText(v.expiresAt) })]),
           el('span', { class: 'chip ' + (dead ? 'off' : ''), text: dead ? v.state : 'pending' }), resend,
-          armed(dead ? 'Delete' : 'Cancel', dead ? 'Deleting…' : 'Cancelling…', { 'data-cancel': v.id }, function () { return api('DELETE', '/documents/' + id + '/invitations/' + v.id); })]));
+          armed(dead ? 'Delete' : 'Cancel', dead ? 'Deleting…' : 'Cancelling…', { 'data-cancel': v.id }, function () { return api('DELETE', '/documents/' + id + '/invitations/' + v.id); }),
+          dead ? null : linkLine(v)]));
       });
       linksBox.hidden = !links.length; linksBox.textContent = '';
       if (links.length) linksBox.appendChild(el('label', { text: 'Invitation links' }));
@@ -1805,7 +1823,8 @@
         linksBox.appendChild(el('div', { class: 'share-row mcp-row' + (dead ? ' dead' : ''), 'data-link': v.id }, [
           el('span', { class: 'grow' }, [el('strong', { text: '…' + v.hint }), el('small', { class: 'mcp-meta', text: ' · ' + v.role + ' · ' + expiryText(v.expiresAt) + ' · used ' + v.useCount + '×' })]),
           el('span', { class: 'chip ' + (dead ? 'off' : ''), text: dead ? v.state : 'active' }),
-          armed(dead ? 'Delete' : 'Revoke', dead ? 'Deleting…' : 'Revoking…', { 'data-revoke-link': v.id }, function () { return api('DELETE', '/documents/' + id + '/invitations/' + v.id); })]));
+          armed(dead ? 'Delete' : 'Revoke', dead ? 'Deleting…' : 'Revoking…', { 'data-revoke-link': v.id }, function () { return api('DELETE', '/documents/' + id + '/invitations/' + v.id); }),
+          dead ? null : linkLine(v)]));
       });
     }
     function pick(u) {

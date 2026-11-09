@@ -42,3 +42,11 @@ Baris `permissions` subject `*` dan role `commenter` (juga `document_tokens.role
 - Berbagi menjadi dua langkah (undang, terima); daftar penerima tidak lagi bisa "dipenuhi" oleh pihak lain.
 - Gateway kini butuh SMTP (`SMTP_*`, `PUBLIC_URL`); tanpa SMTP undangan tetap bisa lewat tautan.
 - Skema wajib v5 sebelum image baru berjalan (platform menolak start bila kurang).
+
+## Amandemen 2026-11-09 — link bisa disalin lagi kapan saja
+Sebelumnya token hanya dilihat sekali (hanya hash yang disimpan). Sekarang pemilik bisa menyalin link yang masih aktif dari daftar kapan saja, dan link penuh tampil di baris (semua undangan aktif: invitation link, link per-user, dan undangan email).
+- **Token diturunkan, bukan disimpan**: `token = "dsi_" + base64url(HMAC-SHA256(INVITE_TOKEN_KEY, "dsi1|" + id + "|" + token_salt))`. Database tetap hanya menyimpan SHA-256 token (pencocokan) dan salt acak 16 byte (`token_salt`, migrasi `006_invitation_links.sql`, skema v6). Tanpa kunci server, database saja tidak cukup untuk membuat link (keamanan setara sebelumnya).
+- **Kunci**: env `INVITE_TOKEN_KEY` (Secret platform, base64 minimal 32 byte). Tanpa kunci, perilaku lama berlaku (token acak, sekali lihat) dan tidak ada yang rusak.
+- **Endpoint**: `GET /api/v1/documents/{id}/invitations/{iid}/link` (hak berbagi, hanya manusia; undangan harus masih berlaku; respons `no-store`; dicatat di audit `invite-link-view`). `409 link_not_recoverable` untuk link lama (tanpa salt) atau bila kunci berganti: link itu tetap berfungsi, hanya tidak bisa ditampilkan lagi. Daftar undangan tidak pernah memuat token; ia memuat `recoverable`.
+- Mengganti kunci tidak mematikan link yang ada.
+

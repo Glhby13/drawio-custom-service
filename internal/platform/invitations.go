@@ -2,7 +2,10 @@ package platform
 
 import (
 	"context"
+	"crypto/hmac"
 	"crypto/rand"
+	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/base64"
 	"errors"
 	"net/http"
@@ -62,6 +65,8 @@ type Invitation struct {
 	State       string     `json:"state"` // pending | expired | accepted | declined | revoked
 	EmailSentAt *time.Time `json:"emailSentAt"`
 	UseCount    int        `json:"useCount"`
+	// Recoverable: the link can be shown again (it was minted with INVITE_TOKEN_KEY, which is still configured)
+	Recoverable bool `json:"recoverable"`
 }
 
 func (i *Invitation) fillState(now time.Time) {
@@ -72,6 +77,29 @@ func (i *Invitation) fillState(now time.Time) {
 }
 
 func (i *Invitation) live(now time.Time) bool { i.fillState(now); return i.State == "pending" }
+
+// deriveInviteToken computes the token of an invitation from the server key, the invitation id and its salt (ADR-0021 amendment).
+func deriveInviteToken(key []byte, id string, salt []byte) string {
+	m := hmac.New(sha256.New, key)
+	m.Write([]byte("dsi1|" + id + "|"))
+	m.Write(salt)
+	return InvitePrefix + base64.RawURLEncoding.EncodeToString(m.Sum(nil))
+}
+
+// mintInviteToken makes the token of invitation `id`: derived (re-computable, with a salt to store) when INVITE_TOKEN_KEY is set,
+// random and shown once otherwise.
+func (s *Server) mintInviteToken(id string) (token, hash string, salt []byte, err error) {
+	if k := s.cfg.InviteTokenKey; len(k) >= 32 {
+		salt = make([]byte, 16)
+		if _, err = rand.Read(salt); err != nil {
+			return "", "", nil, err
+		}
+		token = deriveInviteToken(k, id, salt)
+		return token, hashToken(token), salt, nil
+	}
+	token, hash, err = newInviteToken()
+	return token, hash, nil, err
+}
 
 func newInviteToken() (token, hash string, err error) {
 	b := make([]byte, 32)
@@ -108,11 +136,11 @@ func nextMidnightWIB(t time.Time) time.Time { return startOfDayWIB(t).AddDate(0,
 
 // ---- store -----------------------------------------------------------------------------------------------------------
 
-const invCols = `id, document_id, kind, COALESCE(subject,''), role, hint, created_by, created_at, expires_at, status, email_sent_at, use_count`
+const invCols = `id, document_id, kind, COALESCE(subject,''), role, hint, created_by, created_at, expires_at, status, email_sent_at, use_count, (token_salt IS NOT NULL)`
 
 func scanInvitation(row pgx.Row) (*Invitation, error) {
 	var i Invitation
-	if err := row.Scan(&i.ID, &i.DocumentID, &i.Kind, &i.Subject, &i.Role, &i.Hint, &i.CreatedBy, &i.CreatedAt, &i.ExpiresAt, &i.Status, &i.EmailSentAt, &i.UseCount); err != nil {
+	if err := row.Scan(&i.ID, &i.DocumentID, &i.Kind, &i.Subject, &i.Role, &i.Hint, &i.CreatedBy, &i.CreatedAt, &i.ExpiresAt, &i.Status, &i.EmailSentAt, &i.UseCount, &i.Recoverable); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, errNotFound
 		}
@@ -167,7 +195,7 @@ func emailQuota(ctx context.Context, q pgQuerier, by, subject string, since time
 // CreateInvitation checks the rules and stores the invitation in one transaction under a per-person lock. With reserveEmail the
 // day's one e-mail (per sender, recipient and diagram; hidden and revoked rows count too, so cancel-and-recreate buys nothing)
 // is taken NOW by setting email_sent_at; the gateway gives it back through ReleaseEmail when the mail cannot be sent.
-func (s *Store) CreateInvitation(ctx context.Context, i Invitation, hash string, reserveEmail bool, now time.Time) error {
+func (s *Store) CreateInvitation(ctx context.Context, i Invitation, hash string, salt []byte, reserveEmail bool, now time.Time) error {
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return err
@@ -227,8 +255,8 @@ func (s *Store) CreateInvitation(ctx context.Context, i Invitation, hash string,
 	if reserveEmail {
 		sent = &now
 	}
-	if _, err := tx.Exec(ctx, `INSERT INTO invitations (id, document_id, kind, subject, role, token_hash, hint, created_by, expires_at, email_sent_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
-		i.ID, i.DocumentID, i.Kind, subj, i.Role, hash, i.Hint, i.CreatedBy, i.ExpiresAt, sent); err != nil {
+	if _, err := tx.Exec(ctx, `INSERT INTO invitations (id, document_id, kind, subject, role, token_hash, hint, created_by, expires_at, email_sent_at, token_salt) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+		i.ID, i.DocumentID, i.Kind, subj, i.Role, hash, i.Hint, i.CreatedBy, i.ExpiresAt, sent, salt); err != nil {
 		return err
 	}
 	return tx.Commit(ctx)
@@ -236,7 +264,7 @@ func (s *Store) CreateInvitation(ctx context.Context, i Invitation, hash string,
 
 // ResendInvitation gives a waiting 'user' invitation a fresh token and expiry and takes the day's e-mail, under the same locks.
 // An expired invitation cannot be resent (create a new one), and neither can one whose person has access in the meantime.
-func (s *Store) ResendInvitation(ctx context.Context, docID, id, by, hash, hint string, exp *time.Time, now time.Time) (*Invitation, error) {
+func (s *Store) ResendInvitation(ctx context.Context, docID, id, by, hash, hint string, salt []byte, exp *time.Time, now time.Time) (*Invitation, error) {
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return nil, err
@@ -270,7 +298,7 @@ func (s *Store) ResendInvitation(ctx context.Context, docID, id, by, hash, hint 
 	if err := emailQuota(ctx, tx, by, subject, startOfDayWIB(now)); err != nil {
 		return nil, err
 	}
-	inv, err := scanInvitation(tx.QueryRow(ctx, `UPDATE invitations SET token_hash=$3, hint=$4, expires_at=$5, email_sent_at=$6 WHERE document_id=$1 AND id=$2 AND status='pending' RETURNING `+invCols, docID, id, hash, hint, exp, now))
+	inv, err := scanInvitation(tx.QueryRow(ctx, `UPDATE invitations SET token_hash=$3, hint=$4, expires_at=$5, email_sent_at=$6, token_salt=$7 WHERE document_id=$1 AND id=$2 AND status='pending' RETURNING `+invCols, docID, id, hash, hint, exp, now, salt))
 	if err != nil {
 		return nil, err
 	}
@@ -325,6 +353,17 @@ type InvitePreview struct {
 	DocOwner   string
 	InviterOf  string // display name of the inviter
 	AlreadyHas string // the role the recipient already has on the diagram ("" none)
+}
+
+// InviteTokenParts returns what is needed to compute an invitation's token again, and whether the invitation is still live.
+func (s *Store) InviteTokenParts(ctx context.Context, docID, id string) (hash string, salt []byte, live bool, err error) {
+	var status string
+	var exp *time.Time
+	err = s.pool.QueryRow(ctx, `SELECT token_hash, token_salt, status, expires_at FROM invitations WHERE document_id=$1 AND id=$2 AND hidden_at IS NULL`, docID, id).Scan(&hash, &salt, &status, &exp)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", nil, false, errNotFound
+	}
+	return hash, salt, status == "pending" && (exp == nil || exp.After(time.Now())), err
 }
 
 // previewByHash resolves a token for a recipient: the invitation must be live, the diagram must exist, and a 'user'
@@ -495,13 +534,14 @@ func (s *Server) createInvitation(w http.ResponseWriter, r *http.Request, p *Pri
 	} else {
 		in.Subject = ""
 	}
-	token, hash, err := newInviteToken()
+	invID := "i" + newID(6)
+	token, hash, salt, err := s.mintInviteToken(invID)
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, "internal", "")
 		return
 	}
-	inv := Invitation{ID: "i" + newID(6), DocumentID: d.ID, Kind: in.Kind, Subject: in.Subject, Role: in.Role, Hint: token[len(token)-4:], CreatedBy: p.Username, ExpiresAt: exp}
-	if err := s.store.CreateInvitation(ctx, inv, hash, in.Kind == "user" && in.SendEmail, now); err != nil {
+	inv := Invitation{ID: invID, DocumentID: d.ID, Kind: in.Kind, Subject: in.Subject, Role: in.Role, Hint: token[len(token)-4:], CreatedBy: p.Username, ExpiresAt: exp}
+	if err := s.store.CreateInvitation(ctx, inv, hash, salt, in.Kind == "user" && in.SendEmail, now); err != nil {
 		s.createErr(w, err, now)
 		return
 	}
@@ -549,8 +589,10 @@ func (s *Server) listInvitations(w http.ResponseWriter, r *http.Request, p *Prin
 		return
 	}
 	now := time.Now()
+	keyed := len(s.cfg.InviteTokenKey) >= 32
 	for i := range invs {
 		invs[i].fillState(now)
+		invs[i].Recoverable = invs[i].Recoverable && keyed && invs[i].State == "pending"
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"invitations": invs})
 }
@@ -573,12 +615,12 @@ func (s *Server) resendInvitation(w http.ResponseWriter, r *http.Request, p *Pri
 		writeErr(w, http.StatusBadRequest, "bad_request", "expiresInDays 0..365 (0 = never)")
 		return
 	}
-	token, hash, err := newInviteToken()
+	token, hash, salt, err := s.mintInviteToken(r.PathValue("iid"))
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, "internal", "")
 		return
 	}
-	inv, err := s.store.ResendInvitation(r.Context(), d.ID, r.PathValue("iid"), p.Username, hash, token[len(token)-4:], exp, now)
+	inv, err := s.store.ResendInvitation(r.Context(), d.ID, r.PathValue("iid"), p.Username, hash, token[len(token)-4:], salt, exp, now)
 	if err != nil {
 		if errors.Is(err, errNotFound) {
 			writeErr(w, http.StatusNotFound, "not_found", "invitation not found")
@@ -590,6 +632,33 @@ func (s *Server) resendInvitation(w http.ResponseWriter, r *http.Request, p *Pri
 	_ = s.store.Audit(r.Context(), p.Actor, d.ID, "invite-resend", "ok", map[string]any{"invitationId": inv.ID, "subject": inv.Subject, "expiresAt": exp})
 	inv.fillState(now)
 	writeJSON(w, http.StatusOK, map[string]any{"invitation": inv, "token": token, "documentTitle": d.Title})
+}
+
+// inviteLink returns the link token of a live invitation again (owner side). It is computed, never read from storage; a link made
+// before this feature, or under another key, cannot be shown (409) but keeps working.
+func (s *Server) inviteLink(w http.ResponseWriter, r *http.Request, p *Principal) {
+	d, ok := s.ownerSide(w, r, p)
+	if !ok {
+		return
+	}
+	id := r.PathValue("iid")
+	hash, salt, live, err := s.store.InviteTokenParts(r.Context(), d.ID, id)
+	if err != nil || !live {
+		writeErr(w, http.StatusNotFound, "not_found", "invitation not found")
+		return
+	}
+	k := s.cfg.InviteTokenKey
+	if len(k) < 32 || len(salt) == 0 {
+		writeErr(w, http.StatusConflict, "link_not_recoverable", "this link cannot be shown again: create a new one")
+		return
+	}
+	token := deriveInviteToken(k, id, salt)
+	if subtle.ConstantTimeCompare([]byte(hashToken(token)), []byte(hash)) != 1 { // the key changed since: the link still works, it just cannot be recomputed
+		writeErr(w, http.StatusConflict, "link_not_recoverable", "this link cannot be shown again: create a new one")
+		return
+	}
+	_ = s.store.Audit(r.Context(), p.Actor, d.ID, "invite-link-view", "ok", map[string]string{"invitationId": id})
+	writeJSON(w, http.StatusOK, map[string]any{"token": token})
 }
 
 // deleteInvitation revokes a live invitation; on one that is already dead it removes it from the list (like MCP tokens).

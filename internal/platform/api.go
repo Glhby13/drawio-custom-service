@@ -44,6 +44,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/v1/documents/{id}/invitations", s.api(s.listInvitations))
 	mux.HandleFunc("POST /api/v1/documents/{id}/invitations", s.api(s.createInvitation))
 	mux.HandleFunc("POST /api/v1/documents/{id}/invitations/{iid}/resend", s.api(s.resendInvitation))
+	mux.HandleFunc("GET /api/v1/documents/{id}/invitations/{iid}/link", s.api(s.inviteLink))
 	mux.HandleFunc("DELETE /api/v1/documents/{id}/invitations/{iid}", s.api(s.deleteInvitation))
 	mux.HandleFunc("GET /api/v1/invitations/{token}", s.api(s.previewInvitation))
 	mux.HandleFunc("POST /api/v1/invitations/{token}/accept", s.api(s.acceptInvitation))

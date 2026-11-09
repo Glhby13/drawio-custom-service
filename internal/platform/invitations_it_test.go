@@ -421,4 +421,123 @@ func TestIT_Invitations(t *testing.T) {
 	if c, o, _, _ := invite(alice, doc6, map[string]any{"kind": "link", "role": "viewer"}); c != 409 || errCode(o) != "too_many_invitations" {
 		t.Fatalf("21st link: %d %v", c, o)
 	}
+
+	// ---- the owner can copy a link again (ADR-0021 amendment): GET .../invitations/{iid}/link recomputes the token
+	lb, lc, ld, le, lf := mk("lbob"), mk("lcarol"), mk("ldave"), mk("lerin"), mk("lfrank")
+	linkOwner := mk("linkowner") // a fresh person: the per-person API rate limit (burst 80) is already spent by alice above
+	docL := newDoc(linkOwner, title+" link")
+	getLink := func(w who, d, id string) (int, map[string]any) {
+		t.Helper()
+		return e.call(w, "GET", base(d)+"/"+id+"/link", nil)
+	}
+	linkIDForNoToken := ""
+	noToken := func(what string, w who) {
+		t.Helper()
+		c, o := getLink(w, docL, linkIDForNoToken)
+		if c != 403 && c != 404 {
+			t.Fatalf("%s: %d %v, want 403/404", what, c, o)
+		}
+		if _, has := o["token"]; has {
+			t.Fatalf("%s leaks a token: %v", what, o)
+		}
+	}
+	lTok, lID := mustInvite(linkOwner, docL, map[string]any{"kind": "link", "role": "editor"})
+	linkIDForNoToken = lID
+	c1, o1 := getLink(linkOwner, docL, lID)
+	c2, o2 := getLink(linkOwner, docL, lID)
+	if c1 != 200 || c2 != 200 || o1["token"] == nil || o1["token"] != o2["token"] || o1["token"] != lTok || !validInviteToken(lTok) {
+		t.Fatalf("link shown again: %d %v / %d %v (created with %q)", c1, o1, c2, o2, lTok)
+	}
+	shown, _ := o1["token"].(string)
+	if c, o := accept(lb, shown); c != 200 || o["role"] != "editor" || o["documentId"] != docL {
+		t.Fatalf("accept through the re-shown token: %d %v", c, o)
+	}
+	if c, r := roleOf(lb, docL); c != 200 || r != "editor" {
+		t.Fatalf("role after accepting the re-shown link: %d %v", c, r)
+	}
+	recOf := func(d, id string) (any, bool, string) { // recoverable, found, whole list as text
+		t.Helper()
+		c, l := e.call(linkOwner, "GET", base(d), nil)
+		if c != 200 {
+			t.Fatalf("list: %d %v", c, l)
+		}
+		raw, _ := json.Marshal(l)
+		for _, x := range l["invitations"].([]any) {
+			if m := x.(map[string]any); m["id"] == id {
+				return m["recoverable"], true, string(raw)
+			}
+		}
+		return nil, false, string(raw)
+	}
+	if rec, found, raw := recOf(docL, lID); !found || rec != true || strings.Contains(raw, lTok) || strings.Contains(raw, "\"token\"") {
+		t.Fatalf("list after creation: recoverable=%v found=%v %s", rec, found, raw)
+	}
+	// who may not: stranger, editor, viewer, AI actor
+	e.shareWith(linkOwner, docL, lc, "viewer")
+	noToken("stranger", ld)
+	noToken("editor (accepted the link)", lb)
+	noToken("viewer", lc)
+	lai := who{user: "ai-1", roles: []string{"user"}, typ: identity.ActorAI, obo: linkOwner.user}
+	noToken("AI actor", lai)
+	// an invitation id of another diagram is unknown here
+	if c, o := getLink(linkOwner, doc, lID); c != 404 || o["token"] != nil {
+		t.Fatalf("invitation of another diagram: %d %v", c, o)
+	}
+	if c, o := getLink(linkOwner, docL, "i-does-not-exist"); c != 404 || o["token"] != nil {
+		t.Fatalf("unknown invitation: %d %v", c, o)
+	}
+	// revoked -> 404
+	_, revID := mustInvite(linkOwner, docL, map[string]any{"kind": "link", "role": "viewer"})
+	if c, o := e.call(linkOwner, "DELETE", base(docL)+"/"+revID, nil); c != 200 || o["state"] != "revoked" {
+		t.Fatalf("revoke: %d %v", c, o)
+	}
+	if c, o := getLink(linkOwner, docL, revID); c != 404 || o["token"] != nil {
+		t.Fatalf("revoked link shown: %d %v", c, o)
+	}
+	// expired -> 404 (and not recoverable in the list)
+	_, expID := mustInvite(linkOwner, docL, map[string]any{"kind": "link", "role": "viewer"})
+	if _, err := e.srv.store.pool.Exec(ctx, `UPDATE invitations SET expires_at=now()-interval '1 minute' WHERE id=$1`, expID); err != nil {
+		t.Fatal(err)
+	}
+	if c, o := getLink(linkOwner, docL, expID); c != 404 || o["token"] != nil {
+		t.Fatalf("expired link shown: %d %v", c, o)
+	}
+	if rec, found, _ := recOf(docL, expID); found && rec != false {
+		t.Fatalf("expired link recoverable in the list: %v", rec)
+	}
+	// a pending user invitation (no e-mail) can be shown again, and stays bound to its subject
+	docU := newDoc(linkOwner, title+" link user")
+	uTok2, uID2 := mustInvite(linkOwner, docU, map[string]any{"kind": "user", "subject": le.user, "role": "viewer", "sendEmail": false})
+	if c, o := getLink(linkOwner, docU, uID2); c != 200 || o["token"] != uTok2 {
+		t.Fatalf("user invitation shown again: %d %v (created with %q)", c, o, uTok2)
+	}
+	if rec, found, _ := recOf(docU, uID2); !found || rec != true {
+		t.Fatalf("user invitation recoverable=%v found=%v", rec, found)
+	}
+	if c, o := accept(lf, uTok2); c != 403 || errCode(o) != "invitation_not_for_you" {
+		t.Fatalf("stranger accepts a re-shown user invitation: %d %v", c, o)
+	}
+	// resend gives a fresh token; the old one stops working
+	if c, o := e.call(linkOwner, "POST", base(docU)+"/"+uID2+"/resend", nil); c != 200 || o["token"] == nil || o["token"] == uTok2 {
+		t.Fatalf("resend: %d %v", c, o)
+	} else if c, o2 := getLink(linkOwner, docU, uID2); c != 200 || o2["token"] != o["token"] || o2["token"] == uTok2 {
+		t.Fatalf("link after resend: %d %v (resent %v)", c, o2, o["token"])
+	}
+	if c, o := accept(le, uTok2); c != 404 || errCode(o) != "invitation_invalid" {
+		t.Fatalf("old token after resend: %d %v", c, o)
+	}
+	// an older link (no salt) keeps working but cannot be shown: 409, and the list says so
+	nsTok, nsID := mustInvite(linkOwner, docL, map[string]any{"kind": "link", "role": "viewer"})
+	if _, err := e.srv.store.pool.Exec(ctx, `UPDATE invitations SET token_salt=NULL WHERE id=$1`, nsID); err != nil {
+		t.Fatal(err)
+	}
+	if c, o := getLink(linkOwner, docL, nsID); c != 409 || errCode(o) != "link_not_recoverable" || o["token"] != nil {
+		t.Fatalf("link without salt: %d %v", c, o)
+	}
+	if rec, found, _ := recOf(docL, nsID); !found || rec != false {
+		t.Fatalf("link without salt: recoverable=%v found=%v", rec, found)
+	}
+	if c, o := e.call(ld, "GET", "/api/v1/invitations/"+nsTok, nil); c != 200 {
+		t.Fatalf("a link that cannot be shown must keep working: %d %v", c, o)
+	}
 }

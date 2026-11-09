@@ -276,6 +276,45 @@ def main():
             skip("/invite/<token> page headers", "page answered %s (expected 200 for a signed-in user)" % s)
         else:
             passfail("/invite/<token>: Referrer-Policy no-referrer and Cache-Control no-store", h.get("referrer-policy") == "no-referrer" and "no-store" in h.get("cache-control", ""), "RP=%s CC=%s" % (h.get("referrer-policy"), h.get("cache-control")))
+
+        # ---- 12. copy-again: GET .../invitations/{iid}/link (owner only, never cached, no oracle)
+        doc_c = new_doc("AbuseDocC-%s" % tag)
+        docs.append(doc_c)
+        s, _, _, j = invite(doc_c, {"kind": "link", "role": "viewer"})
+        tok12, iid12 = (j or {}).get("token"), ((j or {}).get("invitation") or {}).get("id")
+        if s != 201 or not tok12 or not iid12:
+            skip("copy-again link endpoint", "cannot create the link: %s" % s)
+        else:
+            lp = "/documents/%s/invitations/%s/link" % (doc_c, iid12)
+            o1, o2 = api("owner", "GET", lp), api("owner", "GET", lp)
+            t1, t2 = (o1[3] or {}).get("token", ""), (o2[3] or {}).get("token", "")
+            passfail("copy-again: the owner gets 200 and the same token twice (equal to the one from creation)", o1[0] == 200 and o2[0] == 200 and t1.startswith("dsi_") and t1 == t2 == tok12, "%s/%s" % (o1[0], o2[0]))
+            passfail("copy-again: the link response is Cache-Control: no-store", "no-store" in o1[1].get("cache-control", ""), "CC=%s" % o1[1].get("cache-control"))
+            if have_s:
+                st = api("stranger", "GET", lp)
+                passfail("copy-again: a stranger gets 403/404 and no dsi_ in the body", st[0] in (403, 404) and "dsi_" not in st[2], "status %s" % st[0])
+            else:
+                skip("copy-again: stranger", "needs STRANGER_*")
+            if have_r:
+                s2, _, _, j2 = invite(doc_c, {"kind": "user", "subject": RECIP_USER, "role": "editor", "sendEmail": False})
+                tk2 = (j2 or {}).get("token")
+                if s2 == 201 and tk2 and api("recip", "POST", "/invitations/%s/accept" % tk2, {})[0] == 200:
+                    ed = api("recip", "GET", lp)
+                    passfail("copy-again: an editor recipient gets 403/404 and no dsi_ in the body", ed[0] in (403, 404) and "dsi_" not in ed[2], "status %s" % ed[0])
+                else:
+                    skip("copy-again: editor recipient", "editor invitation could not be accepted: %s" % s2)
+            else:
+                skip("copy-again: editor recipient", "needs RECIP_*")
+            ls = api("owner", "GET", "/documents/%s/invitations" % doc_c)
+            items = (ls[3] or {}).get("invitations", [])
+            kl = {k.lower() for k in keys_of(ls[3])}
+            passfail("copy-again: the list JSON has no token key and `recoverable` is a boolean on every item", ls[0] == 200 and bool(items) and not ({"token", "tokenhash", "token_hash"} & kl) and all(isinstance(i.get("recoverable"), bool) for i in items), "keys %s" % sorted(kl))
+            ghost = api("owner", "GET", "/documents/%s/invitations/%s/link" % (doc_c, "inv_" + secrets.token_hex(12)))
+            other = api("owner", "GET", "/documents/%s/invitations/%s/link" % (doc, iid12))
+            passfail("copy-again: an unknown iid and an iid of another diagram both -> 404 (no oracle)", ghost[0] == 404 and other[0] == 404 and code_of(ghost[3]) == code_of(other[3]), "unknown %s/%s other-diagram %s/%s" % (ghost[0], code_of(ghost[3]), other[0], code_of(other[3])))
+            rv = api("owner", "DELETE", "/documents/%s/invitations/%s" % (doc_c, iid12))
+            gone = api("owner", "GET", lp)
+            passfail("copy-again: after revoke GET .../link -> 404 and no dsi_ in the body", rv[0] == 200 and gone[0] == 404 and "dsi_" not in gone[2], "revoke %s link %s" % (rv[0], gone[0]))
     finally:
         for d in docs:
             try:

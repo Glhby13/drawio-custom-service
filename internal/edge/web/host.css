@@ -336,3 +336,6 @@ select.field, .select { appearance: none; -webkit-appearance: none; padding: 0 3
 .invite-meta dd { margin: 0; font-weight: 600; color: var(--text-strong); }
 .invite-actions { display: flex; gap: 8px; margin-top: 4px; }
 .invite-actions a.btn { text-decoration: none; }
+.mcp-row { flex-wrap: wrap; }
+.share-linkline { flex: 1 1 100%; display: flex; align-items: center; gap: 8px; min-width: 0; }
+.share-row .share-linkline .field { flex: 1; width: auto; min-width: 0; }

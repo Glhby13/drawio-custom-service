@@ -1,8 +1,12 @@
 package platform
 
 import (
+	"bytes"
+	"strings"
 	"testing"
 	"time"
+
+	"github.com/Glhby13/drawio-custom-service/internal/config"
 )
 
 func TestExpiryOfInvites(t *testing.T) {
@@ -79,6 +83,50 @@ func TestNewAndValidInviteToken(t *testing.T) {
 	for _, bad := range []string{"", "dsi_", tok[:46], tok + "A", "xxx_" + tok[4:], tok[4:], "dsm_" + tok[4:]} {
 		if validInviteToken(bad) {
 			t.Fatalf("%q must be invalid", bad)
+		}
+	}
+}
+
+func TestDeriveInviteToken(t *testing.T) {
+	key := []byte("0123456789abcdef0123456789abcdef")
+	salt := []byte("salt-salt-salt-1")
+	a := deriveInviteToken(key, "iabc", salt)
+	if a != deriveInviteToken(key, "iabc", salt) {
+		t.Fatal("not deterministic")
+	}
+	if !strings.HasPrefix(a, InvitePrefix) || len(a) != 47 || !validInviteToken(a) {
+		t.Fatalf("shape: %q", a)
+	}
+	for name, b := range map[string]string{
+		"id":   deriveInviteToken(key, "iabd", salt),
+		"salt": deriveInviteToken(key, "iabc", []byte("salt-salt-salt-2")),
+		"key":  deriveInviteToken([]byte("fedcba9876543210fedcba9876543210"), "iabc", salt),
+	} {
+		if a == b {
+			t.Fatalf("token does not depend on %s", name)
+		}
+	}
+}
+
+func TestMintInviteToken(t *testing.T) {
+	key := []byte("0123456789abcdef0123456789abcdef")
+	s := &Server{cfg: config.Platform{InviteTokenKey: key}}
+	tok, hash, salt, err := s.mintInviteToken("iabc")
+	if err != nil || len(salt) == 0 || tok != deriveInviteToken(key, "iabc", salt) || hash != hashToken(tok) || !validInviteToken(tok) {
+		t.Fatalf("keyed mint: %q %q %x %v", tok, hash, salt, err)
+	}
+	tok2, _, salt2, _ := s.mintInviteToken("iabc")
+	if tok2 == tok || bytes.Equal(salt, salt2) {
+		t.Fatal("two mints must differ")
+	}
+	for _, k := range [][]byte{nil, []byte("short")} {
+		n := &Server{cfg: config.Platform{InviteTokenKey: k}}
+		tok, hash, salt, err := n.mintInviteToken("iabc")
+		if err != nil || salt != nil || !validInviteToken(tok) || hash != hashToken(tok) {
+			t.Fatalf("unkeyed mint: %q %q %v %v", tok, hash, salt, err)
+		}
+		if t2, _, _, _ := n.mintInviteToken("iabc"); t2 == tok {
+			t.Fatal("random tokens repeat")
 		}
 	}
 }
