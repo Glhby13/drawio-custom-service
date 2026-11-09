@@ -316,3 +316,23 @@ select.field, .select { appearance: none; -webkit-appearance: none; padding: 0 3
 .move-item { justify-content: flex-start; gap: 8px; width: 100%; text-align: left; }
 .move-item.current { font-weight: 650; }
 @media (prefers-reduced-motion: no-preference) { .doc { transition: border-color .12s, box-shadow .12s, background .12s; } }
+
+/* share invitations (ADR-0021) */
+.share-dlg { display: grid; gap: 10px; }
+.share-section { margin-top: 6px; }
+.share-linkmaker { display: grid; gap: 6px; padding-top: 10px; border-top: 1px solid var(--border); }
+.share-picked { display: flex; flex-wrap: wrap; gap: 6px; }
+.share-picked[hidden], .share-list[hidden], .expiry-ctl [hidden], .expiry-note[hidden] { display: none; }
+.expiry-ctl { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; }
+.expiry-ctl .mcp-select { flex: 1; min-width: 0; background-color: var(--surface); color: var(--text); }
+.expiry-days { width: 84px; flex: none; }
+.invite-card { box-sizing: border-box; max-width: 520px; margin: 48px auto; padding: 28px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); display: grid; gap: 14px; }
+.invite-card h1 { margin: 0; font-size: 20px; color: var(--text-strong); }
+.invite-text { margin: 0; font-size: 14px; line-height: 1.55; }
+.invite-text.error { color: #b91c1c; }
+.invite-text.muted { color: var(--muted); font-size: 13px; }
+.invite-meta { display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; margin: 0; padding: 12px 14px; border: 1px solid var(--border); border-radius: 9px; background: var(--surface-2); font-size: 13px; }
+.invite-meta dt { color: var(--muted); }
+.invite-meta dd { margin: 0; font-weight: 600; color: var(--text-strong); }
+.invite-actions { display: flex; gap: 8px; margin-top: 4px; }
+.invite-actions a.btn { text-decoration: none; }

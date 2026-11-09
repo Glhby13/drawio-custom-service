@@ -433,10 +433,10 @@
     $('empty').textContent = cur ? 'This folder is empty. Drag a diagram here or use “Move to folder…”.' : 'No diagrams yet. Create one or import a .drawio file.';
     $('empty').hidden = shown > 0;
   }
-  // the people a diagram is shared with ("*" = everyone), from the list response (owner / admin only)
+  // the people a diagram is shared with, from the list response (owner / admin only)
   function showShares(d) {
     var list = el('ul', { class: 'share-list' }, (d.sharedWith || []).map(function (p) {
-      return el('li', null, [el('span', { text: p.subject === '*' ? 'Everyone' : p.subject }), el('span', { class: 'chip', text: p.role })]);
+      return el('li', null, [el('span', { text: p.subject }), el('span', { class: 'chip', text: p.role })]);
     }));
     dialog('Shared “' + d.title + '”', list, [{ label: 'Close', cls: 'primary' }]);
   }
@@ -627,7 +627,7 @@
     var can = doc && doc.can || {};
     var edit = role === 'editor' || role === 'owner';
     var badge = $('rolebadge');
-    badge.hidden = false; badge.dataset.role = role; badge.textContent = role === 'owner' ? 'owner' : edit ? 'can edit' : role === 'commenter' ? 'can comment' : 'view only';
+    badge.hidden = false; badge.dataset.role = role; badge.textContent = role === 'owner' ? 'owner' : edit ? 'can edit' : 'view only';
     $('title').readOnly = !(role === 'owner' || can.rename);
     $('btn-share').hidden = !(role === 'owner' || can.share);
     if (panelRender) panelRender();
@@ -1612,7 +1612,7 @@
     var created = el('div', { id: 'mcp-created', class: 'mcp-created', hidden: true, role: 'status' }, []);
     var nameIn = el('input', { class: 'field mcp-name', id: 'mcp-name', name: 'mcp-token-name', type: 'text', maxlength: '60', placeholder: 'Token name, e.g. Reporting agent…', autocomplete: 'off', spellcheck: 'false', 'aria-label': 'Token name' });
     var roleSel = el('select', { class: 'field mcp-select', id: 'mcp-role', name: 'mcp-token-role', 'aria-label': 'Token access level' }, [
-      el('option', { value: 'editor', text: 'Can edit' }), el('option', { value: 'commenter', text: 'Can comment' }), el('option', { value: 'viewer', text: 'Can view' })]);
+      el('option', { value: 'editor', text: 'Can edit' }), el('option', { value: 'viewer', text: 'Can view' })]);
     var expSel = el('select', { class: 'field mcp-select', id: 'mcp-exp', name: 'mcp-token-expiry', 'aria-label': 'Token expiry' }, [
       el('option', { value: '30', text: 'Expires in 30 days' }), el('option', { value: '90', text: 'Expires in 90 days' }),
       el('option', { value: '365', text: 'Expires in 1 year' }), el('option', { value: '0', text: 'Never expires' })]);
@@ -1680,72 +1680,225 @@
     return sec;
   }
 
+  // ---- Share (ADR-0021): access for somebody new is an INVITATION they accept; nothing here grants access directly -----------------------
+  var dateFmtShare = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+  function expiryText(t) { return t ? 'expires ' + dateFmtShare.format(new Date(t)) : 'never expires'; }
+  // "Expires in" control shared by the three kinds of invitation: presets, Never, and a custom number of days (1..365, like MCP tokens)
+  function expiryControl(idPrefix) {
+    var sel = el('select', { class: 'field mcp-select', id: idPrefix + '-exp', name: idPrefix + '-expiry', 'aria-label': 'Invitation expiry' }, [
+      el('option', { value: '1', text: 'Expires in 1 day' }), el('option', { value: '7', text: 'Expires in 7 days', selected: true }), el('option', { value: '30', text: 'Expires in 30 days' }),
+      el('option', { value: '90', text: 'Expires in 90 days' }), el('option', { value: '365', text: 'Expires in 1 year' }), el('option', { value: '0', text: 'Never expires' }), el('option', { value: 'custom', text: 'Custom…' })]);
+    sel.value = '7';
+    var days = el('input', { class: 'field expiry-days', id: idPrefix + '-days', type: 'number', min: '1', max: '365', value: '14', hidden: true, 'aria-label': 'Number of days (1 to 365)' });
+    var note = el('p', { class: 'mcp-meta expiry-note', hidden: true, text: 'Anyone with this link can ask for access until you revoke it.' });
+    function sync() { days.hidden = sel.value !== 'custom'; note.hidden = !(sel.value === '0'); }
+    sel.addEventListener('change', sync);
+    return {
+      root: el('div', { class: 'expiry-ctl' }, [sel, days]), note: note,
+      value: function () {
+        if (sel.value !== 'custom') return parseInt(sel.value, 10);
+        var n = parseInt(days.value, 10);
+        if (!(n >= 1 && n <= 365)) { days.focus(); throw new Error('Custom expiry must be 1 to 365 days'); }
+        return n;
+      }
+    };
+  }
+  var inviteErrText = {
+    email_cooldown: 'An invitation e-mail for this person and diagram was already sent today. You can send again from 00:00 WIB, or copy the invitation link and send it yourself.',
+    no_email: 'No e-mail address is known for this person. Copy the invitation link and send it yourself.',
+    email_unavailable: 'E-mail is not configured here. Copy the invitation link instead.',
+    already_pending: 'An invitation for this person is already waiting. Use Resend on it.',
+    already_has_access: 'This person already has this access or more.',
+    too_many_invitations: 'Too many open invitations. Cancel or revoke one first.'
+  };
+  function inviteError(e) { return inviteErrText[e.code] || e.message; }
+
   function openShare(id) {
-    api('GET', '/documents/' + id + '/permissions').then(function (r) {
-      var wrap = el('div', null, []);
-      var list = el('div', { id: 'share-list', class: 'share-list' }, []);
-      var hits = el('div', { class: 'hits' }, []);
-      var q = el('input', { class: 'field', id: 'share-q', type: 'search', placeholder: 'Add people by name or username', autocomplete: 'off', 'aria-label': 'Add people' });
-      var roleDd = makeRoleDropdown('editor', null, { id: 'share-role', 'aria-label': 'Role' });
-      var addBox = el('div', { id: 'share-add-box', class: 'share-add-box', hidden: true }, []);
-      var addTrigger = el('div', { class: 'share-add-trigger' }, []);
-      var addBtn = el('button', {
-        id: 'btn-add-user',
-        class: 'add-user-btn',
-        type: 'button',
-        onclick: function () {
-          addBox.hidden = !addBox.hidden;
-          if (!addBox.hidden) setTimeout(function () { q.focus(); }, 20);
-        }
-      }, [el('span', { class: 'add-user-plus', 'aria-hidden': 'true', text: '+' }), el('span', { text: 'Add user' })]);
-      addTrigger.appendChild(addBtn);
+    var perms, invs = [], canEmail = true;
+    var wrap = el('div', { class: 'share-dlg' }, []);
+    var list = el('div', { id: 'share-list', class: 'share-list' }, []);
+    var pendingBox = el('div', { id: 'share-pending', class: 'share-list share-section', hidden: true }, []);
+    var linksBox = el('div', { id: 'share-links', class: 'share-list share-section', hidden: true }, []);
+    var created = el('div', { id: 'share-created', class: 'mcp-created', hidden: true, role: 'status' }, []);
+    var hits = el('div', { class: 'hits' }, []);
+    var q = el('input', { class: 'field', id: 'share-q', type: 'search', placeholder: 'Add people by name or username', autocomplete: 'off', 'aria-label': 'Add people' });
+    var roleDd = makeRoleDropdown('editor', null, { id: 'share-role', 'aria-label': 'Role' });
+    var userExp = expiryControl('share-user');
+    var picked = null; // { username, name, hasEmail }
+    var pickedBox = el('div', { id: 'share-picked', class: 'share-picked', hidden: true }, []);
+    var sendBtn = el('button', { class: 'btn primary', type: 'button', id: 'share-send', text: 'Send invitation', disabled: true });
+    var copyUserBtn = el('button', { class: 'btn', type: 'button', id: 'share-copy-user', text: 'Copy invitation link', disabled: true });
+    var noEmailNote = el('p', { class: 'mcp-meta', id: 'share-noemail', hidden: true, text: 'No e-mail address was found for this person, so the invitation cannot be sent by e-mail. Copy the link and send it yourself.' });
+    var addBox = el('div', { id: 'share-add-box', class: 'share-add-box', hidden: true }, []);
+    var addBtn = el('button', { id: 'btn-add-user', class: 'add-user-btn', type: 'button', onclick: function () {
+      addBox.hidden = !addBox.hidden;
+      if (!addBox.hidden) setTimeout(function () { q.focus(); }, 20);
+    } }, [el('span', { class: 'add-user-plus', 'aria-hidden': 'true', text: '+' }), el('span', { text: 'Add user' })]);
+    var linkRoleDd = makeRoleDropdown('viewer', null, { id: 'share-link-role', 'aria-label': 'Role for the invitation link' });
+    var linkExp = expiryControl('share-link');
 
-      function refresh() {
-        api('GET', '/documents/' + id + '/permissions').then(function (x) { r = x; draw(); });
-      }
-      function setRole(subject, role) {
-        api('PUT', '/documents/' + id + '/permissions', { subject: subject, role: role }).then(refresh).catch(function (e) { toast('error', e.message); });
-      }
-      function draw() {
-        list.textContent = '';
-        list.appendChild(el('div', { class: 'share-row' }, [el('span', { class: 'grow', text: r.owner }), el('span', { class: 'chip', text: 'owner' })]));
-        (r.permissions || []).forEach(function (p) {
-          var dd = makeRoleDropdown(p.role, function (newRole) { setRole(p.subject, newRole); }, { 'aria-label': 'Role of ' + p.subject, 'data-subject': p.subject });
-          list.appendChild(el('div', { class: 'share-row' }, [
-            el('span', { class: 'grow', text: p.subject === '*' ? 'Everyone with access to DrawSpace' : p.subject }),
-            dd,
-            el('button', { class: 'btn danger', type: 'button', text: 'Remove', 'data-remove': p.subject, onclick: function () { setRole(p.subject, ''); } })
-          ]));
-        });
-      }
-      draw();
-      var timer = null;
-      q.oninput = function () {
-        clearTimeout(timer);
-        timer = setTimeout(function () {
-          var v = q.value.trim(); hits.textContent = '';
-          if (v.length < 1) return;
-          api('GET', '/users?q=' + encodeURIComponent(v)).then(function (u) {
-            (u.users || []).filter(function (x) { return x.username !== r.owner; }).forEach(function (x) {
-              hits.appendChild(el('button', { class: 'hit', type: 'button', 'data-user': x.username, text: (x.name ? x.name + ' · ' : '') + x.username + (x.kind === 'ai' ? ' (AI)' : ''),
-                onclick: function () { setRole(x.username, roleDd.getValue()); q.value = ''; hits.textContent = ''; addBox.hidden = true; } }));
-            });
-          }).catch(function () { /* ignore */ });
-        }, 200);
-      };
-      var everyone = el('button', { class: 'btn', type: 'button', id: 'share-everyone', text: 'Share with everyone', onclick: function () { setRole('*', roleDd.getValue()); addBox.hidden = true; } });
-      addBox.appendChild(el('div', { class: 'share-add-row' }, [q, roleDd]));
-      addBox.appendChild(hits);
-      addBox.appendChild(everyone);
+    function refresh() {
+      return Promise.all([api('GET', '/documents/' + id + '/permissions'), api('GET', '/documents/' + id + '/invitations').catch(function () { return { invitations: [] }; })]).then(function (res) {
+        perms = res[0]; invs = res[1].invitations || []; draw();
+      });
+    }
+    function setRole(subject, role) {
+      api('PUT', '/documents/' + id + '/permissions', { subject: subject, role: role }).then(refresh).catch(function (e) { toast('error', e.message); });
+    }
+    function copyBtn(label, text) {
+      return el('button', { class: 'btn', type: 'button', text: label, onclick: function (ev) {
+        var b = ev.currentTarget;
+        navigator.clipboard.writeText(text).then(function () { b.textContent = 'Copied'; setTimeout(function () { b.textContent = label; }, 1500); }, function () { toast('error', 'Copy failed: select the link and copy it manually'); });
+      } });
+    }
+    // the link is shown once, right after it is made (only its hash is stored), like an MCP token
+    function showCreated(link, who, expiresAt, note) {
+      created.textContent = '';
+      created.appendChild(el('p', { class: 'mcp-warn', text: note || 'Copy this link now. It is shown only once.' }));
+      created.appendChild(el('input', { class: 'field mcp-token', id: 'share-new-link', type: 'text', name: 'share-new-link', autocomplete: 'off', spellcheck: 'false', readonly: 'readonly', value: link, 'aria-label': 'Invitation link', onfocus: function (ev) { ev.currentTarget.select(); } }));
+      created.appendChild(el('div', { class: 'mcp-actions' }, [copyBtn('Copy link', link)]));
+      created.appendChild(el('p', { class: 'mcp-meta', text: (who ? 'For ' + who + ' only · ' : 'Anyone signed in to DrawSpace · ') + expiryText(expiresAt) + '. Access starts only after they accept.' }));
+      created.hidden = false;
+    }
+    function linkOf(token) { return location.origin + '/invite/' + token; }
+    function armed(label, busy, attrs, fn) { // asks once, inline, before an irreversible action
+      return el('button', Object.assign({ class: 'btn danger', type: 'button', text: label, onclick: function (ev) {
+        var b = ev.currentTarget;
+        if (!b.dataset.armed) { b.dataset.armed = '1'; b.textContent = 'Confirm ' + label.toLowerCase(); setTimeout(function () { delete b.dataset.armed; if (!b.disabled) b.textContent = label; }, 4000); return; }
+        b.disabled = true; b.textContent = busy;
+        fn().then(refresh).catch(function (e) { b.disabled = false; b.textContent = label; delete b.dataset.armed; toast('error', e.message); });
+      } }, attrs));
+    }
+    function draw() {
+      list.textContent = '';
+      list.appendChild(el('div', { class: 'share-row' }, [el('span', { class: 'grow', text: perms.owner }), el('span', { class: 'chip', text: 'owner' })]));
+      (perms.permissions || []).forEach(function (p) {
+        var dd = makeRoleDropdown(p.role, function (newRole) { setRole(p.subject, newRole); }, { 'aria-label': 'Role of ' + p.subject, 'data-subject': p.subject });
+        list.appendChild(el('div', { class: 'share-row' }, [
+          el('span', { class: 'grow', text: p.subject }), dd,
+          el('button', { class: 'btn danger', type: 'button', text: 'Remove', 'data-remove': p.subject, onclick: function () { setRole(p.subject, ''); } })]));
+      });
+      var users = invs.filter(function (v) { return v.kind === 'user' && v.state !== 'accepted'; });
+      var links = invs.filter(function (v) { return v.kind === 'link'; });
+      pendingBox.hidden = !users.length; pendingBox.textContent = '';
+      if (users.length) pendingBox.appendChild(el('label', { text: 'Invitations' }));
+      users.forEach(function (v) {
+        var dead = v.state !== 'pending';
+        var resend = v.state === 'pending' ? el('button', { class: 'btn', type: 'button', 'data-resend': v.id, text: v.emailSentAt ? 'Resend' : 'New link', onclick: function (ev) {
+          var b = ev.currentTarget; b.disabled = true;
+          var days; try { days = userExp.value(); } catch (e) { b.disabled = false; toast('error', e.message); return; }
+          api('POST', '/documents/' + id + '/invitations/' + v.id + '/resend', { expiresInDays: days }).then(function (r) {
+            if (!r.emailed && r.token) showCreated(linkOf(r.token), v.subject, r.invitation.expiresAt, r.emailError === 'send_failed' ? 'The e-mail could not be sent. Copy this link and send it yourself.' : null);
+            else toast('info', 'Invitation e-mailed again');
+            return refresh();
+          }).catch(function (e) { b.disabled = false; toast('error', inviteError(e)); });
+        } }) : null;
+        pendingBox.appendChild(el('div', { class: 'share-row mcp-row' + (dead ? ' dead' : ''), 'data-invitation': v.id }, [
+          el('span', { class: 'grow' }, [el('strong', { text: v.subject }), el('small', { class: 'mcp-meta', text: ' · ' + v.role + ' · ' + (v.emailSentAt ? 'e-mailed' : 'link only') + ' · ' + expiryText(v.expiresAt) })]),
+          el('span', { class: 'chip ' + (dead ? 'off' : ''), text: dead ? v.state : 'pending' }), resend,
+          armed(dead ? 'Delete' : 'Cancel', dead ? 'Deleting…' : 'Cancelling…', { 'data-cancel': v.id }, function () { return api('DELETE', '/documents/' + id + '/invitations/' + v.id); })]));
+      });
+      linksBox.hidden = !links.length; linksBox.textContent = '';
+      if (links.length) linksBox.appendChild(el('label', { text: 'Invitation links' }));
+      links.forEach(function (v) {
+        var dead = v.state !== 'pending';
+        linksBox.appendChild(el('div', { class: 'share-row mcp-row' + (dead ? ' dead' : ''), 'data-link': v.id }, [
+          el('span', { class: 'grow' }, [el('strong', { text: '…' + v.hint }), el('small', { class: 'mcp-meta', text: ' · ' + v.role + ' · ' + expiryText(v.expiresAt) + ' · used ' + v.useCount + '×' })]),
+          el('span', { class: 'chip ' + (dead ? 'off' : ''), text: dead ? v.state : 'active' }),
+          armed(dead ? 'Delete' : 'Revoke', dead ? 'Deleting…' : 'Revoking…', { 'data-revoke-link': v.id }, function () { return api('DELETE', '/documents/' + id + '/invitations/' + v.id); })]));
+      });
+    }
+    function pick(u) {
+      picked = u; q.value = ''; hits.textContent = '';
+      pickedBox.hidden = false; pickedBox.textContent = '';
+      pickedBox.appendChild(el('span', { class: 'chip', text: (u.name ? u.name + ' · ' : '') + u.username }));
+      var mail = !!u.hasEmail && canEmail;
+      sendBtn.disabled = !mail; copyUserBtn.disabled = false; noEmailNote.hidden = mail;
+      if (!mail && !canEmail) noEmailNote.textContent = 'E-mail is not configured here. Copy the invitation link and send it yourself.';
+      else noEmailNote.textContent = 'No e-mail address was found for this person, so the invitation cannot be sent by e-mail. Copy the link and send it yourself.';
+    }
+    function createFor(sendEmail, btn, label) {
+      if (!picked) return;
+      var days; try { days = userExp.value(); } catch (e) { toast('error', e.message); return; }
+      btn.disabled = true; btn.textContent = 'Working…';
+      api('POST', '/documents/' + id + '/invitations', { kind: 'user', subject: picked.username, role: roleDd.getValue(), expiresInDays: days, sendEmail: sendEmail }).then(function (r) {
+        if (r.emailed) toast('info', 'Invitation e-mailed to ' + picked.username + '. They must accept it to get access.');
+        else if (r.token) showCreated(linkOf(r.token), picked.username, r.invitation.expiresAt, sendEmail ? 'The e-mail could not be sent. Copy this link and send it yourself.' : null);
+        picked = null; pickedBox.hidden = true; sendBtn.disabled = true; copyUserBtn.disabled = true; noEmailNote.hidden = true; addBox.hidden = true;
+        return refresh();
+      }).catch(function (e) { toast('error', inviteError(e)); }).then(function () { btn.disabled = !picked; btn.textContent = label; });
+    }
+    sendBtn.onclick = function () { createFor(true, sendBtn, 'Send invitation'); };
+    copyUserBtn.onclick = function () { createFor(false, copyUserBtn, 'Copy invitation link'); };
 
+    var timer = null;
+    q.oninput = function () {
+      clearTimeout(timer);
+      timer = setTimeout(function () {
+        var v = q.value.trim(); hits.textContent = '';
+        if (v.length < 1) return;
+        api('GET', '/users?q=' + encodeURIComponent(v)).then(function (u) {
+          canEmail = u.canEmail !== false;
+          (u.users || []).filter(function (x) { return x.username !== perms.owner && x.kind !== 'ai'; }).forEach(function (x) {
+            hits.appendChild(el('button', { class: 'hit', type: 'button', 'data-user': x.username, text: (x.name ? x.name + ' · ' : '') + x.username + (x.hasEmail ? '' : ' (no e-mail)'), onclick: function () { pick(x); } }));
+          });
+        }).catch(function () { /* ignore */ });
+      }, 200);
+    };
+    q.addEventListener('keydown', function (e) { if (e.key === 'Enter') e.preventDefault(); }); // Enter in the search box must not close the dialog
+    addBox.appendChild(el('div', { class: 'share-add-row' }, [q, roleDd]));
+    addBox.appendChild(hits); addBox.appendChild(pickedBox);
+    addBox.appendChild(el('div', { class: 'share-add-row' }, [userExp.root])); addBox.appendChild(userExp.note);
+    addBox.appendChild(noEmailNote);
+    addBox.appendChild(el('div', { class: 'share-add-row' }, [sendBtn, copyUserBtn]));
+    var linkBtn = el('button', { class: 'btn', type: 'button', id: 'share-make-link', text: 'Create link', onclick: function () {
+      var days; try { days = linkExp.value(); } catch (e) { toast('error', e.message); return; }
+      linkBtn.disabled = true;
+      api('POST', '/documents/' + id + '/invitations', { kind: 'link', role: linkRoleDd.getValue(), expiresInDays: days }).then(function (r) {
+        showCreated(linkOf(r.token), null, r.invitation.expiresAt); return refresh();
+      }).catch(function (e) { toast('error', inviteError(e)); }).then(function () { linkBtn.disabled = false; });
+    } });
+    var linkSec = el('div', { class: 'share-section share-linkmaker' }, [
+      el('label', { text: 'Invitation link' }),
+      el('p', { class: 'mcp-meta', text: 'Anyone signed in to DrawSpace who opens the link can accept it and gets this access. Send it yourself.' }),
+      el('div', { class: 'share-add-row' }, [linkRoleDd, linkExp.root, linkBtn]), linkExp.note]);
+
+    refresh().then(function () {
       wrap.appendChild(el('label', null, ['People with access']));
-      wrap.appendChild(list);
-      wrap.appendChild(addTrigger);
-      wrap.appendChild(addBox);
-      q.addEventListener('keydown', function (e) { if (e.key === 'Enter') e.preventDefault(); }); // Enter in the search box must not close the dialog
-      var actions = [{ label: 'Done', cls: 'primary' }];
-      dialog('Share "' + (doc ? doc.document.title : '') + '"', wrap, actions);
+      wrap.appendChild(list); wrap.appendChild(pendingBox);
+      wrap.appendChild(el('div', { class: 'share-add-trigger' }, [addBtn]));
+      wrap.appendChild(addBox); wrap.appendChild(linkSec); wrap.appendChild(linksBox); wrap.appendChild(created);
+      dialog('Share "' + (doc ? doc.document.title : '') + '"', wrap, [{ label: 'Done', cls: 'primary' }], { wide: true });
     }).catch(function (e) { toast('error', e.message); });
+  }
+
+  // ---- invitation page (/invite/<token>): the recipient accepts or declines; the page text is Indonesian by design ----------------------------
+  function showInvite(token) {
+    var box = $('invite-card'); $('invite-view').hidden = false; document.title = 'Undangan · DrawSpace'; setStatus('auth', 'Signed in');
+    function msg(title, text, kind) {
+      box.textContent = '';
+      box.appendChild(el('h1', { text: title }));
+      box.appendChild(el('p', { class: 'invite-text' + (kind ? ' ' + kind : ''), text: text }));
+      box.appendChild(el('div', { class: 'invite-actions' }, [el('a', { class: 'btn primary', href: '/', text: 'Ke daftar diagram' })]));
+    }
+    if (!/^dsi_[A-Za-z0-9_-]{43}$/.test(token)) { msg('Undangan tidak valid', 'Tautan undangan ini tidak lengkap atau sudah rusak. Mintalah tautan baru kepada pengundang.', 'error'); return; }
+    var roleLabel = { editor: 'Editor (dapat melihat dan mengubah diagram)', viewer: 'Viewer (hanya dapat melihat diagram)' };
+    api('GET', '/invitations/' + encodeURIComponent(token)).then(function (r) {
+      box.textContent = '';
+      box.appendChild(el('h1', { text: 'Undangan akses diagram' }));
+      box.appendChild(el('p', { class: 'invite-text' }, [el('strong', { text: r.inviter.name || r.inviter.username }), ' mengundang Anda untuk mengakses diagram ', el('strong', { text: '“' + r.document.title + '”' }), '.']));
+      box.appendChild(el('dl', { class: 'invite-meta' }, [
+        el('dt', { text: 'Hak akses' }), el('dd', { id: 'invite-role', text: roleLabel[r.role] || r.role }),
+        el('dt', { text: 'Berlaku hingga' }), el('dd', { text: r.expiresAt ? dateFmtShare.format(new Date(r.expiresAt)) : 'Tidak kedaluwarsa' })]));
+      if (r.alreadyHas) box.appendChild(el('p', { class: 'invite-text', text: 'Anda sudah memiliki akses pada diagram ini; hak akses yang lebih tinggi tidak akan diturunkan.' }));
+      box.appendChild(el('p', { class: 'invite-text muted', text: 'Diagram baru muncul di daftar Anda setelah Anda menekan Terima.' }));
+      var acc = el('button', { class: 'btn primary', id: 'invite-accept', type: 'button', text: 'Terima' });
+      var dec = el('button', { class: 'btn', id: 'invite-decline', type: 'button', text: 'Tolak' });
+      box.appendChild(el('div', { class: 'invite-actions' }, [acc, dec]));
+      function fail(e) { msg('Undangan tidak dapat diproses', e.message, 'error'); }
+      acc.onclick = function () { acc.disabled = dec.disabled = true; api('POST', '/invitations/' + encodeURIComponent(token) + '/accept').then(function (a) { location.replace('/d/' + encodeURIComponent(a.documentId)); }).catch(fail); };
+      dec.onclick = function () { acc.disabled = dec.disabled = true; api('POST', '/invitations/' + encodeURIComponent(token) + '/decline').then(function () { msg('Undangan ditolak', 'Anda menolak undangan ini. Tidak ada akses yang diberikan.'); }).catch(fail); };
+    }).catch(function (e) { msg(e.status === 403 ? 'Undangan bukan untuk akun ini' : 'Undangan tidak berlaku', e.message, 'error'); });
   }
 
   // AI settings as a dropdown under the "AI" menu item (same look as the other menus), not a modal dialog.
@@ -1893,6 +2046,7 @@
       $('user').hidden = false;
       var match = /^\/d\/([^/]+)\/?$/.exec(location.pathname);
       if (match) showEditor(decodeURIComponent(match[1]));
+      else if (/^\/invite\/[^/]+\/?$/.test(location.pathname)) showInvite(decodeURIComponent(location.pathname.split('/')[2]));
       else if (location.pathname === '/admin/users') showUsers();
       else showList();
     })

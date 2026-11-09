@@ -1,6 +1,6 @@
 // Performance sanity (ADR-0006 criterion 5): latency of a change from one browser to another on a 500-cell diagram,
 // time to open it, size of what travels. Lab only, informational thresholds. Run: node e2e/perf_collab.mjs
-import { BASE, check, finish, launch, newPage, keycloakLogin } from './lib.mjs';
+import { shareViaInvitation, BASE, check, finish, launch, newPage, keycloakLogin } from './lib.mjs';
 const browser = await launch();
 async function login(user) {
   const s = await newPage(browser);
@@ -19,7 +19,7 @@ const ready = s => s.page.waitForFunction(() => window.__adapter && window.__ada
 
 const alice = await login('e2e-team1'), bob = await login('lab-test2');
 const id = (await api(alice, 'POST', '/documents', { title: 'perf 500' })).json.document.id;
-await api(alice, 'PUT', `/documents/${id}/permissions`, { subject: 'lab-test2', role: 'editor' });
+await shareViaInvitation(api, alice, id, bob, 'lab-test2', 'editor');
 const N = 500;
 const ops = Array.from({ length: N }, (_, i) => ({ id: 'p' + i, t: 'addCell', page: 'p1', cell: 'n' + i, kind: 'v', parent: '1', props: { v: 'Node ' + i, gx: String((i % 25) * 90), gy: String(Math.floor(i / 25) * 70), gw: '80', gh: '40', 'st:rounded': '1', 'st:fillColor': '#dae8fc' } }));
 const t0 = Date.now();

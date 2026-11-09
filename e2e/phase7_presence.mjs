@@ -1,7 +1,7 @@
 // SPIKE-003 / Phase 7 E2E in real Chrome: live presence (selection, editing + draft, drag/resize previews, AI "applying"),
 // lifecycle (commit, cancel, disconnect, heartbeat loss), security (viewer, no access), concurrency and latency with 10 clients.
 // Presence is ephemeral: the suite also proves it never writes to the operation log. Run: node e2e/phase7_presence.mjs
-import { BASE, check, finish, launch, newPage, keycloakLogin, agentToken } from './lib.mjs';
+import { shareViaInvitation, BASE, check, finish, launch, newPage, keycloakLogin, agentToken } from './lib.mjs';
 
 const browser = await launch();
 const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -54,8 +54,8 @@ const tool = async (ctx, token, name, args) => {
 const alice = await login('e2e-team1'), bob = await login('lab-test2'), carol = await login('e2e-user2');
 const ALICE = 'e2e-team1', BOB = 'lab-test2', CAROL = 'e2e-user2';
 const id = (await api(alice, 'POST', '/documents', { title: 'Live presence ' + Date.now() })).json.document.id;
-await api(alice, 'PUT', `/documents/${id}/permissions`, { subject: BOB, role: 'editor' });
-await api(alice, 'PUT', `/documents/${id}/permissions`, { subject: CAROL, role: 'viewer' });
+await shareViaInvitation(api, alice, id, bob, BOB, 'editor');
+await shareViaInvitation(api, alice, id, carol, CAROL, 'viewer');
 const mk = (cell, label, x, y) => ({ id: 'o' + cell, t: 'addCell', page: 'p1', cell, kind: 'v', parent: '1', props: { v: label, gx: String(x), gy: String(y), gw: '120', gh: '60' } });
 await api(alice, 'POST', `/documents/${id}/operations`, { ops: [mk('A', 'Database', -500, -420), mk('B', 'Cache', -250, -420), mk('C', 'Queue', -500, -300)] });
 await Promise.all([open(alice, id), open(bob, id), open(carol, id)]);

@@ -22,9 +22,9 @@ func docFolder(out map[string]any, id string) (found bool, folder any, placed bo
 func TestIT_Folders(t *testing.T) {
 	e := newIT(t)
 	alice := who{user: "alice", roles: []string{"user"}}
-	bob := who{user: "bob", roles: []string{"user"}}
 	ai := who{user: "ai-1", roles: []string{"user"}, typ: "ai", obo: "alice"}
 	tag := fmt.Sprint(time.Now().UnixNano() % 1e9)
+	bob := who{user: "bob" + tag, roles: []string{"user"}} // fresh every run: the test files a share into bob's own folder and leaves it
 
 	mk := func(w who, name string, parent any) string {
 		c, o := e.call(w, "POST", "/api/v1/folders", map[string]any{"name": name, "parentId": parent})
@@ -72,9 +72,7 @@ func TestIT_Folders(t *testing.T) {
 		t.Fatalf("alice must see it in B: %v %v %v", f, fid, pl)
 	}
 	// a share lands in "Shared with me" (placed=false) and bob may file it in his own folder; alice's view is unaffected
-	if c, _ := e.call(alice, "PUT", "/api/v1/documents/"+id+"/permissions", map[string]any{"subject": "bob", "role": "viewer"}); c != 200 {
-		t.Fatalf("share: %d", c)
-	}
+	e.shareWith(alice, id, bob, "viewer")
 	_, bl := e.call(bob, "GET", "/api/v1/documents", nil)
 	if f, fid, pl := docFolder(bl, id); !f || fid != nil || pl {
 		t.Fatalf("bob: default spot expected: %v %v %v", f, fid, pl)

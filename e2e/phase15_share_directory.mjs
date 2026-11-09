@@ -35,8 +35,9 @@ check('an unknown name returns an empty list, not an error', (await search('zzqx
 // sharing with a person who never signed in works end to end
 const doc = await page.evaluate(async c => (await (await fetch('/api/v1/documents', { method: 'POST', headers: { 'X-CSRF-Token': c, 'Content-Type': 'application/json' }, body: '{"title":"phase15 share"}' })).json()).document.id, csrf);
 const target = real.find(u => u !== 'e2e-team1');
-const st = await page.evaluate(async ([d, c, t]) => (await fetch(`/api/v1/documents/${d}/permissions`, { method: 'PUT', headers: { 'X-CSRF-Token': c, 'Content-Type': 'application/json' }, body: JSON.stringify({ subject: t, role: 'viewer' }) })).status, [doc, csrf, target]);
-check('sharing with a directory user succeeds', st === 200, target + ' -> ' + st);
+const inv = await page.evaluate(async ([d, c, t]) => (await fetch(`/api/v1/documents/${d}/invitations`, { method: 'POST', headers: { 'X-CSRF-Token': c, 'Content-Type': 'application/json' }, body: JSON.stringify({ kind: 'user', subject: t, role: 'viewer', sendEmail: false }) })).status, [doc, csrf, target]);
+const direct = await page.evaluate(async ([d, c, t]) => { const r = await fetch(`/api/v1/documents/${d}/permissions`, { method: 'PUT', headers: { 'X-CSRF-Token': c, 'Content-Type': 'application/json' }, body: JSON.stringify({ subject: t, role: 'viewer' }) }); return { status: r.status, text: await r.text() }; }, [doc, csrf, target]);
+check('sharing with a directory user succeeds', inv === 201 && direct.status === 400 && direct.text.includes('use_invitation'), target + ' -> invitation ' + inv + ', direct PUT ' + direct.status);
 await page.evaluate(async ([d, c]) => fetch('/api/v1/documents/' + d, { method: 'DELETE', headers: { 'X-CSRF-Token': c } }), [doc, csrf]);
 await browser.close();
 finish();

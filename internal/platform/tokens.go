@@ -165,8 +165,8 @@ func (s *Server) issueToken(w http.ResponseWriter, r *http.Request, p *Principal
 		writeErr(w, http.StatusBadRequest, "bad_request", "name 1..60 characters")
 		return
 	}
-	if in.Role != RoleViewer && in.Role != RoleCommenter && in.Role != RoleEditor {
-		writeErr(w, http.StatusBadRequest, "bad_request", "role must be viewer, commenter or editor")
+	if in.Role != RoleViewer && in.Role != RoleEditor {
+		writeErr(w, http.StatusBadRequest, "bad_request", "role must be viewer or editor")
 		return
 	}
 	if in.ExpiresInDays < 0 || time.Duration(in.ExpiresInDays)*24*time.Hour > maxTokenLifetime {

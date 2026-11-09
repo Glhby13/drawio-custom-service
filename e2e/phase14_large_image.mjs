@@ -2,7 +2,7 @@
 // capped at 64 KiB ("Change rejected: bad_prop"); the cap is now 25 MiB end to end (model, WebSocket, REST, gateway, ingress).
 // Also exercises replica fan-out: two users are likely served by different platform pods.
 // Run: node e2e/phase14_large_image.mjs
-import { BASE, check, finish, launch, newPage, keycloakLogin, kubectl } from './lib.mjs';
+import { shareViaInvitation, BASE, check, finish, launch, newPage, keycloakLogin, kubectl } from './lib.mjs';
 
 const browser = await launch();
 const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -43,7 +43,7 @@ const pending = s => s.page.evaluate(() => window.__adapter.state().pending);
 const alice = await login('e2e-team1'), bob = await login('lab-test2');
 const stamp = new Date().toISOString().slice(11, 19);
 const doc = (await api(alice, 'POST', '/documents', { title: 'Large image ' + stamp })).json.document.id;
-await api(alice, 'PUT', '/documents/' + doc + '/permissions', { subject: 'lab-test2', role: 'editor' });
+await shareViaInvitation(api, alice, doc, bob, 'lab-test2', 'editor');
 await open(alice, doc); await open(bob, doc);
 
 const pods = kubectl('-n lab-dev get pods -l app.kubernetes.io/name=drawio-platform --no-headers').trim().split('\n').filter(Boolean);

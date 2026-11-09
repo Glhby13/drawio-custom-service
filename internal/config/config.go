@@ -37,6 +37,9 @@ type Gateway struct {
 	// OTPIssuer is the issuer shown in the authenticator app for the one-time code ("Lab:lab-test3"). Keep it equal to
 	// the realm's display name so a code enrolled here looks exactly like one enrolled on Keycloak's own page.
 	OTPIssuer string
+	// SMTP for the share-invitation e-mail (ADR-0021). Empty SMTP_HOST = no e-mail: invitations then go by link only.
+	SMTPHost, SMTPFromEmail, SMTPFromName, SMTPStartTLS, SMTPClientHostname, SMTPUser, SMTPPassword string
+	SMTPPort, SMTPTimeoutSeconds                                                                    int
 }
 
 // LoadGateway reads and validates the environment; getenv is injectable for tests.
@@ -53,8 +56,26 @@ func LoadGateway(getenv func(string) string) (Gateway, error) {
 		CAFile:        getenv("EXTRA_CA_FILE"),
 		InternalKeyID: or(getenv("INTERNAL_KEY_ID"), "edge-1"),
 	}
+	g.SMTPHost, g.SMTPFromEmail = strings.TrimSpace(getenv("SMTP_HOST")), strings.TrimSpace(getenv("SMTP_FROM_EMAIL"))
+	g.SMTPFromName, g.SMTPStartTLS = or(strings.TrimSpace(getenv("SMTP_FROM_NAME")), "DrawSpace"), or(strings.ToLower(strings.TrimSpace(getenv("SMTP_STARTTLS"))), "none")
+	g.SMTPClientHostname, g.SMTPUser, g.SMTPPassword = getenv("SMTP_CLIENT_HOSTNAME"), getenv("SMTP_USER"), getenv("SMTP_PASSWORD")
+	g.SMTPPort, g.SMTPTimeoutSeconds = 25, 10
+	var smtpErrs []error
+	if v := getenv("SMTP_PORT"); v != "" {
+		n, e := strconv.Atoi(v)
+		if e != nil || n < 1 || n > 65535 {
+			smtpErrs = append(smtpErrs, errors.New("SMTP_PORT is not a valid port"))
+		}
+		g.SMTPPort = n
+	}
+	if g.SMTPHost != "" && g.SMTPFromEmail == "" {
+		smtpErrs = append(smtpErrs, errors.New("SMTP_FROM_EMAIL is required when SMTP_HOST is set"))
+	}
+	if g.SMTPStartTLS != "none" && g.SMTPStartTLS != "opportunistic" && g.SMTPStartTLS != "always" {
+		smtpErrs = append(smtpErrs, errors.New("SMTP_STARTTLS must be none, opportunistic or always"))
+	}
 	g.OTPIssuer = or(strings.TrimSpace(getenv("OTP_ISSUER")), realmName(g.IssuerURL))
-	var errs []error
+	errs := smtpErrs
 	pu, err := parseURL("PUBLIC_URL", getenv("PUBLIC_URL"))
 	errs = append(errs, err)
 	g.PublicURL = pu

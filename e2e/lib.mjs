@@ -153,3 +153,12 @@ export async function keycloakLogin(page, user) {
 export function kubectl(args) {
   return execFileSync('ssh', ['lab-bastion', 'kubectl ' + args], { encoding: 'utf8' });
 }
+
+// Sharing is an invitation the recipient accepts (ADR-0021): the owner creates a link-only invitation for one account
+// (sendEmail:false, so no mail is sent) and the recipient accepts it. `api(session, method, path, body)` is the calling
+// script's own helper; owner/target are its sessions. Returns the accept response ({status, json}), or the refused create.
+export async function shareViaInvitation(api, owner, docId, target, subject, role) {
+  const made = await api(owner, 'POST', '/documents/' + docId + '/invitations', { kind: 'user', subject, role, sendEmail: false });
+  if (made.status !== 201) return made;
+  return api(target, 'POST', '/invitations/' + made.json.token + '/accept');
+}

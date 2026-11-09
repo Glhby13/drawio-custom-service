@@ -1,7 +1,7 @@
 // Per-diagram MCP tokens E2E against the lab (ADR-0016): only the owner creates them, a token opens exactly one diagram with at
 // most its role, revocation / AI switch-off take effect on the next call, OAuth (Keycloak) bearer tokens are not accepted.
 // Run: node e2e/phase10_mcp_token.mjs   (needs the platform with migration 003 and an mcp-server with MCP_OAUTH_ENABLED unset)
-import { BASE, check, finish, launch, newPage, keycloakLogin } from './lib.mjs';
+import { shareViaInvitation, BASE, check, finish, launch, newPage, keycloakLogin } from './lib.mjs';
 
 const browser = await launch();
 
@@ -48,7 +48,7 @@ await owner.page.waitForFunction(() => window.__adapter && window.__adapter.stat
 // ---- who may create tokens ---------------------------------------------------------------------------------------------------------
 let r = await api(other, 'POST', '/documents/' + id + '/mcp-tokens', { name: 'x', role: 'editor', enableAI: true });
 check('a user without access cannot create a token (diagram looks missing)', r.status === 404, r.status + ' ' + r.text.slice(0, 80));
-await api(owner, 'PUT', '/documents/' + id + '/permissions', { subject: 'e2e-user2', role: 'editor' });
+await shareViaInvitation(api, owner, id, other, 'e2e-user2', 'editor');
 r = await api(other, 'POST', '/documents/' + id + '/mcp-tokens', { name: 'x', role: 'editor', enableAI: true });
 check('an editor who is not the owner cannot create a token', r.status === 403, r.status + ' ' + r.text.slice(0, 80));
 r = await api(other, 'GET', '/documents/' + id + '/mcp-tokens');

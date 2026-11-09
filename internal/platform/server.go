@@ -21,19 +21,20 @@ const Audience = "platform"
 
 // Server wires the platform.
 type Server struct {
-	cfg     config.Platform
-	log     *slog.Logger
-	store   *Store
-	blob    *Blob
-	rdb     *redis.Client
-	verify  *identity.VerifierSet
-	hub     *Hub
-	replica string
-	seen    sync.Map // username -> last upsert time
-	rate    *rateLimiter
-	local   localCache   // 15 s cache of local-account state used by authn
-	actRate *rateLimiter // live presence reports per session (best effort, dropped when exceeded)
-	started time.Time
+	cfg        config.Platform
+	log        *slog.Logger
+	store      *Store
+	blob       *Blob
+	rdb        *redis.Client
+	verify     *identity.VerifierSet
+	hub        *Hub
+	replica    string
+	seen       sync.Map // username -> last upsert time
+	rate       *rateLimiter
+	local      localCache   // 15 s cache of local-account state used by authn
+	actRate    *rateLimiter // live presence reports per session (best effort, dropped when exceeded)
+	inviteRate *rateLimiter // invitation look-ups/decisions per person (token-guessing brake)
+	started    time.Time
 }
 
 // Principal is the verified caller.
@@ -59,7 +60,7 @@ func New(cfg config.Platform, log *slog.Logger, store *Store, blob *Blob, rdb *r
 	for _, k := range cfg.Trusted {
 		vs.Add(k.Kid, k.Pub, k.Issuer)
 	}
-	s := &Server{cfg: cfg, log: log, store: store, blob: blob, rdb: rdb, verify: vs, replica: newID(5), started: time.Now(), rate: newRateLimiter(40, 80), actRate: newRateLimiter(30, 60)}
+	s := &Server{cfg: cfg, log: log, store: store, blob: blob, rdb: rdb, verify: vs, replica: newID(5), started: time.Now(), rate: newRateLimiter(40, 80), actRate: newRateLimiter(30, 60), inviteRate: newRateLimiter(0.5, 10)}
 	s.hub = newHub(s)
 	return s
 }

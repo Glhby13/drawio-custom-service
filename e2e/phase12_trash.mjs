@@ -1,7 +1,7 @@
 // Trash / Restore E2E against the lab (ADR-0018): the list icon, the confirmation dialog, the Trash filter (?scope=trash), Restore,
 // who may delete (owner / app admin, ADR-0019), the yellow Shared chip, the filters, and that a deleted diagram is gone for everybody else.
 // Run: node e2e/phase12_trash.mjs   (needs the platform + gateway with the ADR-0018 change; lab test users from lab/SECRETS.md)
-import { BASE, check, finish, launch, newPage, keycloakLogin } from './lib.mjs';
+import { shareViaInvitation, BASE, check, finish, launch, newPage, keycloakLogin } from './lib.mjs';
 
 const browser = await launch();
 
@@ -32,8 +32,8 @@ const tag = String(Date.now()).slice(-7), title = 'Trash E2E ' + tag;
 const made = await api(owner, 'POST', '/documents', { title });
 const id = made.json && made.json.document && made.json.document.id;
 check('owner creates a diagram', made.status === 201 && id, 'status ' + made.status);
-await api(owner, 'PUT', '/documents/' + id + '/permissions', { subject: 'lab-test', role: 'editor' });
-await api(owner, 'PUT', '/documents/' + id + '/permissions', { subject: 'e2e-user2', role: 'viewer' });
+await shareViaInvitation(api, owner, id, editor, 'lab-test', 'editor');
+await shareViaInvitation(api, owner, id, viewer, 'e2e-user2', 'viewer');
 
 // ---- UI: the owner sees the trash icon, the editor and the viewer do not
 await owner.page.goto(BASE + '/', { waitUntil: 'domcontentloaded' });

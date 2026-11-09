@@ -185,6 +185,26 @@ func (e *itEnv) hashOf(w who, docID string) (string, float64) {
 	return out["hash"].(string), out["seq"].(float64)
 }
 
+// shareWithTok gives targetUser access the only way a new human can get it (ADR-0021): the owner creates a kind:'user'
+// invitation (no e-mail) and the target accepts it. Fails the test unless both steps succeed.
+func (e *itEnv) shareWithTok(ownerTok, docID, targetUser, targetTok, role string) {
+	e.t.Helper()
+	c, o := e.rawCall(ownerTok, "POST", "/api/v1/documents/"+docID+"/invitations", map[string]any{"kind": "user", "subject": targetUser, "role": role, "sendEmail": false})
+	if c != 201 {
+		e.t.Fatalf("invite %s: %d %v", targetUser, c, o)
+	}
+	tok, _ := o["token"].(string)
+	if c, o := e.rawCall(targetTok, "POST", "/api/v1/invitations/"+tok+"/accept", nil); c != 200 {
+		e.t.Fatalf("accept %s: %d %v", targetUser, c, o)
+	}
+}
+
+// shareWith is shareWithTok for two SSO test users.
+func (e *itEnv) shareWith(owner who, docID string, target who, role string) {
+	e.t.Helper()
+	e.shareWithTok(e.token(owner), docID, target.user, e.token(target), role)
+}
+
 func addVertex(id, cell, parent, order string) model.Op {
 	return model.Op{ID: id, T: model.OpAddCell, Page: "p1", Cell: cell, Kind: "v", Parent: parent, Order: order,
 		Props: map[string]string{"gx": "10", "gy": "20", "gw": "80", "gh": "40", "v": cell}}
@@ -211,11 +231,8 @@ func TestPlatformEndToEnd(t *testing.T) {
 	if c, _ := e.call(bob, "PUT", "/api/v1/documents/"+docID+"/permissions", map[string]any{"subject": "bob", "role": "editor"}); c != 404 {
 		t.Fatalf("bob must not be able to share: %d", c)
 	}
-	for _, p := range []map[string]any{{"subject": "bob", "role": "editor"}, {"subject": "carol", "role": "viewer"}} {
-		if c, o := e.call(alice, "PUT", "/api/v1/documents/"+docID+"/permissions", p); c != 200 {
-			t.Fatalf("share: %d %v", c, o)
-		}
-	}
+	e.shareWith(alice, docID, bob, "editor")
+	e.shareWith(alice, docID, carol, "viewer")
 	if c, o := e.call(admin, "GET", "/api/v1/documents/"+docID, nil); c != 200 || o["role"] != "" {
 		t.Fatalf("admin read: %d role=%v", c, o["role"])
 	}
@@ -434,9 +451,9 @@ func TestLivePresence(t *testing.T) {
 	ai := who{user: "ai-1", roles: []string{"user"}, typ: "ai", obo: "alice"}
 	_, out := e.call(alice, "POST", "/api/v1/documents", map[string]any{"title": "presence"})
 	docID := out["document"].(map[string]any)["id"].(string)
-	for _, p := range []map[string]any{{"subject": "bob", "role": "editor"}, {"subject": "carol", "role": "viewer"}, {"subject": "ai-1", "role": "editor"}} {
-		e.call(alice, "PUT", "/api/v1/documents/"+docID+"/permissions", p)
-	}
+	e.shareWith(alice, docID, bob, "editor")
+	e.shareWith(alice, docID, carol, "viewer")
+	e.call(alice, "PUT", "/api/v1/documents/"+docID+"/permissions", map[string]any{"subject": "ai-1", "role": "editor"}) // an AI actor is still granted directly
 	e.call(alice, "PUT", "/api/v1/documents/"+docID+"/ai-policy", map[string]any{"allowed": true, "maxOpsPerMin": 100, "maxDelete": 5})
 	wa, _ := e.dial(alice, docID, 0)
 	wb, _ := e.dial(bob, docID, 0)
@@ -693,16 +710,14 @@ func TestLocalAccounts(t *testing.T) {
 		t.Fatalf("owner %v", doc["owner"])
 	}
 	bob := who{user: "bob" + tag, roles: []string{"user"}}
-	if c, _ := e.rawCall(e.localTok(lu), "PUT", "/api/v1/documents/"+docID+"/permissions", map[string]any{"subject": bob.user, "role": "editor"}); c != 200 {
-		t.Fatalf("share to an SSO user: %d", c)
-	}
+	e.shareWithTok(e.localTok(lu), docID, bob.user, e.token(bob), "editor")
 	if c, o := e.call(bob, "GET", "/api/v1/documents/"+docID, nil); c != 200 || o["role"] != "editor" {
 		t.Fatalf("the SSO user sees the local user's diagram: %d %v", c, o["role"])
 	}
 	// ... and the other way round
 	_, o2 := e.call(bob, "POST", "/api/v1/documents", map[string]any{"title": "sso owner"})
 	d2 := o2["document"].(map[string]any)["id"].(string)
-	e.call(bob, "PUT", "/api/v1/documents/"+d2+"/permissions", map[string]any{"subject": lu, "role": "viewer"})
+	e.shareWithTok(e.token(bob), d2, lu, e.localTok(lu), "viewer")
 	if c, o := e.rawCall(e.localTok(lu), "GET", "/api/v1/documents/"+d2, nil); c != 200 || o["role"] != "viewer" {
 		t.Fatalf("the local user sees the SSO user's diagram: %d %v", c, o["role"])
 	}

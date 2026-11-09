@@ -3,7 +3,7 @@
 // OAuth path only: needs the mcp-server started with MCP_OAUTH_ENABLED=true (off by default since ADR-0016; per-diagram tokens are
 // covered by phase10_mcp_token.mjs).
 // Run: node e2e/phase6_mcp.mjs
-import { BASE, check, finish, launch, newPage, keycloakLogin, agentToken, password } from './lib.mjs';
+import { shareViaInvitation, BASE, check, finish, launch, newPage, keycloakLogin, agentToken, password } from './lib.mjs';
 
 const browser = await launch();
 const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -130,7 +130,7 @@ r = await tool(ctx, tokA, 'apply_operations', { document: id, operations: Array.
 check('exceeding the AI quota is refused (rate limited)', !r.ok && /rate limited/.test(r.text), r.text.slice(0, 120));
 
 // a viewer's agent: the AI is capped by the delegating user's own role
-check('owner shares with carol as viewer only', (await api(alice, 'PUT', `/documents/${id}/permissions`, { subject: 'e2e-user2', role: 'viewer' })).status === 200);
+check('owner shares with carol as viewer only', (await shareViaInvitation(api, alice, id, carol, 'e2e-user2', 'viewer')).status === 200);
 await api(alice, 'PUT', `/documents/${id}/ai-policy`, { allowed: true, maxOpsPerMin: 60, maxDelete: 2 });
 const tokC = await agentToken(ctx, 'e2e-user2');
 r = await tool(ctx, tokC, 'get_diagram', { document: id });

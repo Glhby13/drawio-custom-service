@@ -1,7 +1,7 @@
 // Personal folders E2E against the lab (ADR-0020): nested folders, filing diagrams (menu + drag), "Shared with me" and the
 // recipient's own filing, privacy between users, deletion moving contents up, URL state, search flat list.
 // Run: node e2e/phase13_folders.mjs   (needs platform + gateway with ADR-0020; lab test users from lab/SECRETS.md)
-import { BASE, check, finish, launch, newPage, keycloakLogin } from './lib.mjs';
+import { shareViaInvitation, BASE, check, finish, launch, newPage, keycloakLogin } from './lib.mjs';
 
 const browser = await launch();
 async function login(user) {
@@ -38,7 +38,7 @@ check('another user cannot rename or delete them (404)', (await api(peer, 'PATCH
 // ---- a diagram, shared with the peer
 const made = await api(owner, 'POST', '/documents', { title });
 const doc = made.json.document.id;
-await api(owner, 'PUT', '/documents/' + doc + '/permissions', { subject: 'e2e-user2', role: 'viewer' });
+await shareViaInvitation(api, owner, doc, peer, 'e2e-user2', 'viewer');
 
 // ---- UI: root shows the folder; it opens; breadcrumb + URL state; the diagram is filed through the "Move to…" dialog
 await reload(owner);

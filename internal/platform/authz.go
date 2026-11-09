@@ -40,13 +40,6 @@ func minRole(a, b string) string {
 	return b
 }
 
-func maxRole(a, b string) string {
-	if rank(a) >= rank(b) {
-		return a
-	}
-	return b
-}
-
 // Action is what a caller wants to do with a document; the single PDP below answers for REST, WebSocket and MCP.
 type Action string
 
@@ -67,7 +60,7 @@ const (
 )
 
 // docRole computes the principal's effective document role (the heart of the PDP, ADR-0004/0009):
-//   - human: owner, else the best of their own share and the "*" (everyone) share;
+//   - human: owner, else their own share (there is no "everyone" share any more, ADR-0021);
 //   - AI actor: the minimum of its own explicit share and, when acting on behalf of a user, that user's role; capped at
 //     editor, and only when the document's AI policy allows AI at all.
 func (s *Server) docRole(ctx context.Context, p *Principal, d *DocMeta) (string, error) {
@@ -81,13 +74,13 @@ func (s *Server) docRole(ctx context.Context, p *Principal, d *DocMeta) (string,
 			}
 			return minRole(minRole(p.TokenRole, RoleEditor), RoleOwner), nil
 		}
-		own, err := s.sharedRole(ctx, d, p.Username, false)
+		own, err := s.sharedRole(ctx, d, p.Username)
 		if err != nil {
 			return RoleNone, err
 		}
 		role := minRole(own, RoleEditor)
 		if obo := p.Actor.OnBehalfOf; obo != "" {
-			delegated, err := s.sharedRole(ctx, d, obo, true)
+			delegated, err := s.sharedRole(ctx, d, obo)
 			if err != nil {
 				return RoleNone, err
 			}
@@ -95,25 +88,14 @@ func (s *Server) docRole(ctx context.Context, p *Principal, d *DocMeta) (string,
 		}
 		return role, nil
 	}
-	return s.sharedRole(ctx, d, p.Username, true)
+	return s.sharedRole(ctx, d, p.Username)
 }
 
-func (s *Server) sharedRole(ctx context.Context, d *DocMeta, subject string, allowEveryone bool) (string, error) {
+func (s *Server) sharedRole(ctx context.Context, d *DocMeta, subject string) (string, error) {
 	if d.Owner == subject {
 		return RoleOwner, nil
 	}
-	role, err := s.store.RoleOf(ctx, d.ID, subject)
-	if err != nil {
-		return RoleNone, err
-	}
-	if allowEveryone {
-		every, err := s.store.RoleOf(ctx, d.ID, "*")
-		if err != nil {
-			return RoleNone, err
-		}
-		role = maxRole(role, every)
-	}
-	return role, nil
+	return s.store.RoleOf(ctx, d.ID, subject)
 }
 
 // can answers the PDP question. An application admin may read, share, delete, restore, export, set policy and audit any

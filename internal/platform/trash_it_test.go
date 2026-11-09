@@ -33,9 +33,7 @@ func TestIT_TrashAndRestore(t *testing.T) {
 		t.Fatalf("create: %d %v", code, out)
 	}
 	id := out["document"].(map[string]any)["id"].(string)
-	if c, o := e.call(alice, "PUT", "/api/v1/documents/"+id+"/permissions", map[string]any{"subject": "bob", "role": "editor"}); c != 200 {
-		t.Fatalf("share: %d %v", c, o)
-	}
+	e.shareWith(alice, id, bob, "editor")
 
 	// only the owner (or an application admin) may delete: an editor is refused, a stranger sees nothing
 	if c, _ := e.call(bob, "DELETE", "/api/v1/documents/"+id, nil); c != 403 {

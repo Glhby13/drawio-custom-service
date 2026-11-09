@@ -43,7 +43,8 @@ type Server struct {
 	// stylesheet by hash (no 'unsafe-inline', no extra public route).
 	loggedOutBody []byte
 	loggedOutCSP  string
-	loginBody     []byte // the sign-in page (inlined stylesheet, CSP allows that stylesheet by hash and its own script)
+	mailer        mailSender // nil = e-mail not configured (ADR-0021)
+	loginBody     []byte     // the sign-in page (inlined stylesheet, CSP allows that stylesheet by hash and its own script)
 	loginCSP      string
 	cookie        string
 	bind          string
@@ -68,6 +69,8 @@ func New(cfg config.Gateway, log *slog.Logger, store session.Store, o *OIDC, sig
 	if cfg.InsecureCookie {
 		s.cookie, s.bind = "drawio_sid", "drawio_login"
 	}
+	s.mailer = newMailer(mailerConfig{Host: cfg.SMTPHost, Port: cfg.SMTPPort, FromEmail: cfg.SMTPFromEmail, FromName: cfg.SMTPFromName, StartTLS: cfg.SMTPStartTLS,
+		ClientHostname: cfg.SMTPClientHostname, User: cfg.SMTPUser, Password: cfg.SMTPPassword, TimeoutSeconds: cfg.SMTPTimeoutSeconds})
 	s.proxy = newEditorProxy(cfg.DrawioUpstream, log)
 	if cfg.PlatformUpstream != nil {
 		s.platform = newPlatformProxy(cfg.PlatformUpstream, log)
@@ -107,10 +110,13 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/me", s.limited(s.authed(s.me)))
 	mux.HandleFunc("GET /static/", s.authed(s.staticFile))
 	mux.HandleFunc("GET /{$}", s.authed(s.hostPage))
-	mux.HandleFunc("GET /admin/users", s.authed(s.hostPage)) // the user-management view of the single-page UI (admins only, enforced by the platform)
-	mux.HandleFunc("GET /d/{id}", s.authed(s.hostPage))      // the single-page UI routes on the client
+	mux.HandleFunc("GET /admin/users", s.authed(s.hostPage))      // the user-management view of the single-page UI (admins only, enforced by the platform)
+	mux.HandleFunc("GET /d/{id}", s.authed(s.hostPage))           // the single-page UI routes on the client
+	mux.HandleFunc("GET /invite/{token}", s.authed(s.invitePage)) // share invitation: sign in first (return_to keeps the link), then accept/decline in the UI
 	if s.platform != nil {
 		mux.Handle("GET /api/v1/users", s.authedHandler(s.searchUsers)) // platform hits + the whole Keycloak directory
+		mux.Handle("POST /api/v1/documents/{id}/invitations", s.authedHandler(s.createInvite))
+		mux.Handle("POST /api/v1/documents/{id}/invitations/{iid}/resend", s.authedHandler(s.resendInvite))
 		mux.Handle("/api/v1/", s.authedHandler(s.platformAPI))
 		mux.Handle("/ws/v1/", s.authedHandler(s.platformAPI))
 	}
@@ -397,6 +403,13 @@ func (s *Server) me(w http.ResponseWriter, _ *http.Request, sess *session.Sessio
 
 func (s *Server) hostPage(w http.ResponseWriter, r *http.Request, _ *session.Session) {
 	pageHeaders(w.Header())
+	http.ServeFileFS(w, r, s.static, "host.html")
+}
+
+// invitePage serves the single-page UI for /invite/{token}; the token must never leave through a Referer header.
+func (s *Server) invitePage(w http.ResponseWriter, r *http.Request, _ *session.Session) {
+	pageHeaders(w.Header())
+	w.Header().Set("Referrer-Policy", "no-referrer")
 	http.ServeFileFS(w, r, s.static, "host.html")
 }
 

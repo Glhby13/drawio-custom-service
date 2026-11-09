@@ -49,9 +49,7 @@ func TestIT_MCPTokens(t *testing.T) {
 	doc := out["document"].(map[string]any)["id"].(string)
 	_, out = e.call(alice, "POST", "/api/v1/documents", map[string]any{"title": "other " + suffix})
 	other := out["document"].(map[string]any)["id"].(string)
-	if c, _ := e.call(alice, "PUT", "/api/v1/documents/"+doc+"/permissions", map[string]any{"subject": bob.user, "role": "editor"}); c != 200 {
-		t.Fatalf("share: %d", c)
-	}
+	e.shareWith(alice, doc, bob, "editor")
 
 	base := "/api/v1/documents/" + doc + "/mcp-tokens"
 	// only the owner creates tokens

@@ -87,7 +87,7 @@ type DocListItem struct {
 	// FolderID/Placed are the CALLER's own view (ADR-0020): Placed=false means the default spot (root / "Shared with me").
 	FolderID *string `json:"folderId"`
 	Placed   bool    `json:"placed"`
-	// SharedWith lists who the diagram is shared with ("*" = everyone); only filled in for the owner and an admin.
+	// SharedWith lists who the diagram is shared with; only filled in for the owner and an admin.
 	SharedWith []ShareRef `json:"sharedWith,omitempty"`
 }
 
@@ -97,15 +97,14 @@ type ShareRef struct {
 	Role    string `json:"role"`
 }
 
-// ListDocuments returns documents the subject can see: owned or shared with them (or with everyone); admins see all.
+// ListDocuments returns documents the subject can see: owned or shared with them; admins see all.
 func (s *Store) ListDocuments(ctx context.Context, username string, admin bool) ([]DocListItem, error) {
 	q := `SELECT d.id, d.title, d.owner, d.created_at, d.updated_at, d.head_seq, d.snapshot_seq, d.ai_policy,
-	        CASE WHEN d.owner=$1 THEN 'owner' ELSE COALESCE((SELECT p.role FROM permissions p WHERE p.document_id=d.id AND p.subject=$1),
-	             (SELECT p.role FROM permissions p WHERE p.document_id=d.id AND p.subject='*'), '') END AS role
+	        CASE WHEN d.owner=$1 THEN 'owner' ELSE COALESCE((SELECT p.role FROM permissions p WHERE p.document_id=d.id AND p.subject=$1), '') END AS role
 	        , pl.folder_id, (pl.document_id IS NOT NULL) AS placed
 	      FROM documents d LEFT JOIN doc_placement pl ON pl.document_id=d.id AND pl.owner=$1 WHERE d.deleted_at IS NULL`
 	if !admin {
-		q += ` AND (d.owner=$1 OR EXISTS (SELECT 1 FROM permissions p WHERE p.document_id=d.id AND p.subject IN ($1,'*')))`
+		q += ` AND (d.owner=$1 OR EXISTS (SELECT 1 FROM permissions p WHERE p.document_id=d.id AND p.subject = $1))`
 	}
 	q += ` ORDER BY d.updated_at DESC LIMIT 500`
 	rows, err := s.pool.Query(ctx, q, username)
@@ -269,16 +268,25 @@ func (s *Store) UpsertUser(ctx context.Context, sub, username, name, email, kind
 	return err
 }
 
+// IsAIUser reports a known AI actor (kind 'ai') with that username.
+func (s *Store) IsAIUser(ctx context.Context, username string) bool {
+	var n int
+	return s.pool.QueryRow(ctx, `SELECT count(*) FROM users WHERE username=$1 AND kind='ai'`, username).Scan(&n) == nil && n > 0
+}
+
 // UserHit is a share-picker suggestion.
 type UserHit struct {
 	Username string `json:"username"`
 	Name     string `json:"name"`
 	Kind     string `json:"kind"`
+	HasEmail bool   `json:"hasEmail"` // an e-mail is on record (the address itself never leaves the server)
 }
 
 // SearchUsers returns users seen by the platform whose username/name contains q.
 func (s *Store) SearchUsers(ctx context.Context, q string) ([]UserHit, error) {
-	rows, err := s.pool.Query(ctx, `SELECT username, COALESCE(name,''), kind FROM users WHERE username ILIKE $1 OR name ILIKE $1 ORDER BY username LIMIT 20`, "%"+strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`).Replace(q)+"%")
+	rows, err := s.pool.Query(ctx, `SELECT u.username, COALESCE(u.name,''), u.kind,
+	  (COALESCE(u.email,'') <> '' OR EXISTS (SELECT 1 FROM local_users l WHERE l.username=u.username AND COALESCE(l.email,'') <> ''))
+	  FROM users u WHERE u.username ILIKE $1 OR u.name ILIKE $1 ORDER BY u.username LIMIT 20`, "%"+strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`).Replace(q)+"%")
 	if err != nil {
 		return nil, err
 	}
@@ -286,7 +294,7 @@ func (s *Store) SearchUsers(ctx context.Context, q string) ([]UserHit, error) {
 	out := []UserHit{}
 	for rows.Next() {
 		var u UserHit
-		if err := rows.Scan(&u.Username, &u.Name, &u.Kind); err != nil {
+		if err := rows.Scan(&u.Username, &u.Name, &u.Kind, &u.HasEmail); err != nil {
 			return nil, err
 		}
 		out = append(out, u)

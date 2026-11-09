@@ -1,7 +1,7 @@
 // Phases 3-5 E2E in real Chrome against the lab: documents, sharing/permissions, realtime collaboration between three
 // users, viewer read-only, revoke, history/revert, versions/restore, export, reload persistence, pod restart.
 // Run: node e2e/phase5_collab.mjs
-import { BASE, check, finish, launch, newPage, keycloakLogin, kubectl } from './lib.mjs';
+import { shareViaInvitation, BASE, check, finish, launch, newPage, keycloakLogin, kubectl } from './lib.mjs';
 
 const browser = await launch();
 const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -64,8 +64,8 @@ const id = created.json?.document?.id;
 check('owner creates a document (blank, seq 0)', created.status === 201 && id && created.json.role === 'owner', `status ${created.status} id ${id}`);
 check('stranger cannot see the document (404, no existence oracle)', (await api(bob, 'GET', '/documents/' + id)).status === 404 && (await api(carol, 'GET', '/documents/' + id + '/content')).status === 404);
 check('non-owner cannot share it', (await api(bob, 'PUT', '/documents/' + id + '/permissions', { subject: 'lab-test2', role: 'editor' })).status === 404);
-check('owner shares: bob = editor', (await api(alice, 'PUT', '/documents/' + id + '/permissions', { subject: 'lab-test2', role: 'editor' })).status === 200);
-check('owner shares: carol = viewer', (await api(alice, 'PUT', '/documents/' + id + '/permissions', { subject: 'e2e-user2', role: 'viewer' })).status === 200);
+check('owner shares: bob = editor', (await shareViaInvitation(api, alice, id, bob, 'lab-test2', 'editor')).status === 200);
+check('owner shares: carol = viewer', (await shareViaInvitation(api, alice, id, carol, 'e2e-user2', 'viewer')).status === 200);
 check('viewer cannot share', (await api(carol, 'PUT', '/documents/' + id + '/permissions', { subject: 'e2e-user2', role: 'editor' })).status === 403);
 const list = await api(bob, 'GET', '/documents');
 check('shared document appears in the editor\'s list with their role', list.json.documents.some(d => d.id === id && d.role === 'editor'));

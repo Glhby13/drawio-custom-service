@@ -17,7 +17,7 @@ import (
 	"github.com/Glhby13/drawio-custom-service/internal/model"
 )
 
-var subjectRe = regexp.MustCompile(`^(\*|[A-Za-z0-9_.@\-]{1,128})$`)
+var subjectRe = regexp.MustCompile(`^[A-Za-z0-9_.@\-]{1,128}$`)
 
 func versionKey(docID, vid string) string { return "docs/" + docID + "/ver/" + vid + ".json.gz" }
 
@@ -40,6 +40,15 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/v1/documents/{id}/undelete", s.api(s.undeleteDoc))
 	mux.HandleFunc("GET /api/v1/documents/{id}/permissions", s.api(s.getPerms))
 	mux.HandleFunc("PUT /api/v1/documents/{id}/permissions", s.api(s.putPerm))
+	mux.HandleFunc("GET /api/v1/documents/{id}/invitations", s.api(s.listInvitations))
+	mux.HandleFunc("POST /api/v1/documents/{id}/invitations", s.api(s.createInvitation))
+	mux.HandleFunc("POST /api/v1/documents/{id}/invitations/{iid}/resend", s.api(s.resendInvitation))
+	mux.HandleFunc("DELETE /api/v1/documents/{id}/invitations/{iid}", s.api(s.deleteInvitation))
+	mux.HandleFunc("GET /api/v1/invitations/{token}", s.api(s.previewInvitation))
+	mux.HandleFunc("POST /api/v1/invitations/{token}/accept", s.api(s.acceptInvitation))
+	mux.HandleFunc("POST /api/v1/invitations/{token}/decline", s.api(s.declineInvitation))
+	mux.HandleFunc("GET /api/v1/internal/contacts/{username}", s.internalContact)                 // gateway service token only
+	mux.HandleFunc("POST /api/v1/internal/invitations/{iid}/email-failed", s.internalEmailFailed) // gateway service token only
 	mux.HandleFunc("PUT /api/v1/documents/{id}/ai-policy", s.api(s.putAIPolicy))
 	mux.HandleFunc("GET /api/v1/documents/{id}/mcp-tokens", s.api(s.listTokens))
 	mux.HandleFunc("POST /api/v1/documents/{id}/mcp-tokens", s.api(s.issueToken))
@@ -425,19 +434,33 @@ func (s *Server) putPerm(w http.ResponseWriter, r *http.Request, p *Principal) {
 	}
 	var in struct {
 		Subject string `json:"subject"`
-		Role    string `json:"role"` // viewer | commenter | editor | "" (remove)
+		Role    string `json:"role"` // viewer | editor | "" (remove)
 	}
 	if !readJSON(w, r, &in, 4096) {
 		return
 	}
 	in.Subject = strings.TrimSpace(in.Subject)
 	if !subjectRe.MatchString(in.Subject) || in.Subject == d.Owner {
-		writeErr(w, http.StatusBadRequest, "bad_request", "subject must be a username or * (everyone), and not the owner")
+		writeErr(w, http.StatusBadRequest, "bad_request", "subject must be a username, and not the owner")
 		return
 	}
-	if in.Role != "" && in.Role != RoleViewer && in.Role != RoleCommenter && in.Role != RoleEditor {
-		writeErr(w, http.StatusBadRequest, "bad_request", "role must be viewer, commenter, editor or empty")
+	if in.Role != "" && in.Role != RoleViewer && in.Role != RoleEditor {
+		writeErr(w, http.StatusBadRequest, "bad_request", "role must be viewer, editor or empty")
 		return
+	}
+	// Changing the role of someone who already has access, or removing it, is direct. GIVING access to somebody new is not:
+	// that goes through an invitation the recipient accepts (ADR-0021).
+	if in.Role != "" {
+		cur, err := s.store.RoleOf(r.Context(), d.ID, in.Subject)
+		if err != nil {
+			writeErr(w, http.StatusInternalServerError, "internal", "")
+			return
+		}
+		// AI actors are not people who could be spammed with diagrams and cannot accept anything: they are still shared directly.
+		if cur == "" && !s.store.IsAIUser(r.Context(), in.Subject) {
+			writeErr(w, http.StatusBadRequest, "use_invitation", "access for a new person is given by an invitation they accept")
+			return
+		}
 	}
 	if err := s.store.SetPerm(r.Context(), d.ID, in.Subject, in.Role, p.Username); err != nil {
 		writeErr(w, http.StatusInternalServerError, "internal", "")
