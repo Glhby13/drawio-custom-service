@@ -32,6 +32,10 @@ const (
 	maxInviteDays         = 365
 	maxLinksPerDoc        = 20
 	maxPendingUserInvites = 50
+	// safety valves ON TOP of "one e-mail per sender, recipient and diagram per day": a sender could otherwise open many
+	// diagrams and mail the same person once from each (reviewer finding, 2026-11-09)
+	maxEmailsPerPairPerDay   = 10  // one sender -> one recipient, all diagrams together
+	maxEmailsPerSenderPerDay = 100 // one sender, all recipients
 )
 
 // wib is Indonesian Western Time (no daylight saving): the daily e-mail limit resets at 00:00 here.
@@ -122,6 +126,7 @@ var (
 	errAlreadyHasAccess = errors.New("already has this access")
 	errTooManyInvites   = errors.New("too many invitations")
 	errEmailCooldown    = errors.New("invitation e-mail already sent today")
+	errEmailQuota       = errors.New("too many invitation e-mails today")
 )
 
 // errAlreadyPending carries the id of the invitation that is already waiting for the same person.
@@ -147,6 +152,18 @@ func emailedSince(ctx context.Context, q pgQuerier, docID, subject, by string, s
 	return n > 0, err
 }
 
+// emailQuota enforces the cross-diagram daily valves (call it under the sender's lock).
+func emailQuota(ctx context.Context, q pgQuerier, by, subject string, since time.Time) error {
+	var pair, total int
+	if err := q.QueryRow(ctx, `SELECT count(*) FILTER (WHERE subject=$2), count(*) FROM invitations WHERE kind='user' AND created_by=$1 AND email_sent_at >= $3`, by, subject, since).Scan(&pair, &total); err != nil {
+		return err
+	}
+	if pair >= maxEmailsPerPairPerDay || total >= maxEmailsPerSenderPerDay {
+		return errEmailQuota
+	}
+	return nil
+}
+
 // CreateInvitation checks the rules and stores the invitation in one transaction under a per-person lock. With reserveEmail the
 // day's one e-mail (per sender, recipient and diagram; hidden and revoked rows count too, so cancel-and-recreate buys nothing)
 // is taken NOW by setting email_sent_at; the gateway gives it back through ReleaseEmail when the mail cannot be sent.
@@ -158,7 +175,12 @@ func (s *Store) CreateInvitation(ctx context.Context, i Invitation, hash string,
 	defer func() { _ = tx.Rollback(ctx) }()
 	limit, key := maxLinksPerDoc, i.DocumentID+"|link"
 	if i.Kind == "user" {
-		limit, key = maxPendingUserInvites, i.DocumentID+"|"+i.Subject
+		limit, key = maxPendingUserInvites, i.DocumentID+"|user" // one lock for the whole diagram: the caps count across all people
+	}
+	if reserveEmail { // lock order everywhere: sender first, then diagram
+		if err := lockKey(ctx, tx, "mail|"+i.CreatedBy); err != nil {
+			return err
+		}
 	}
 	if err := lockKey(ctx, tx, key); err != nil {
 		return err
@@ -185,6 +207,9 @@ func (s *Store) CreateInvitation(ctx context.Context, i Invitation, hash string,
 			} else if sent {
 				return errEmailCooldown
 			}
+			if err := emailQuota(ctx, tx, i.CreatedBy, i.Subject, startOfDayWIB(now)); err != nil {
+				return err
+			}
 		}
 	}
 	var n int
@@ -209,27 +234,41 @@ func (s *Store) CreateInvitation(ctx context.Context, i Invitation, hash string,
 	return tx.Commit(ctx)
 }
 
-// ResendInvitation gives a waiting 'user' invitation a fresh token and expiry and takes the day's e-mail, under the same lock.
+// ResendInvitation gives a waiting 'user' invitation a fresh token and expiry and takes the day's e-mail, under the same locks.
+// An expired invitation cannot be resent (create a new one), and neither can one whose person has access in the meantime.
 func (s *Store) ResendInvitation(ctx context.Context, docID, id, by, hash, hint string, exp *time.Time, now time.Time) (*Invitation, error) {
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return nil, err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
-	var subject string
-	if err := tx.QueryRow(ctx, `SELECT subject FROM invitations WHERE document_id=$1 AND id=$2 AND kind='user' AND status='pending' AND hidden_at IS NULL`, docID, id).Scan(&subject); err != nil {
+	if err := lockKey(ctx, tx, "mail|"+by); err != nil {
+		return nil, err
+	}
+	if err := lockKey(ctx, tx, docID+"|user"); err != nil {
+		return nil, err
+	}
+	var subject, role string
+	if err := tx.QueryRow(ctx, `SELECT subject, role FROM invitations WHERE document_id=$1 AND id=$2 AND kind='user' AND status='pending' AND hidden_at IS NULL AND (expires_at IS NULL OR expires_at > now())`, docID, id).Scan(&subject, &role); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, errNotFound
 		}
 		return nil, err
 	}
-	if err := lockKey(ctx, tx, docID+"|"+subject); err != nil {
+	var cur string
+	if err := tx.QueryRow(ctx, `SELECT COALESCE((SELECT role FROM permissions WHERE document_id=$1 AND subject=$2),'')`, docID, subject).Scan(&cur); err != nil {
 		return nil, err
+	}
+	if rank(cur) >= rank(role) {
+		return nil, errAlreadyHasAccess
 	}
 	if sent, err := emailedSince(ctx, tx, docID, subject, by, startOfDayWIB(now)); err != nil {
 		return nil, err
 	} else if sent {
 		return nil, errEmailCooldown
+	}
+	if err := emailQuota(ctx, tx, by, subject, startOfDayWIB(now)); err != nil {
+		return nil, err
 	}
 	inv, err := scanInvitation(tx.QueryRow(ctx, `UPDATE invitations SET token_hash=$3, hint=$4, expires_at=$5, email_sent_at=$6 WHERE document_id=$1 AND id=$2 AND status='pending' RETURNING `+invCols, docID, id, hash, hint, exp, now))
 	if err != nil {
@@ -314,7 +353,7 @@ func (s *Store) previewByHash(ctx context.Context, q interface {
 	if !pv.live(time.Now()) {
 		return nil, errInviteInvalid
 	}
-	if pv.Kind == "user" && pv.Subject != username {
+	if pv.Kind == "user" && !strings.EqualFold(pv.Subject, username) { // Keycloak and local accounts are lower case; be tolerant, never wider
 		return nil, errInviteNotYours
 	}
 	if pv.DocOwner == username {
@@ -384,7 +423,7 @@ type Contact struct {
 // ContactOf looks a username up in local accounts first (the authoritative e-mail), then in the users seen so far.
 func (s *Store) ContactOf(ctx context.Context, username string) (Contact, error) {
 	var c Contact
-	err := s.pool.QueryRow(ctx, `SELECT COALESCE(email,''), COALESCE(display_name,'') FROM local_users WHERE username=$1`, username).Scan(&c.Email, &c.Name)
+	err := s.pool.QueryRow(ctx, `SELECT COALESCE(email,''), COALESCE(display_name,'') FROM local_users WHERE lower(username)=lower($1)`, username).Scan(&c.Email, &c.Name)
 	if err == nil {
 		c.Found = true
 		return c, nil
@@ -392,7 +431,7 @@ func (s *Store) ContactOf(ctx context.Context, username string) (Contact, error)
 	if !errors.Is(err, pgx.ErrNoRows) {
 		return c, err
 	}
-	err = s.pool.QueryRow(ctx, `SELECT COALESCE(email,''), COALESCE(name,'') FROM users WHERE username=$1`, username).Scan(&c.Email, &c.Name)
+	err = s.pool.QueryRow(ctx, `SELECT COALESCE(email,''), COALESCE(name,'') FROM users WHERE lower(username)=lower($1)`, username).Scan(&c.Email, &c.Name)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return c, nil
 	}
@@ -487,6 +526,10 @@ func (s *Server) createErr(w http.ResponseWriter, err error, now time.Time) {
 	case errors.Is(err, errEmailCooldown):
 		writeJSON(w, http.StatusTooManyRequests, map[string]any{
 			"error":   map[string]string{"code": "email_cooldown", "message": "an invitation e-mail for this person and diagram was already sent today"},
+			"retryAt": nextMidnightWIB(now).UTC()})
+	case errors.Is(err, errEmailQuota):
+		writeJSON(w, http.StatusTooManyRequests, map[string]any{
+			"error":   map[string]string{"code": "email_quota", "message": "too many invitation e-mails sent today (to this person or in total); copy the invitation link instead"},
 			"retryAt": nextMidnightWIB(now).UTC()})
 	case errors.Is(err, errTooManyInvites):
 		writeErr(w, http.StatusConflict, "too_many_invitations", "cancel or revoke an invitation before creating another one")

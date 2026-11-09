@@ -41,30 +41,41 @@ func (f *fakeMailer) Send(_ context.Context, m mailer.Message) error {
 
 // inviteEnv is a gateway Server wired to a fake platform: only what the invitation handlers touch.
 type inviteEnv struct {
-	s        *Server
-	mail     *fakeMailer
-	mu       sync.Mutex
-	created  int
-	released []string          // email-failed calls: the day's e-mail given back
-	contact  map[string]string // username -> e-mail known to the platform
-	status   int               // answer of the platform create (default 201)
+	s            *Server
+	mail         *fakeMailer
+	mu           sync.Mutex
+	created      int
+	released     []string          // email-failed calls: the day's e-mail given back
+	contact      map[string]string // username -> e-mail known to the platform
+	status       int               // answer of the platform create (default 201)
+	canShare     bool              // answer of the owner check (GET permissions)
+	contactCalls int
 }
 
 const testToken = "dsi_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
 
 func newInviteEnv(t *testing.T) *inviteEnv {
 	t.Helper()
-	e := &inviteEnv{mail: &fakeMailer{}, contact: map[string]string{}, status: http.StatusCreated}
+	e := &inviteEnv{mail: &fakeMailer{}, contact: map[string]string{}, status: http.StatusCreated, canShare: true}
 	plat := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		e.mu.Lock()
 		defer e.mu.Unlock()
 		switch {
+		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/permissions"):
+			if !e.canShare {
+				w.WriteHeader(http.StatusNotFound)
+				return
+			}
+			_, _ = io.WriteString(w, `{"owner":"alice","permissions":[]}`)
 		case strings.HasPrefix(r.URL.Path, "/api/v1/internal/contacts/"):
+			e.contactCalls++
 			u := strings.TrimPrefix(r.URL.Path, "/api/v1/internal/contacts/")
 			_ = json.NewEncoder(w).Encode(map[string]any{"email": e.contact[u], "name": "Grace G", "found": true})
 		case strings.HasSuffix(r.URL.Path, "/email-failed"):
 			e.released = append(e.released, r.URL.Path)
 			_, _ = io.WriteString(w, `{"released":true}`)
+		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/resend"):
+			_, _ = io.WriteString(w, `{"invitation":{"id":"i1","kind":"user","subject":"grace","role":"editor","status":"pending"},"token":"`+testToken+`","documentTitle":"test"}`)
 		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/invitations"):
 			e.created++
 			w.WriteHeader(e.status)
@@ -82,15 +93,16 @@ func newInviteEnv(t *testing.T) *inviteEnv {
 	plu, _ := url.Parse(plat.URL)
 	_, priv, _ := ed25519.GenerateKey(rand.Reader)
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
-	e.s = &Server{cfg: config.Gateway{PlatformUpstream: plu, PublicURL: pu}, log: log, signer: identity.NewSigner(priv, "k", "drawio-gateway"), platform: newPlatformProxy(plu, log), mailer: e.mail}
+	e.s = &Server{cfg: config.Gateway{PlatformUpstream: plu, PublicURL: pu}, log: log, signer: identity.NewSigner(priv, "k", "drawio-gateway"), platform: newPlatformProxy(plu, log), mailer: e.mail, lookupLim: newLimiter(100, 100)}
 	return e
 }
 
-var inviteSess = &session.Session{Subject: "sub-alice", Username: "alice", Name: "Alice A", CreatedAt: time.Now()}
+var inviteSess = &session.Session{Subject: "sub-alice", Username: "alice", Name: "Alice A", CSRF: "csrf-tok", CreatedAt: time.Now()}
 
 func (e *inviteEnv) post(h func(http.ResponseWriter, *http.Request, *session.Session), body string) *httptest.ResponseRecorder {
 	r := httptest.NewRequest(http.MethodPost, "/api/v1/documents/d1/invitations", bytes.NewBufferString(body))
 	r.SetPathValue("id", "d1")
+	r.Header.Set("X-CSRF-Token", "csrf-tok")
 	w := httptest.NewRecorder()
 	h(w, r, inviteSess)
 	return w
@@ -247,5 +259,71 @@ func TestCreateInviteRefusesAMalformedSubjectBeforeLookingAnythingUp(t *testing.
 	}
 	if e.created != 0 || len(e.mail.sent) != 0 {
 		t.Error("nothing may be created or mailed for a malformed subject")
+	}
+}
+
+func TestCreateInviteRejectsAnUnparsableBodyInsteadOfForwardingIt(t *testing.T) {
+	e := newInviteEnv(t)
+	e.contact["grace"] = "grace@btn.co.id"
+	// the platform used to read only the first value and ignore the rest: the gateway then never saw "sendEmail"
+	w := e.post(e.s.createInvite, `{"kind":"user","subject":"grace","role":"viewer","sendEmail":true} {}`)
+	if w.Code != http.StatusBadRequest || e.created != 0 {
+		t.Fatalf("status %d created %d: %s", w.Code, e.created, w.Body.String())
+	}
+}
+
+func TestCreateInviteLooksNothingUpForSomebodyWhoMayNotShare(t *testing.T) {
+	e := newInviteEnv(t)
+	e.canShare = false
+	w := e.post(e.s.createInvite, `{"kind":"user","subject":"grace","role":"viewer","sendEmail":true}`)
+	if w.Code != http.StatusForbidden || e.contactCalls != 0 || e.created != 0 {
+		t.Fatalf("status %d, contact look-ups %d, created %d: %s", w.Code, e.contactCalls, e.created, w.Body.String())
+	}
+}
+
+func TestContactLookupsAreThrottledPerPerson(t *testing.T) {
+	e := newInviteEnv(t)
+	e.s.lookupLim = newLimiter(0.000001, 3)
+	e.status = http.StatusTooManyRequests // each attempt stops at the platform; only the look-up budget matters here
+	got429 := false
+	for i := 0; i < 8; i++ {
+		w := e.post(e.s.createInvite, `{"kind":"user","subject":"grace","role":"viewer","sendEmail":true}`)
+		if w.Code == http.StatusTooManyRequests && strings.Contains(w.Body.String(), "rate_limited") {
+			got429 = true
+		}
+	}
+	if !got429 || e.contactCalls > 3 {
+		t.Fatalf("look-ups were not throttled: 429=%v contact calls=%d", got429, e.contactCalls)
+	}
+}
+
+func TestResendWithoutKnownEmailGivesTheDaysEmailBack(t *testing.T) {
+	e := newInviteEnv(t) // the platform knows no address for grace and there is no Keycloak
+	r := httptest.NewRequest(http.MethodPost, "/api/v1/documents/d1/invitations/i1/resend", strings.NewReader(`{}`))
+	r.SetPathValue("id", "d1")
+	r.SetPathValue("iid", "i1")
+	r.Header.Set("X-CSRF-Token", "csrf-tok")
+	w := httptest.NewRecorder()
+	e.s.resendInvite(w, r, inviteSess)
+	if len(e.mail.sent) != 0 || len(e.released) != 1 || !strings.Contains(w.Body.String(), "no_email") || !strings.Contains(w.Body.String(), testToken) {
+		t.Fatalf("mails %d released %v body %s", len(e.mail.sent), e.released, w.Body.String())
+	}
+}
+
+func TestPlatformAPIRefusesStateChangesWithoutTheCSRFToken(t *testing.T) {
+	e := newInviteEnv(t)
+	for _, method := range []string{http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete} {
+		r := httptest.NewRequest(method, "/api/v1/documents/d1/invitations", strings.NewReader(`{}`))
+		w := httptest.NewRecorder()
+		e.s.platformAPI(w, r, inviteSess)
+		if w.Code != http.StatusForbidden || !strings.Contains(w.Body.String(), "csrf") {
+			t.Errorf("%s without token -> %d %s", method, w.Code, w.Body.String())
+		}
+	}
+	r := httptest.NewRequest(http.MethodGet, "/api/v1/documents/d1/permissions", nil)
+	w := httptest.NewRecorder()
+	e.s.platformAPI(w, r, inviteSess)
+	if w.Code != http.StatusOK {
+		t.Errorf("a read needs no token: %d", w.Code)
 	}
 }

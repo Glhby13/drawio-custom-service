@@ -139,6 +139,17 @@ func (s *Server) callPlatform(r *http.Request, sess *session.Session, body []byt
 	return rec
 }
 
+// authorizedToShare asks the platform whether the caller may share this diagram (the same rule the invitation endpoints use).
+func (s *Server) authorizedToShare(r *http.Request, sess *session.Session) bool {
+	req, err := http.NewRequestWithContext(r.Context(), http.MethodGet, "/api/v1/documents/"+url.PathEscape(r.PathValue("id"))+"/permissions", nil)
+	if err != nil {
+		return false
+	}
+	rec := httptest.NewRecorder()
+	s.platformAPI(rec, req, sess)
+	return rec.Code == http.StatusOK
+}
+
 // createInvite handles POST /api/v1/documents/{id}/invitations. A link, or a user invitation the owner will copy by hand,
 // goes straight to the platform. An e-mailed invitation first needs a known address, then the platform's checks
 // (including the daily limit), then the mail, and only then the "sent" mark.
@@ -152,7 +163,11 @@ func (s *Server) createInvite(w http.ResponseWriter, r *http.Request, sess *sess
 		Kind, Subject string
 		SendEmail     bool
 	}
-	if json.Unmarshal(body, &in) != nil || in.Kind != "user" || !in.SendEmail {
+	if err := json.Unmarshal(body, &in); err != nil {
+		writeGwErr(w, http.StatusBadRequest, "bad_request", "invalid JSON body") // never forward what this parser rejects: the platform must not read it differently
+		return
+	}
+	if in.Kind != "user" || !in.SendEmail {
 		copyRecorded(w, s.callPlatform(r, sess, body))
 		return
 	}
@@ -163,6 +178,17 @@ func (s *Server) createInvite(w http.ResponseWriter, r *http.Request, sess *sess
 	subject := strings.ToLower(strings.TrimSpace(in.Subject))
 	if !validUsername(subject) { // same rule as the platform, checked BEFORE anything is looked up or mailed
 		writeGwErr(w, http.StatusBadRequest, "bad_request", "subject must be a username")
+		return
+	}
+	// Only somebody who may share THIS diagram can make the gateway look an address up (no contact oracle for everybody else),
+	// and even they are throttled: the answer "has an address / has none" is not free to harvest.
+	if !s.authorizedToShare(r, sess) {
+		writeGwErr(w, http.StatusForbidden, "forbidden", "not allowed")
+		return
+	}
+	if !s.lookupLim.allow(sess.Username) {
+		w.Header().Set("Retry-After", "5")
+		writeGwErr(w, http.StatusTooManyRequests, "rate_limited", "too many look-ups, try again shortly")
 		return
 	}
 	to, toName := s.recipientContact(r.Context(), subject)
@@ -196,8 +222,16 @@ func (s *Server) resendInvite(w http.ResponseWriter, r *http.Request, sess *sess
 		return
 	}
 	subject, _ := pi.Invitation["subject"].(string)
+	id, _ := pi.Invitation["id"].(string)
+	if !s.lookupLim.allow(sess.Username) {
+		s.releaseEmail(r, id)
+		w.Header().Set("Retry-After", "5")
+		writeGwErr(w, http.StatusTooManyRequests, "rate_limited", "too many look-ups, try again shortly")
+		return
+	}
 	to, toName := s.recipientContact(r.Context(), subject)
 	if to == "" {
+		s.releaseEmail(r, id) // the day's e-mail was taken by the platform; nothing was sent
 		s.answerInvite(w, http.StatusOK, pi, false, "no_email")
 		return
 	}
@@ -223,9 +257,7 @@ func (s *Server) mailAndAnswer(w http.ResponseWriter, r *http.Request, sess *ses
 	id, _ := pi.Invitation["id"].(string)
 	// the platform already took the day's e-mail when it created/rotated the invitation: give it back if the mail cannot go out
 	fail := func(reason string) {
-		if code, err := s.platformInternal(r.Context(), http.MethodPost, "/api/v1/internal/invitations/"+url.PathEscape(id)+"/email-failed", map[string]string{}, nil); err != nil || code != http.StatusOK {
-			s.log.Warn("invite e-mail slot not released", "request_id", RequestID(r.Context()))
-		}
+		s.releaseEmail(r, id)
 		s.answerInvite(w, rec.Code, pi, false, reason)
 	}
 	rendered, err := mailer.RenderInvite(mailer.Invite{ToName: firstNonEmpty(toName, subject), InviterName: inviter, InviterUsername: sess.Username,
@@ -246,6 +278,16 @@ func (s *Server) mailAndAnswer(w http.ResponseWriter, r *http.Request, sess *ses
 	}
 	pi.Token = ""
 	s.answerInvite(w, rec.Code, pi, true, "")
+}
+
+// releaseEmail gives the day's e-mail back. It must not depend on the browser's request still being alive (a closed tab during the
+// SMTP dial would otherwise leave the slot taken for a mail that never went out).
+func (s *Server) releaseEmail(r *http.Request, id string) {
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), 10*time.Second)
+	defer cancel()
+	if code, err := s.platformInternal(ctx, http.MethodPost, "/api/v1/internal/invitations/"+url.PathEscape(id)+"/email-failed", map[string]string{}, nil); err != nil || code != http.StatusOK {
+		s.log.Warn("invite e-mail slot not released", "request_id", RequestID(r.Context()))
+	}
 }
 
 func (s *Server) answerInvite(w http.ResponseWriter, code int, pi platformInvite, emailed bool, emailError string) {

@@ -44,6 +44,7 @@ type Server struct {
 	loggedOutBody []byte
 	loggedOutCSP  string
 	mailer        mailSender // nil = e-mail not configured (ADR-0021)
+	lookupLim     *limiter   // e-mail address look-ups per signed-in person (invitations)
 	loginBody     []byte     // the sign-in page (inlined stylesheet, CSP allows that stylesheet by hash and its own script)
 	loginCSP      string
 	cookie        string
@@ -65,7 +66,7 @@ func New(cfg config.Gateway, log *slog.Logger, store session.Store, o *OIDC, sig
 		return nil, err
 	}
 	s := &Server{cfg: cfg, log: log, store: store, oidc: o, signer: signer, static: static, loggedOutBody: body, loggedOutCSP: csp, loginBody: lbody, loginCSP: lcsp,
-		lim: newLimiter(cfg.RateRPS, cfg.RateBurst), cookie: "__Host-drawio_sid", bind: "__Host-drawio_login"}
+		lim: newLimiter(cfg.RateRPS, cfg.RateBurst), lookupLim: newLimiter(0.5, 10), cookie: "__Host-drawio_sid", bind: "__Host-drawio_login"}
 	if cfg.InsecureCookie {
 		s.cookie, s.bind = "drawio_sid", "drawio_login"
 	}

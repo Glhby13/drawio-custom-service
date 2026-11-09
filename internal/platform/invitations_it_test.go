@@ -372,6 +372,47 @@ func TestIT_Invitations(t *testing.T) {
 		t.Fatalf("a burst of 20 parallel invitations created %d (want exactly 1)", created)
 	}
 
+	// ---- reviewer findings (2026-11-09): the cross-diagram e-mail valve, resend of an expired invitation, one JSON value per body
+	frank, victim := mk("frank"), mk("victim")
+	for i := 0; i < maxEmailsPerPairPerDay; i++ { // one e-mail per diagram is fine, but only so many to the same person per day
+		d := newDoc(frank, title+" f"+strings.Repeat("x", i))
+		if c, o, _, _ := invite(frank, d, map[string]any{"kind": "user", "subject": victim.user, "role": "viewer", "sendEmail": true}); c != 201 {
+			t.Fatalf("e-mail %d of the day to one person: %d %v", i+1, c, o)
+		}
+	}
+	dLast := newDoc(frank, title+" f-last")
+	if c, o, _, _ := invite(frank, dLast, map[string]any{"kind": "user", "subject": victim.user, "role": "viewer", "sendEmail": true}); c != 429 || errCode(o) != "email_quota" {
+		t.Fatalf("one more diagram, same person, same day: %d %v", c, o)
+	}
+	if c, o, _, _ := invite(frank, dLast, map[string]any{"kind": "user", "subject": victim.user, "role": "viewer", "sendEmail": false}); c != 201 {
+		t.Fatalf("a link-only invitation is never limited: %d %v", c, o)
+	}
+	docX := newDoc(alice, title+" expired")
+	_, idX := mustInvite(alice, docX, map[string]any{"kind": "user", "subject": dave.user, "role": "viewer", "sendEmail": false})
+	if _, err := e.srv.store.pool.Exec(ctx, `UPDATE invitations SET expires_at=now()-interval '1 minute' WHERE id=$1`, idX); err != nil {
+		t.Fatal(err)
+	}
+	if c, _ := e.call(alice, "POST", base(docX)+"/"+idX+"/resend", nil); c != 404 {
+		t.Fatalf("an expired invitation must not be resurrected by a resend: %d", c)
+	}
+	rawBody := func(body string) int {
+		req, _ := http.NewRequest("POST", e.ts.URL+base(docX), strings.NewReader(body))
+		req.Header.Set("Authorization", "Bearer "+e.token(alice))
+		req.Header.Set("Content-Type", "application/json")
+		r, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_ = r.Body.Close()
+		return r.StatusCode
+	}
+	if c := rawBody(`{"kind":"link","role":"viewer"} {}`); c != 400 {
+		t.Fatalf("trailing JSON after the first value must be refused: %d", c)
+	}
+	if c := rawBody(`{"kind":"link","role":"viewer"}` + "\n"); c != 201 {
+		t.Fatalf("a trailing newline is fine: %d", c)
+	}
+
 	// ---- at most 20 live links per diagram
 	doc6 := newDoc(alice, title+" 6")
 	for i := 0; i < maxLinksPerDoc; i++ {

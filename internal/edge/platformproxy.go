@@ -60,6 +60,14 @@ func (s *Server) platformAPI(w http.ResponseWriter, r *http.Request, sess *sessi
 		http.NotFound(w, r)
 		return
 	}
+	// Defence in depth next to the Origin check (csrfOrigin) and SameSite=Lax: a state-changing API call must carry the session's
+	// CSRF token, which only this site's own scripts can read (GET /api/me). WebSocket upgrades are GET and not affected.
+	if r.Method != http.MethodGet && r.Method != http.MethodHead && r.Method != http.MethodOptions && !s.csrfOK(r, sess) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusForbidden)
+		_, _ = w.Write([]byte(`{"error":{"code":"csrf","message":"csrf token required"}}`))
+		return
+	}
 	idp := "sso"
 	if sess.Idp == "local" {
 		idp = "local"

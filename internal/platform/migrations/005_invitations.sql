@@ -24,6 +24,7 @@ CREATE TABLE invitations (
   CHECK ((kind = 'user' AND subject IS NOT NULL) OR (kind = 'link' AND subject IS NULL)));
 CREATE INDEX invitations_document ON invitations (document_id);
 CREATE INDEX invitations_recipient ON invitations (document_id, subject, created_by, email_sent_at) WHERE kind = 'user';
+CREATE INDEX invitations_sender_mail ON invitations (created_by, email_sent_at) WHERE email_sent_at IS NOT NULL;
 
 -- copies of access that this migration retires; restore with INSERT ... SELECT (see docs/office-sync)
 CREATE TABLE access_archive (

@@ -26,6 +26,14 @@ Berbagi lama langsung memberi akses: `PUT /documents/{id}/permissions` menulis b
 - Rate limit per orang pada preview/accept/decline (anti tebak token); batas 20 link aktif dan 50 undangan pending per diagram; aktor AI dan token MCP ditolak di semua endpoint undangan.
 - Halaman `/invite/{token}`: login dulu (`return_to`), `Referrer-Policy: no-referrer`, `Cache-Control: no-store`. Semua teks pengguna di-escape (html/template); subjek email dibersihkan dari karakter kontrol; alamat penerima divalidasi (satu alamat polos, tanpa CR/LF).
 - Terima tidak pernah menurunkan role yang sudah lebih tinggi; pemilik tidak bisa menerima undangan diagramnya sendiri.
+- **Hasil tinjauan keamanan independen** (gemini-4-argon-high, 2026-11-09; 8 temuan, semuanya ditindaklanjuti):
+  - katup email lintas diagram di atas "satu email per diagram": maks **10 email/hari** dari satu pengirim ke satu penerima (semua diagram) dan **100/hari** per pengirim (`email_quota`), dihitung di bawah kunci pengirim (urutan kunci: pengirim, lalu diagram) supaya permintaan paralel tidak melewatinya;
+  - gateway **memeriksa hak berbagi di platform sebelum mencari alamat email** (tanpa oracle "punya email atau tidak" bagi orang yang bukan pemilik) dan membatasi pencarian per orang (burst 10, 1 per 2 detik);
+  - gateway menolak (400) badan JSON yang parser-nya tolak, dan `readJSON` platform kini mewajibkan tepat satu nilai JSON (tanpa selisih parser yang membuat gateway terlewati);
+  - `resend` hanya untuk undangan yang masih berlaku dan penerimanya belum punya akses (undangan kedaluwarsa tidak bisa dihidupkan lagi, tidak menembus batas 50), dan jatah email dikembalikan juga saat tidak ada email atau permintaan browser terputus (`context.WithoutCancel`);
+  - kunci per diagram untuk seluruh undangan user (batas 50 tidak bisa dilewati lewat penerima berbeda);
+  - perbandingan username penerima tidak membedakan huruf besar/kecil (tidak pernah lebih longgar);
+  - panggilan API yang mengubah data (POST/PUT/PATCH/DELETE) kini **wajib membawa token CSRF sesi** selain pemeriksaan Origin + SameSite (hanya skrip situs sendiri yang bisa membacanya lewat `/api/me`).
 
 ## Data lama (migrasi 005, non-destruktif)
 Baris `permissions` subject `*` dan role `commenter` (juga `document_tokens.role='commenter'`) **disalin ke `access_archive`** sebelum dihapus/dilipat ke viewer. Tidak ada dokumen, versi, op, snapshot, atau komentar yang disentuh. Pemulihan: `INSERT INTO permissions … SELECT … FROM access_archive WHERE reason='everyone'` (lihat langkah kantor).

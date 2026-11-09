@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"regexp"
 	"strconv"
@@ -162,6 +163,10 @@ func readJSON(w http.ResponseWriter, r *http.Request, v any, max int64) bool {
 	r.Body = http.MaxBytesReader(w, r.Body, max)
 	dec := json.NewDecoder(r.Body)
 	if err := dec.Decode(v); err != nil {
+		writeErr(w, http.StatusBadRequest, "bad_request", "invalid JSON body")
+		return false
+	}
+	if _, err := dec.Token(); !errors.Is(err, io.EOF) { // exactly one JSON value: the gateway and the platform must read the same request
 		writeErr(w, http.StatusBadRequest, "bad_request", "invalid JSON body")
 		return false
 	}
