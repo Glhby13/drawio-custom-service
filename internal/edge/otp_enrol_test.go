@@ -150,6 +150,13 @@ func (f *fakeKeycloak) listUsers(w http.ResponseWriter, r *http.Request) {
 	if u := f.users[r.URL.Query().Get("username")]; u != nil {
 		out = append(out, map[string]any{"id": u.id, "totp": u.otpRaw != ""})
 	}
+	if q := r.URL.Query().Get("search"); q != "" {
+		for _, u := range f.users {
+			if strings.Contains(u.username, strings.ToLower(q)) {
+				out = append(out, map[string]any{"id": u.id, "username": u.username, "firstName": "First", "lastName": u.username, "enabled": !strings.HasPrefix(u.username, "off-")})
+			}
+		}
+	}
 	_ = json.NewEncoder(w).Encode(out)
 }
 

@@ -110,6 +110,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /admin/users", s.authed(s.hostPage)) // the user-management view of the single-page UI (admins only, enforced by the platform)
 	mux.HandleFunc("GET /d/{id}", s.authed(s.hostPage))      // the single-page UI routes on the client
 	if s.platform != nil {
+		mux.Handle("GET /api/v1/users", s.authedHandler(s.searchUsers)) // platform hits + the whole Keycloak directory
 		mux.Handle("/api/v1/", s.authedHandler(s.platformAPI))
 		mux.Handle("/ws/v1/", s.authedHandler(s.platformAPI))
 	}
