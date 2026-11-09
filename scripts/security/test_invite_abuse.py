@@ -198,10 +198,12 @@ def main():
         no = raw("POST", "/api/v1/documents/%s/invitations" % doc, "owner", body, origin=False)
         after = len((api("owner", "GET", "/documents/%s/invitations" % doc)[3] or {}).get("invitations", []))
         passfail("CSRF: create with a foreign Origin, or with no Origin/Referer at all -> 403, nothing created", fo[0] == 403 and no[0] == 403 and before == after, "foreign-origin %s, no-origin %s, rows %s->%s" % (fo[0], no[0], before, after))
-        # The platform API's CSRF defence is the Origin check + SameSite=Lax cookie (ADR-0004), the same for every mutating endpoint; the
-        # X-CSRF-Token header is only enforced on logout. So a same-origin request without the header is accepted by design: informational.
+        # Defence in depth (gateway, platformAPI): a state-changing API call must also carry the session's X-CSRF-Token, even from the
+        # right Origin (reviewer finding 2026-11-09).
         nc = raw("POST", "/api/v1/documents/%s/invitations" % doc, "owner", body, csrf=False)
-        report("PASS", "info: same-origin request without X-CSRF-Token is accepted (Origin check + SameSite=Lax is the defence, like every other endpoint)", "status %s" % nc[0])
+        wr = raw("POST", "/api/v1/documents/%s/invitations" % doc, "owner", body, headers={"X-CSRF-Token": "wrong-token"})
+        after2 = len((api("owner", "GET", "/documents/%s/invitations" % doc)[3] or {}).get("invitations", []))
+        passfail("CSRF token: same-origin create without, or with a wrong, X-CSRF-Token -> 403, nothing created", nc[0] == 403 and wr[0] == 403 and after2 == after, "no-token %s, wrong-token %s, rows %s->%s" % (nc[0], wr[0], after, after2))
 
         # ---- 5. mass-assignment
         evil = {"kind": "link", "role": "viewer", "status": "accepted", "createdBy": "x", "tokenHash": "y", "id": "z", "hiddenAt": "2020-01-01T00:00:00Z", "useCount": 99, "documentId": "other"}
