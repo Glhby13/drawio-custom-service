@@ -6,7 +6,7 @@
 # CGO_ENABLED=0, no native libraries. CA bundle is the image's; internal CAs are mounted at runtime
 # (EXTRA_CA_FILE), never baked in and never bypassed with InsecureSkipVerify.
 # =============================================================================
-ARG GO_IMAGE=golang:1.27.3-alpine
+ARG GO_IMAGE=golang:1.27.4-alpine
 
 FROM --platform=$BUILDPLATFORM ${GO_IMAGE} AS go-build
 ARG TARGETOS=linux

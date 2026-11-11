@@ -27,7 +27,7 @@ def MANIFEST_PATH           = env.DRAWIO_MANIFEST_PATH ?: 'lab-manifest/drawio-c
 def MANIFEST_ENV            = env.DRAWIO_MANIFEST_ENV ?: 'dev'
 def MANIFEST_CREDENTIALS_ID = env.DRAWIO_MANIFEST_CREDENTIALS_ID ?: env.PORTAL_MANIFEST_CREDENTIALS_ID ?: 'github-helm-values-lab'
 
-def GO_IMAGE       = cfg('GO_IMAGE', 'golang:1.27.3-alpine')
+def GO_IMAGE       = cfg('GO_IMAGE', 'golang:1.27.4-alpine')
 def GOLANGCI_IMAGE = cfg('GOLANGCI_IMAGE', 'golangci/golangci-lint:v2.14.0-alpine')
 def KANIKO_IMAGE   = cfg('KANIKO_IMAGE', 'gcr.io/kaniko-project/executor:v1.23.2-debug')
 def GOVULNCHECK_VERSION = cfg('GOVULNCHECK_VERSION', 'v1.9.0')
