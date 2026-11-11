@@ -11,6 +11,8 @@ Author / Agent: Claude Code · Timestamp: 2026-10-25 10:00
 - Manifest ada di repo lain: `helm-base-lab/drawio`, `helm-values-lab/lab-manifest/drawio/`, `argocd-gitops-lab/.../lab-projects-dev-lab-services.yaml`.
 - Memori bersama: agentmemory project `lab`. Rules: `../rules.md` (kantor read-only, push butuh persetujuan).
 
+- **ADR-0022 Backport selesai (2026-11-11): akses menu AI/MCP lewat grup Keycloak** disinkronkan dari kantor ke lab (ADR-0022, `config.AIAccess`, `AI_ENABLED`, `AI_ACCESS_ROLE=mcp-access`, `scripts/keycloak_mcp_access.py`, values gateway+platform).
+- **Rencana (2026-11-10, belum ada kode/ADR): AI Assistant / `integrated-ai-service`** = chat AI per diagram (model Qwen 35B via LiteLLM kantor, terpisah dari menu AI/MCP). Keputusan, fakta lingkungan, fase, pertanyaan terbuka: `docs/AI-ASSISTANT-SERVICE.md` (baca dulu sebelum mulai).
 - Dev loop: `LOCAL_WEB=1 node e2e/phase5_collab.mjs` memakai aset `internal/edge/web/` dari disk (aset dibenamkan di image gateway; tanpa flag = versi ter-deploy). Jenkins: Go checks dijalankan berurutan (tiga build Go paralel di satu container → OOM cgroup di node lab kecil → build `ABORTED` "Agent was removed").
 
 ## Catatan terbaru (2026-11-09) — berbagi lewat undangan (ADR-0021)

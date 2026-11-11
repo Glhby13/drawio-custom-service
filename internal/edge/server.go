@@ -399,7 +399,9 @@ func (s *Server) me(w http.ResponseWriter, _ *http.Request, sess *session.Sessio
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]any{"sub": sess.Subject, "username": sess.Username, "name": sess.Name,
-		"email": sess.Email, "roles": sess.Roles, "idp": sess.Idp, "csrf": sess.CSRF, "expiresAt": sess.ExpiresAt})
+		"email": sess.Email, "roles": sess.Roles, "idp": sess.Idp, "csrf": sess.CSRF, "expiresAt": sess.ExpiresAt,
+		// what the UI may show; the platform enforces the same rule on the API (ADR-0022)
+		"features": map[string]bool{"ai": config.AIAccess(s.cfg.AIEnabled, s.cfg.AIAccessRole, sess.Roles)}})
 }
 
 func (s *Server) hostPage(w http.ResponseWriter, r *http.Request, _ *session.Session) {

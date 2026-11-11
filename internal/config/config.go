@@ -40,6 +40,10 @@ type Gateway struct {
 	// SMTP for the share-invitation e-mail (ADR-0021). Empty SMTP_HOST = no e-mail: invitations then go by link only.
 	SMTPHost, SMTPFromEmail, SMTPFromName, SMTPStartTLS, SMTPClientHostname, SMTPUser, SMTPPassword string
 	SMTPPort, SMTPTimeoutSeconds                                                                    int
+	// AIEnabled (AI_ENABLED) and AIAccessRole (AI_ACCESS_ROLE) must equal the platform's values (ADR-0022): the gateway only decides
+	// whether the AI menu is shown (GET /api/me -> features.ai); the platform enforces the same rule on the API.
+	AIEnabled    bool
+	AIAccessRole string
 }
 
 // LoadGateway reads and validates the environment; getenv is injectable for tests.
@@ -55,6 +59,8 @@ func LoadGateway(getenv func(string) string) (Gateway, error) {
 		RedisPassword: getenv("REDIS_PASSWORD"),
 		CAFile:        getenv("EXTRA_CA_FILE"),
 		InternalKeyID: or(getenv("INTERNAL_KEY_ID"), "edge-1"),
+		AIEnabled:     getenv("AI_ENABLED") == "true",
+		AIAccessRole:  strings.TrimSpace(getenv("AI_ACCESS_ROLE")),
 	}
 	g.SMTPHost, g.SMTPFromEmail = strings.TrimSpace(getenv("SMTP_HOST")), strings.TrimSpace(getenv("SMTP_FROM_EMAIL"))
 	g.SMTPFromName, g.SMTPStartTLS = or(strings.TrimSpace(getenv("SMTP_FROM_NAME")), "DrawSpace"), or(strings.ToLower(strings.TrimSpace(getenv("SMTP_STARTTLS"))), "none")

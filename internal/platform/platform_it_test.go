@@ -42,7 +42,7 @@ func newIT(t *testing.T) *itEnv {
 	}
 	pub, priv, _ := ed25519.GenerateKey(rand.Reader)
 	hp := strings.Split(os.Getenv("DRAWIO_IT_PG"), ":")
-	cfg := config.Platform{Port: "0", PGHost: hp[0], PGPort: hp[1], PGDB: "drawio_test", PGUser: "lab_worker", PGPassword: os.Getenv("DRAWIO_IT_PG_PASSWORD"), PGSSLMode: "disable",
+	cfg := config.Platform{AIEnabled: true, Port: "0", PGHost: hp[0], PGPort: hp[1], PGDB: "drawio_test", PGUser: "lab_worker", PGPassword: os.Getenv("DRAWIO_IT_PG_PASSWORD"), PGSSLMode: "disable",
 		S3Endpoint: os.Getenv("DRAWIO_IT_S3"), S3Bucket: "drawio-documents", S3AccessKey: "drawio", S3SecretKey: os.Getenv("DRAWIO_IT_S3_SECRET"), S3Region: "us-east-1",
 		RedisAddr: os.Getenv("DRAWIO_IT_REDIS"), RedisUser: "drawio", RedisPassword: os.Getenv("DRAWIO_IT_REDIS_PASSWORD"),
 		InviteTokenKey: []byte("it-invite-token-key-0123456789abcdef"), Trusted: []config.TrustedKey{{Kid: "t-1", Pub: pub, Issuer: "it-edge"}, {Kid: "gw-1", Pub: pub, Issuer: "drawio-gateway"}, {Kid: "mcp-1", Pub: pub, Issuer: "drawio-mcp"}}, SnapshotEvery: 10, AdminRole: "admin", UserRole: "user", AIDefaultMaxOpsPerMin: 300, AIDefaultMaxDelete: 20}

@@ -5,7 +5,9 @@
   var $ = function (id) { return document.getElementById(id); };
   var statusEl = $('status'), csrf = '', me = null, adapter = null, doc = null, editorUi = null;
   // Features that exist in the code and the API but are switched off in the UI for now (comments: not useful yet; flip to re-enable).
-  var FEATURES = { comments: false };
+  // ai: the AI menu / MCP tokens are shown only to members of the Keycloak AI access group (ADR-0022). The gateway decides (GET /api/me -> features.ai,
+  // from AI_ENABLED + AI_ACCESS_ROLE) and the platform enforces the same rule, so this flag is cosmetic. Off until /api/me answers.
+  var FEATURES = { comments: false, ai: false };
   var THEME_KEY = 'drawspace_theme';
   var hostThemeTimer = null;
 
@@ -359,7 +361,7 @@
   function docRow(d, loc) {
     var chips = [el('span', { class: 'chip', text: d.role })];
     if (loc) chips.push(el('span', { class: 'chip loc', text: locLabel(loc), title: 'Location' }));
-    if (d.aiPolicy && d.aiPolicy.allowed) chips.push(el('span', { class: 'chip ai', text: 'AI allowed' }));
+    if (FEATURES.ai && d.aiPolicy && d.aiPolicy.allowed) chips.push(el('span', { class: 'chip ai', text: 'AI allowed' }));
     var n = (d.sharedWith || []).length;
     if (n) chips.push(el('button', { class: 'chip shared', type: 'button', text: 'Shared · ' + n, title: 'Who has access', 'aria-label': 'Shared with ' + n + ' — show who', onclick: function () { showShares(d); } }));
     var kids = [el('div', { class: 'doc-main' }, [
@@ -565,10 +567,10 @@
     var afterHelp = help ? help.nextSibling : statusAnchor;
     if (afterHelp) {
       ui.menubar.container.insertBefore(elt, afterHelp);
-      ui.menubar.container.insertBefore(aiElt, afterHelp);
+      if (FEATURES.ai) ui.menubar.container.insertBefore(aiElt, afterHelp);
     } else {
       ui.menubar.container.appendChild(elt);
-      ui.menubar.container.appendChild(aiElt);
+      if (FEATURES.ai) ui.menubar.container.appendChild(aiElt);
     }
     // copy the selection as an image (the clipboard accepts PNG and SVG only; JPG is saved as a file through draw.io's own export dialog)
     var graph = ui.editor.graph, act = function (name) { return function () { var a = ui.actions.get(name); if (a) a.funct(); }; };
@@ -2056,6 +2058,7 @@
     .then(function (r) { if (!r.ok) throw new Error('unauthenticated'); return r.json(); })
     .then(function (m) {
       me = m; csrf = m.csrf;
+      FEATURES.ai = !!(m.features && m.features.ai);
       var name = m.name || m.username || '', isAdmin = Array.isArray(m.roles) && m.roles.indexOf('admin') >= 0;
       $('who').textContent = name; $('avatar').textContent = initials(name);
       $('menu-name').textContent = name;

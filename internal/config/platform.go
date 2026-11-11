@@ -33,6 +33,12 @@ type Platform struct {
 	// InviteTokenKey (INVITE_TOKEN_KEY, base64, >= 32 bytes) lets the platform compute an invitation token again, so a link can be copied
 	// at any time. Empty = tokens are random and shown once (ADR-0021).
 	InviteTokenKey []byte
+	// AIEnabled (AI_ENABLED=true) turns the AI/MCP feature on: issuing and accepting MCP tokens. Default off (the AI menu is hidden in the UI
+	// too). It is the global switch; AIAccessRole decides WHO may use the feature once it is on (ADR-0022).
+	AIEnabled bool
+	// AIAccessRole (AI_ACCESS_ROLE, e.g. "mcp-access") is the Keycloak client role whose holders may create and list MCP tokens and see
+	// the AI menu. Empty = every signed-in user (lab). It must equal the gateway's value, which decides what the UI shows.
+	AIAccessRole string
 }
 
 // LoadPlatform reads and validates the environment.
@@ -44,7 +50,7 @@ func LoadPlatform(getenv func(string) string) (Platform, error) {
 		S3Region: or(getenv("S3_REGION"), "us-east-1"), S3UseSSL: getenv("S3_USE_SSL") == "true",
 		RedisAddr: getenv("REDIS_ADDR"), RedisUser: getenv("REDIS_USER"), RedisPassword: getenv("REDIS_PASSWORD"), CAFile: getenv("EXTRA_CA_FILE"),
 		AdminRole: or(getenv("ADMIN_ROLE"), "admin"), UserRole: or(getenv("REQUIRED_ROLE"), "user"), PublicURL: getenv("PUBLIC_URL"), LocalAdminUser: or(getenv("LOCAL_ADMIN_USERNAME"), "admin"), LocalAdminPassword: getenv("LOCAL_ADMIN_PASSWORD"),
-		SnapshotEvery: 200, AIDefaultMaxOpsPerMin: 300, AIDefaultMaxDelete: 20,
+		AIEnabled: getenv("AI_ENABLED") == "true", AIAccessRole: strings.TrimSpace(getenv("AI_ACCESS_ROLE")), SnapshotEvery: 200, AIDefaultMaxOpsPerMin: 300, AIDefaultMaxDelete: 20,
 	}
 	var errs []error
 	for name, v := range map[string]string{"PG_HOST": p.PGHost, "PG_USER": p.PGUser, "PG_PASSWORD": p.PGPassword, "S3_ENDPOINT": p.S3Endpoint,

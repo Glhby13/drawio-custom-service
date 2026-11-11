@@ -13,6 +13,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/Glhby13/drawio-custom-service/internal/config"
 	"github.com/Glhby13/drawio-custom-service/internal/identity"
 	"github.com/Glhby13/drawio-custom-service/internal/model"
 )
@@ -147,6 +148,17 @@ type tokenReq struct {
 
 // issueToken creates a token. Only the owner may do it (an AI actor never, an application admin neither).
 func (s *Server) issueToken(w http.ResponseWriter, r *http.Request, p *Principal) {
+	if !s.cfg.AIEnabled {
+		writeErr(w, http.StatusForbidden, "ai_unavailable", "AI access is not enabled")
+		return
+	}
+	// ADR-0022: besides the global switch, the person must hold the Keycloak role of the AI access group (AI_ACCESS_ROLE). Checked
+	// before anything about the diagram is revealed. Listing and revoking stay with the owner (and the admin) so tokens can always be cleaned up.
+	if !config.AIAccess(true, s.cfg.AIAccessRole, p.Roles) {
+		_ = s.store.Audit(r.Context(), p.Actor, r.PathValue("id"), "mcp-token-create", "denied", map[string]string{"why": "no AI access role"})
+		writeErr(w, http.StatusForbidden, "ai_not_permitted", "your account is not in the AI access group")
+		return
+	}
 	d, role, ok := s.access(w, r, p, ActRead)
 	if !ok {
 		return
@@ -304,6 +316,10 @@ func (s *Server) resolveToken(w http.ResponseWriter, r *http.Request) {
 	deny := func(why string) {
 		_ = s.store.Audit(r.Context(), model.Actor{ID: "drawio-mcp", Type: identity.ActorService}, "", "mcp-token-use", "denied", map[string]string{"why": why})
 		writeErr(w, http.StatusUnauthorized, "invalid_token", "token not accepted")
+	}
+	if !s.cfg.AIEnabled {
+		deny("ai disabled")
+		return
 	}
 	if !strings.HasPrefix(in.Token, TokenPrefix) || len(in.Token) > 128 {
 		deny("format")
