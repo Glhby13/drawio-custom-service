@@ -203,7 +203,7 @@ func (d *Doc) Validate(o *Op) string {
 		if !idRe.MatchString(o.Page) {
 			return "bad_page_id"
 		}
-		if _, ok := d.Pages[o.Page]; ok {
+		if pg, ok := d.Pages[o.Page]; ok && pg.Dead == 0 {
 			return "duplicate_page"
 		}
 		if len(d.SortedPages()) >= maxPages {
@@ -250,10 +250,14 @@ func (d *Doc) Validate(o *Op) string {
 		if !idRe.MatchString(o.Cell) {
 			return "bad_cell_id"
 		}
-		if _, ok := pg.Cells[o.Cell]; ok {
-			return "duplicate_cell"
-		}
-		if len(pg.Cells) >= maxCellsPerPage {
+		if c, ok := pg.Cells[o.Cell]; ok {
+			if c.Alive() {
+				return "duplicate_cell"
+			}
+			if c.Kind != o.Kind {
+				return "bad_kind"
+			}
+		} else if len(pg.Cells) >= maxCellsPerPage {
 			return "too_many_cells"
 		}
 		if o.Kind != "v" && o.Kind != "e" && o.Kind != "-" {
@@ -586,12 +590,24 @@ func (d *Doc) Apply(o *Op) {
 	pg := d.Pages[o.Page]
 	switch o.T {
 	case OpAddPage:
-		if p, ok := d.Pages[o.Page]; ok && p.CreatedBy == o.ID {
+		if p, ok := d.Pages[o.Page]; ok {
+			if p.CreatedBy == o.ID || p.Dead == 0 || s < p.Dead {
+				return
+			}
+			p.Dead = 0
+			setReg(&p.Name, o.Name, s)
+			setReg(&p.Order, o.Order, s)
+			setReg(&p.Attrs, o.Attrs, s)
+			for _, c := range p.Cells {
+				if c.Dead == 0 && c.Parent.Seq < s {
+					c.Dead = s
+				}
+			}
 			return
 		}
 		d.Pages[o.Page] = &Page{ID: o.Page, CreatedBy: o.ID, Name: Reg{V: o.Name, Seq: s}, Order: Reg{V: o.Order, Seq: s}, Attrs: Reg{V: o.Attrs, Seq: s}, Cells: map[string]*Cell{}}
 	case OpDeletePage:
-		if pg != nil && pg.Dead == 0 {
+		if pg != nil && pg.Dead == 0 && s >= pg.Order.Seq {
 			pg.Dead = s
 		}
 	case OpRenamePage:
@@ -601,7 +617,21 @@ func (d *Doc) Apply(o *Op) {
 	case OpSetAttrs:
 		setReg(&pg.Attrs, o.Attrs, s)
 	case OpAddCell:
-		if c, ok := pg.Cells[o.Cell]; ok && c.CreatedBy == o.ID {
+		if c, ok := pg.Cells[o.Cell]; ok {
+			if c.CreatedBy == o.ID || c.Dead == 0 || s < c.Dead {
+				return
+			}
+			c.Dead = 0
+			setReg(&c.Parent, o.Parent, s)
+			setReg(&c.Order, o.Order, s)
+			for k := range c.Props {
+				if _, keep := o.Props[k]; !keep {
+					c.delProp(k, s)
+				}
+			}
+			for k, v := range o.Props {
+				c.setProp(k, v, s)
+			}
 			return
 		}
 		c := &Cell{ID: o.Cell, Kind: o.Kind, CreatedBy: o.ID, Parent: Reg{V: o.Parent, Seq: s}, Order: Reg{V: o.Order, Seq: s}, Props: map[string]Reg{}}
@@ -639,17 +669,24 @@ func (d *Doc) Apply(o *Op) {
 	case OpRestore:
 		for _, sc := range o.Cells {
 			c := pg.Cells[sc.ID]
+			if c == nil || c.Dead == 0 || s < c.Dead {
+				continue
+			}
 			c.Dead = 0
-			c.Parent = Reg{V: sc.Parent, Seq: s}
-			c.Order = Reg{V: sc.Order, Seq: s}
-			c.Props = map[string]Reg{}
+			setReg(&c.Parent, sc.Parent, s)
+			setReg(&c.Order, sc.Order, s)
+			for k := range c.Props {
+				if _, keep := sc.Props[k]; !keep {
+					c.delProp(k, s)
+				}
+			}
 			for k, v := range sc.Props {
-				c.Props[k] = Reg{V: v, Seq: s}
+				c.setProp(k, v, s)
 			}
 		}
 	case OpDeleteCell:
 		for _, id := range r.Del {
-			if c := pg.Cells[id]; c != nil && c.Dead == 0 {
+			if c := pg.Cells[id]; c != nil && c.Dead == 0 && s >= c.Parent.Seq {
 				c.Dead = s
 			}
 		}

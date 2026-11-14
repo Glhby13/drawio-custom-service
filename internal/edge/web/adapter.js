@@ -76,8 +76,13 @@
     var ui = null, ws = null, you = '', role = '', closed = false;
     var C = M.newDoc(), pending = [], T = M.newDoc(), E = M.newDoc(), joined = false; // E = what the editor is known to contain
     var busy = false, again = false, backoff = 500, lastHash = null, hashTimer = null, reconnectTimer = null, pingTimer = null;
-    var presence = null, offlineEdits = false, loadedInEditor = false, embedReady = false, pendingLoad = null, patchWaiters = [];
+    var presence = null, offlineEdits = false, loadedInEditor = false, embedReady = false, pendingLoad = null, patchWaiters = [], pageWait = new Map();
     var stats = { sent: 0, acked: 0, nacked: 0, remote: 0, resyncs: 0, patches: 0, hashChecks: 0, hashBad: 0 };
+
+    function clearPageWait() {
+      pageWait.forEach(function (pw) { if (pw.timer) clearTimeout(pw.timer); });
+      pageWait.clear();
+    }
 
     function status(s, t) { if (opts.onStatus) opts.onStatus(s, t); }
     function canEdit() { return role === 'editor' || role === 'owner'; }
@@ -90,9 +95,11 @@
     function post(msg) { frame.contentWindow.postMessage(JSON.stringify(msg), location.origin); }
     function waitPatchEvent() {
       return new Promise(function (resolve) {
-        var done = false, w = function () { if (!done) { done = true; resolve(); } };
+        var done = false, timer, w = function (msg) {
+          if (!done) { done = true; clearTimeout(timer); resolve(msg); }
+        };
         patchWaiters.push(w);
-        setTimeout(w, 4000);
+        timer = setTimeout(function () { w(null); }, 4000);
       });
     }
     window.addEventListener('message', function (ev) {
@@ -101,7 +108,7 @@
       try { msg = JSON.parse(ev.data); } catch (e) { return; }
       if (msg.event === 'init') { embedReady = true; maybeLoad(); }
       else if (msg.event === 'autosave') { if (loadedInEditor) { if (!joined) offlineEdits = true; schedule(); } }
-      else if (msg.event === 'patch') { var ws2 = patchWaiters; patchWaiters = []; ws2.forEach(function (w) { w(); }); }
+      else if (msg.event === 'patch') { var ws2 = patchWaiters; patchWaiters = []; ws2.forEach(function (w) { w(msg); }); }
     });
 
     function attachUi() {
@@ -160,6 +167,7 @@
       if (ui && typeof ui.setFileData === 'function') {
         try {
           ui.setFileData(xml);
+          if (ui.editor && ui.editor.undoManager && typeof ui.editor.undoManager.clear === 'function') ui.editor.undoManager.clear();
           if (ui.editor && typeof ui.editor.setModified === 'function') ui.editor.setModified(false);
           return Promise.resolve();
         } catch (e) {
@@ -177,6 +185,12 @@
       });
     }
     function firstPageId(xml) { var m = /<diagram[^>]*\bid="([^"]*)"/.exec(xml); return m ? m[1] : ''; }
+    function pageReady(p) {
+      if (!p.cells.has('0')) return false;
+      var hasLayer = false;
+      p.cells.forEach(function (c) { if (c.parent === '0') hasLayer = true; });
+      return hasLayer;
+    }
 
     // ---- reconcile -------------------------------------------------------------------------------------------------------
     function schedule() { if (busy) { again = true; return; } setTimeout(reconcile, 0); }
@@ -196,15 +210,50 @@
             if (d.ops.length) sendBatch(d.ops);
             offlineEdits = false;
           }
-          var r = B.toPatch(L, T);
-          E = M.clone(T);
+          var Tview = T, cloned = false, lIds = new Set(L.pages.map(function (p) { return p.id; })), now = Date.now();
+          pageWait.forEach(function (pw, id) {
+            if (lIds.has(id) || !T.pages.has(id)) { if (pw.timer) clearTimeout(pw.timer); pageWait.delete(id); }
+          });
+          T.pages.forEach(function (tp, id) {
+            if (lIds.has(id)) return;
+            if (pageReady(tp)) {
+              var done = pageWait.get(id);
+              if (done) { if (done.timer) clearTimeout(done.timer); pageWait.delete(id); }
+              return;
+            }
+            var pw = pageWait.get(id);
+            if (!pw) {
+              (function () {
+                var entry = { since: now, ready: false, timer: null };
+                entry.timer = setTimeout(function () {
+                  entry.ready = true;
+                  entry.timer = null;
+                  if (!closed && joined) schedule();
+                }, 300);
+                pageWait.set(id, entry);
+                pw = entry;
+              })();
+            }
+            if (!pw.ready && now - pw.since < 300) {
+              if (!cloned) { Tview = M.clone(T); cloned = true; }
+              Tview.pages.delete(id);
+            } else if (pw.timer) {
+              clearTimeout(pw.timer);
+              pw.timer = null;
+              pw.ready = true;
+            }
+          });
+          var r = B.toPatch(L, Tview);
+          E = M.clone(Tview);
           if (!r.empty) {
             stats.patches++;
             var w = waitPatchEvent();
             post({ action: 'patch', patch: r.patch });
-            await w;
+            var pres = await w;
+            if (!joined) break;
+            if (!pres || pres.error) { resync(!pres ? 'patch_timeout' : 'patch_error'); break; }
           }
-        } while (again);
+        } while (again && joined);
       } catch (e) {
         if (window.console) console.error('reconcile failed', e);
         status('error', 'Sync error, reloading');
@@ -264,6 +313,7 @@
     }
 
     function onJoined(m) {
+      joinedOnce = true;
       role = m.role; you = m.you;
       if (opts.onRole) opts.onRole(role, m.title);
       if (m.mode === 'catchup') {
@@ -276,6 +326,7 @@
         return;
       }
       forceFull = false;
+      clearPageWait();
       if (presence) presence.clearRemote();
       C = M.fromState(typeof m.state === 'string' ? JSON.parse(m.state) : m.state, m.seq);
       var drop = pending; pending = [];
@@ -314,6 +365,8 @@
     function resync(reason) {
       stats.resyncs++;
       joined = false; forceFull = true;
+      clearPageWait();
+      var ws2 = patchWaiters; patchWaiters = []; ws2.forEach(function (w) { w({ cancelled: true }); });
       try { if (ws) ws.close(4000, 'resync ' + reason); } catch (e) { /* ignore */ }
     }
 
@@ -363,7 +416,7 @@
       modelCanonHash: function (which) { return M.sha256hex(M.canon(which === 'predicted' ? T : C, { ignoreOrder: true })); },
       flush: function () { return reconcile(); },
       resync: function (reason) { resync(reason); },
-      close: function () { closed = true; if (presence) presence.stop(); clearTimeout(reconnectTimer); try { ws.close(); } catch (e) { /* ignore */ } },
+      close: function () { closed = true; clearPageWait(); clearTimeout(hashTimer); if (presence) presence.stop(); clearTimeout(reconnectTimer); try { ws.close(); } catch (e) { /* ignore */ } },
       editorUi: function () { return ui; },
     };
   }
