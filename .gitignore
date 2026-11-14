@@ -6,3 +6,7 @@ spikes/**/node_modules/
 webtest/diffops.json
 e2e/.otp-seeds.json
 e2e/.otp-last.json
+
+e2e/undo/.validator
+e2e/undo/*.json
+e2e/undo/.before/
